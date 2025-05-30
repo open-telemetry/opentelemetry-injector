@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 FPM_DIR="$( cd "$( dirname ${BASH_SOURCE[0]} )" && pwd )"
-REPO_DIR="$( cd "$FPM_DIR/../../../" && pwd )"
+REPO_DIR="$( cd "$FPM_DIR/../../" && pwd )"
 
 PKG_NAME="opentelemetry-injector"
 PKG_VENDOR="OpenTelemetry"
@@ -22,15 +22,14 @@ EXAMPLES_INSTALL_DIR="${INSTALL_DIR}/examples"
 EXAMPLES_DIR="${FPM_DIR}/examples"
 
 JAVA_AGENT_RELEASE_PATH="${FPM_DIR}/../java-agent-release.txt"
-JAVA_AGENT_RELEASE_URL="https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/"
+JAVA_AGENT_RELEASE_URL="https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases"
 JAVA_AGENT_INSTALL_PATH="${INSTALL_DIR}/javaagent.jar"
 
 NODEJS_AGENT_RELEASE_PATH="${FPM_DIR}/../nodejs-agent-release.txt"
-NODEJS_AGENT_RELEASE_URL="https://github.com/open-telemetry/opentelemetry-nodejs-instrumentation/releases/"
 NODEJS_AGENT_INSTALL_PATH="${INSTALL_DIR}/otel-js.tgz"
 
 DOTNET_AGENT_RELEASE_PATH="${FPM_DIR}/../dotnet-agent-release.txt"
-DOTNET_AGENT_RELEASE_URL="https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/"
+DOTNET_AGENT_RELEASE_URL="https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases"
 DOTNET_AGENT_INSTALL_DIR="${INSTALL_DIR}/dotnet"
 
 PREUNINSTALL_PATH="$FPM_DIR/preuninstall.sh"
@@ -67,11 +66,12 @@ download_java_agent() {
 download_nodejs_agent() {
     local tag="$1"
     local dest="$2"
-    local dl_url="$NODEJS_AGENT_RELEASE_URL/download/$tag/opentelemetry-${tag#v}.tgz"
-
-    echo "Downloading $dl_url ..."
+    npm pack @opentelemetry/auto-instrumentations-node@${tag#v}
     mkdir -p "$( dirname $dest )"
-    curl -sfL "$dl_url" -o "$dest"
+    pushd "$( dirname $dest )"
+    npm pack @opentelemetry/auto-instrumentations-node@${tag#v}
+    mv *.tgz otel-js.tgz
+    popd
 }
 
 download_dotnet_agent() {
@@ -92,7 +92,7 @@ download_dotnet_agent() {
 setup_files_and_permissions() {
     local arch="$1"
     local buildroot="$2"
-    local libotelinject="$REPO_DIR/instrumentation/dist/libotelinject_${arch}.so"
+    local libotelinject="$REPO_DIR/dist/libotelinject_${arch}.so"
     local java_agent_release="$(cat "$JAVA_AGENT_RELEASE_PATH")"
     local nodejs_agent_release="$(cat "$NODEJS_AGENT_RELEASE_PATH")"
     local dotnet_agent_release="$(cat "$DOTNET_AGENT_RELEASE_PATH")"

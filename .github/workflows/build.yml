@@ -1,0 +1,32 @@
+name: build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-package:
+    runs-on: ${{ matrix.ARCH == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    strategy:
+      matrix:
+        SYS_PACKAGE: [ "deb", "rpm" ]
+        ARCH: [ "amd64", "arm64"]
+    steps:
+      - name: Check out the codebase.
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run tests
+        run: make tests ARCH=${{ matrix.ARCH }}
+
+      - name: Build ${{ matrix.ARCH }} ${{ matrix.SYS_PACKAGE }} package
+        run: make ${{ matrix.SYS_PACKAGE }}-package ARCH="${{ matrix.ARCH }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: otelinject-${{ matrix.ARCH }}-${{ matrix.SYS_PACKAGE }}
+          path: ./dist/*.${{ matrix.SYS_PACKAGE }}

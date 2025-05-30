@@ -4,3 +4,5 @@ so/
 tests/dotnet/libotelinject.so
 tests/java/libotelinject.so
 tests/nodejs/libotelinject.so
+
+.tools/

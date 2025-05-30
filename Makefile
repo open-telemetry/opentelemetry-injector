@@ -76,3 +76,37 @@ tests: test-java test-nodejs test-dotnet
 test-%: dist
 	(cd tests/$* && ARCH=$(ARCH) ./test.sh)
 
+SHELL = /bin/bash
+.SHELLFLAGS = -o pipefail -c
+
+# SRC_ROOT is the top of the source tree.
+SRC_ROOT := $(shell git rev-parse --show-toplevel)
+TOOLS_BIN_DIR    := $(SRC_ROOT)/.tools
+CHLOGGEN_CONFIG  := .chloggen/config.yaml
+CHLOGGEN         := $(TOOLS_BIN_DIR)/chloggen
+
+$(TOOLS_BIN_DIR):
+	mkdir -p $@
+
+$(CHLOGGEN): $(TOOLS_BIN_DIR)
+	GOBIN=$(TOOLS_BIN_DIR) go install go.opentelemetry.io/build-tools/chloggen@v0.23.1
+
+FILENAME?=$(shell git branch --show-current)
+.PHONY: chlog-new
+chlog-new: $(CHLOGGEN)
+	$(CHLOGGEN) new --config $(CHLOGGEN_CONFIG) --filename $(FILENAME)
+
+.PHONY: chlog-validate
+chlog-validate: $(CHLOGGEN)
+	$(CHLOGGEN) validate --config $(CHLOGGEN_CONFIG)
+
+.PHONY: chlog-preview
+chlog-preview: $(CHLOGGEN)
+	$(CHLOGGEN) update --config $(CHLOGGEN_CONFIG) --dry
+
+.PHONY: chlog-update
+chlog-update: $(CHLOGGEN)
+	$(CHLOGGEN) update --config $(CHLOGGEN_CONFIG) --version $(VERSION)
+
+list:
+	@grep '^[^#[:space:]].*:' Makefile

@@ -10,7 +10,7 @@ SCRIPT_DIR="$( cd "$( dirname ${BASH_SOURCE[0]} )" && pwd )"
 
 VERSION="${1:-}"
 ARCH="${2:-amd64}"
-OUTPUT_DIR="${3:-$REPO_DIR/instrumentation/dist}"
+OUTPUT_DIR="${3:-$REPO_DIR/dist}"
 
 if [[ -z "$VERSION" ]]; then
     VERSION="$( get_version )"

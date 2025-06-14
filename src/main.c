@@ -6,7 +6,7 @@
 #define MAX_LINE_LENGTH 1023
 #define MAX_LINES 50
 
-#define ALLOWED_ENV_VARS "OTEL_SERVICE_NAME", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_RESOURCE_ATTRIBUTES", "JAVA_TOOL_OPTIONS", "NODE_OPTIONS", "CORECLR_ENABLE_PROFILING", "CORECLR_PROFILER", "CORECLR_PROFILER_PATH", "DOTNET_ADDITIONAL_DEPS", "DOTNET_SHARED_STORE", "DOTNET_STARTUP_HOOKS", "OTEL_DOTNET_AUTO_HOME", "OTEL_DOTNET_AUTO_PLUGINS", "OTEL_EXPORTER_OTLP_PROTOCOL", "OTEL_METRICS_EXPORTER", "OTEL_LOGS_EXPORTER"
+#define ALLOWED_ENV_VARS "OTEL_SERVICE_NAME", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_RESOURCE_ATTRIBUTES", "JAVA_TOOL_OPTIONS", "NODE_OPTIONS", "CORECLR_ENABLE_PROFILING", "CORECLR_PROFILER", "CORECLR_PROFILER_PATH", "DOTNET_ADDITIONAL_DEPS", "DOTNET_SHARED_STORE", "DOTNET_STARTUP_HOOKS", "OTEL_DOTNET_AUTO_HOME", "OTEL_DOTNET_AUTO_PLUGINS", "OTEL_EXPORTER_OTLP_PROTOCOL", "OTEL_METRICS_EXPORTER", "OTEL_LOGS_EXPORTER", "RUBYOPT"
 
 static char *const allowed_env_vars[] = {ALLOWED_ENV_VARS};
 static size_t const allowed_env_vars_size = sizeof(allowed_env_vars) / sizeof(*allowed_env_vars);
@@ -14,10 +14,12 @@ static size_t const allowed_env_vars_size = sizeof(allowed_env_vars) / sizeof(*a
 #define DOTNET_ENV_VAR_FILE "/etc/opentelemetry/otelinject/dotnet.conf"
 #define JAVA_ENV_VAR_FILE "/etc/opentelemetry/otelinject/java.conf"
 #define NODEJS_ENV_VAR_FILE "/etc/opentelemetry/otelinject/node.conf"
+#define RUBY_ENV_VAR_FILE "/etc/opentelemetry/otelinject/ruby.conf"
 
 static char *const env_var_file_dotnet = DOTNET_ENV_VAR_FILE;
 static char *const env_var_file_java = JAVA_ENV_VAR_FILE;
 static char *const env_var_file_node = NODEJS_ENV_VAR_FILE;
+static char *const env_var_file_ruby = RUBY_ENV_VAR_FILE;
 
 extern char *program_invocation_short_name;
 
@@ -30,6 +32,8 @@ void __attribute__((constructor)) enter() {
         env_var_file = env_var_file_java;
     } else if (strcmp("node", program_invocation_short_name) == 0) {
         env_var_file = env_var_file_node;
+    } else if (strcmp("ruby", program_invocation_short_name) == 0) {
+        env_var_file = env_var_file_ruby;
     } else {
         // we don't want to inject environment variables for this program.
         return;

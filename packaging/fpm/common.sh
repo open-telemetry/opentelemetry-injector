@@ -32,7 +32,7 @@ DOTNET_AGENT_RELEASE_PATH="${FPM_DIR}/../dotnet-agent-release.txt"
 DOTNET_AGENT_RELEASE_URL="https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases"
 DOTNET_AGENT_INSTALL_DIR="${INSTALL_DIR}/dotnet"
 
-RUBY_AGENT_RELEASE_PATH="${FPM_DIR}/../ruby-agent-release.txt"
+RUBY_AGENT_GEMFILE_PATH="${FPM_DIR}/../Gemfile"
 RUBY_AGENT_INSTALL_DIR="${INSTALL_DIR}/ruby"
 
 PREUNINSTALL_PATH="$FPM_DIR/preuninstall.sh"
@@ -94,15 +94,7 @@ download_dotnet_agent() {
 
 download_ruby_agent() {
     local dest="$1"
-    gem install opentelemetry-api --no-ri --no-rdoc -v '1.4.0' --install-dir $dest
-    gem install opentelemetry-exporter-otlp --no-ri --no-rdoc -v '0.29.1' --install-dir $dest
-    gem install opentelemetry-helpers-mysql --no-ri --no-rdoc -v '0.2.0' --install-dir $dest
-    gem install opentelemetry-helpers-sql-obfuscation --no-ri --no-rdoc -v '0.3.0' --install-dir $dest
-    gem install opentelemetry-instrumentation-all --no-ri --no-rdoc -v '0.72.0' --install-dir $dest
-    gem install opentelemetry-resource-detector-azure --no-ri --no-rdoc -v '0.2.0' --install-dir $dest
-    gem install opentelemetry-resource-detector-container --no-ri --no-rdoc -v '0.2.0' --install-dir $dest
-    gem install opentelemetry-resource-detector-google_cloud_platform --no-ri --no-rdoc -v '0.2.0' --install-dir $dest
-    gem install opentelemetry-sdk --no-ri --no-rdoc -v '1.6.0' --install-dir $dest
+    bundle install --path $dest --gemfile=$RUBY_AGENT_GEMFILE_PATH
     mkdir -p $dest/src
     cp $FPM_DIR/autoinstrumentation.rb $dest/src/
 }

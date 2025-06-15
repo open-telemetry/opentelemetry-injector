@@ -1,6 +1,8 @@
 ARG BASE=busybox
 FROM $BASE
 
+ENV ANOTHER_VAR foo
+
 COPY main.rb .
 
 RUN mkdir -p /etc/opentelemetry/otelinject

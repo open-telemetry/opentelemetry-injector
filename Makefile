@@ -110,3 +110,7 @@ chlog-update: $(CHLOGGEN)
 
 list:
 	@grep '^[^#[:space:]].*:' Makefile
+
+.PHONY: integration-test-java
+integration-test-%: dist
+	(cd packaging/tests/$* && ./run.sh)

@@ -30,3 +30,15 @@ jobs:
         with:
           name: otelinject-${{ matrix.ARCH }}-${{ matrix.SYS_PACKAGE }}
           path: ./dist/*.${{ matrix.SYS_PACKAGE }}
+  integration-tests:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        lang: [ "java" ]
+    steps:
+      - name: Check out the codebase.
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run integration tests for ${{ matrix.lang }}
+        run: make integration-test-${{ matrix.lang }}

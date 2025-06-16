@@ -33,7 +33,7 @@ DOTNET_AGENT_RELEASE_URL="https://github.com/open-telemetry/opentelemetry-dotnet
 DOTNET_AGENT_INSTALL_DIR="${INSTALL_DIR}/dotnet"
 
 RUBY_AGENT_GEMFILE_PATH="${FPM_DIR}/../Gemfile"
-RUBY_AGENT_INSTALL_DIR="${INSTALL_DIR}/ruby"
+RUBY_AGENT_INSTALL_DIR="${INSTALL_DIR}"
 
 PREUNINSTALL_PATH="$FPM_DIR/preuninstall.sh"
 
@@ -94,9 +94,10 @@ download_dotnet_agent() {
 
 download_ruby_agent() {
     local dest="$1"
-    bundle install --path $dest --gemfile=$RUBY_AGENT_GEMFILE_PATH
-    mkdir -p $dest/src
-    cp $FPM_DIR/autoinstrumentation.rb $dest/src/
+    bundle install --path /tmp --gemfile=$RUBY_AGENT_GEMFILE_PATH
+    mkdir -p $dest/ruby/src
+    cp $FPM_DIR/autoinstrumentation.rb $dest/ruby/src/
+    cp -R /tmp/ruby/3.1.0/gems $dest/ruby/
 }
 
 setup_files_and_permissions() {

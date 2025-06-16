@@ -91,15 +91,17 @@ module OTelBundlerPatch
         c.resource = detect_resource_from_env
         if required_instrumentation.empty?
           c.use_all # enables all instrumentation!
+          OpenTelemetry.logger.info { 'Auto-instrumentation with all instrumentations initialized' }
         else
           required_instrumentation.each do |instrumentation|
             c.use instrumentation
           end
+          OpenTelemetry.logger.info { 'Auto-instrumentation with #{required_instrumentation} instrumentations enabled' }
         end
       end
       OpenTelemetry.logger.info { 'Auto-instrumentation initialized' }
     rescue StandardError => e
-      OpenTelemetry.logger.info { "Auto-instrumentation failed to initialize. Error: #{e.message}" }
+      OpenTelemetry.logger.error { "Auto-instrumentation failed to initialize. Error: #{e.message}" }
     end
   end
 end
@@ -110,16 +112,9 @@ container = ENV['OTEL_RUBY_RESOURCE_DETECTORS'].to_s.include?('container')
 google_cloud_platform = ENV['OTEL_RUBY_RESOURCE_DETECTORS'].to_s.include?('google_cloud_platform')
 azure = ENV['OTEL_RUBY_RESOURCE_DETECTORS'].to_s.include?('azure')
 
-# set OTEL_OPERATOR to true if in autoinstrumentation-ruby image
-# /otel-auto-instrumentation-ruby is set in operator ruby.go
-operator_gem_path = ENV['OTEL_OPERATOR'].to_s == 'true' ? '/otel-auto-instrumentation-ruby' : nil
-additional_gem_path = operator_gem_path || ENV['ADDITIONAL_GEM_PATH'] || Gem.dir
-puts "Loading the additional gem path from #{additional_gem_path}"
-
 # google-protobuf is used for otel trace exporter
-Dir.glob("#{additional_gem_path}/gems/*").each do |file|
+Dir.glob("/usr/lib/opentelemetry/ruby/gems/*").each do |file|
   if file.include?('opentelemetry') || file.include?('google')
-    puts "Unshift #{file.inspect}"
     $LOAD_PATH.unshift("#{file}/lib")
   end
 end

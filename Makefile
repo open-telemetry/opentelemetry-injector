@@ -111,6 +111,6 @@ chlog-update: $(CHLOGGEN)
 list:
 	@grep '^[^#[:space:]].*:' Makefile
 
-.PHONY: integration-test-java
+.PHONY: integration-test-java-ruby
 integration-test-%: dist
 	(cd packaging/tests/$* && ./run.sh)

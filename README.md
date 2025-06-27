@@ -119,3 +119,11 @@ The following methods are supported to manually activate and configure Auto Inst
    - [.NET](https://opentelemetry.io/docs/zero-code/dotnet/configuration/)
 3. Reboot the system, or run `systemctl daemon-reload` and then restart the applicable `systemd` services for any
    changes to take effect.
+
+## Maintainers
+
+- [Antoine Toulme](https://github.com/atoulme), Splunk
+- [Jacob Aronoff](https://github.com/jaronoff97), Omlet
+- [Michele Mancioppi](https://github.com/mmanciop), Dash0
+
+For more information about the maintainer role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#maintainer).

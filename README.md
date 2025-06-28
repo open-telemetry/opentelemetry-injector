@@ -11,6 +11,7 @@ Instrumentation agents:
 - [Java](https://opentelemetry.io/docs/zero-code/java/)
 - [Node.js](https://opentelemetry.io/docs/zero-code/js/)
 - [.NET](https://opentelemetry.io/docs/zero-code/dotnet/)
+- [Ruby](https://github.com/open-telemetry/opentelemetry-ruby)
 
 ## Activation and Configuration
 

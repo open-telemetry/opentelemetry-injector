@@ -120,7 +120,11 @@ The following methods are supported to manually activate and configure Auto Inst
 3. Reboot the system, or run `systemctl daemon-reload` and then restart the applicable `systemd` services for any
    changes to take effect.
 
-## Maintainers
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Maintainers
 
 - [Antoine Toulme](https://github.com/atoulme), Splunk
 - [Jacob Aronoff](https://github.com/jaronoff97), Omlet

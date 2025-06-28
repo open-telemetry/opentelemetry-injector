@@ -121,6 +121,7 @@ The following methods are supported to manually activate and configure Auto Inst
    changes to take effect.
 
 ## Contributing
+
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Maintainers

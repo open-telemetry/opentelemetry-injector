@@ -1,1 +1,2 @@
+# renovate: datasource=github-releases depName=open-telemetry/opentelemetry-java-instrumentation
 v2.16.0

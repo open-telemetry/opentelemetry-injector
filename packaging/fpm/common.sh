@@ -93,9 +93,9 @@ setup_files_and_permissions() {
     local arch="$1"
     local buildroot="$2"
     local libotelinject="$REPO_DIR/dist/libotelinject_${arch}.so"
-    local java_agent_release="$(cat "$JAVA_AGENT_RELEASE_PATH")"
-    local nodejs_agent_release="$(cat "$NODEJS_AGENT_RELEASE_PATH")"
-    local dotnet_agent_release="$(cat "$DOTNET_AGENT_RELEASE_PATH")"
+    local java_agent_release="$(cat "$JAVA_AGENT_RELEASE_PATH" | tail -n 1)"
+    local nodejs_agent_release="$(cat "$NODEJS_AGENT_RELEASE_PATH" | tail -n 1)"
+    local dotnet_agent_release="$(cat "$DOTNET_AGENT_RELEASE_PATH" | tail -n 1)"
 
     mkdir -p "$buildroot/$(dirname $libotelinject_INSTALL_PATH)"
     cp -f "$libotelinject" "$buildroot/$libotelinject_INSTALL_PATH"

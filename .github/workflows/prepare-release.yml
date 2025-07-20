@@ -1,0 +1,25 @@
+name: Automation - Prepare Release
+
+on:
+  workflow_dispatch:
+    # Determine the version number that will be assigned to the release.
+    inputs:
+      candidate:
+        required: true
+        description: Release candidate version (like 0.70.0)
+jobs:
+  # Releasing opentelemetry-injector
+  prepare-release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5
+        with:
+          go-version: "1.24.5"
+          cache: false
+      - name: Prepare release for injector
+        env:
+          GITHUB_TOKEN: ${{ secrets.OPENTELEMETRYBOT_GITHUB_TOKEN }}
+          REPO: open-telemetry/opentelemetry-injector
+          CANDIDATE: ${{ inputs.candidate }}
+        run: ./.github/workflows/scripts/prepare-release.sh

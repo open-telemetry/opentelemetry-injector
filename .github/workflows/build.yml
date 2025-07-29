@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
   pull_request:
 
 permissions:
@@ -25,14 +27,25 @@ jobs:
       - name: Run tests
         run: make tests ARCH=${{ matrix.ARCH }}
 
+      - name: Determine version
+        id: version
+        run: |
+          TAG="${GITHUB_REF##*/}"
+          if [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+.* ]]
+          then
+            echo "version=$TAG" >> $GITHUB_OUTPUT
+          else
+            echo "version=dev" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build ${{ matrix.ARCH }} ${{ matrix.SYS_PACKAGE }} package
-        run: make ${{ matrix.SYS_PACKAGE }}-package ARCH="${{ matrix.ARCH }}"
+        run: make ${{ matrix.SYS_PACKAGE }}-package ARCH="${{ matrix.ARCH }}" VERSION="${{ steps.github_tag.version.version }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: otelinject-${{ matrix.ARCH }}-${{ matrix.SYS_PACKAGE }}
-          path: ./dist/*.${{ matrix.SYS_PACKAGE }}
+          path: ./instrumentation/dist/*.${{ matrix.SYS_PACKAGE }}
   integration-tests:
     runs-on: ubuntu-24.04
     strategy:
@@ -45,3 +58,26 @@ jobs:
           fetch-depth: 0
       - name: Run integration tests for ${{ matrix.lang }}
         run: make integration-test-${{ matrix.lang }}
+  publish-stable:
+    runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'open-telemetry/opentelemetry-injector'
+    needs: build-package
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - run: mkdir -p artifacts
+      - name: Download artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: ./artifacts/
+      - name: Prepare release notes
+        run: ./.github/workflows/scripts/prepare-release-notes.sh
+        env:
+          RELEASE_TAG: ${{ steps.github_tag.outputs.tag }}
+      - name: Release
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2
+        with:
+          body_path: release-notes.md
+          files: |
+            artifacts/*

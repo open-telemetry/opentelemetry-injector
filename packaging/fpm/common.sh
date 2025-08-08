@@ -32,6 +32,9 @@ DOTNET_AGENT_RELEASE_PATH="${FPM_DIR}/../dotnet-agent-release.txt"
 DOTNET_AGENT_RELEASE_URL="https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases"
 DOTNET_AGENT_INSTALL_DIR="${INSTALL_DIR}/dotnet"
 
+RUBY_AGENT_GEMFILE_PATH="${FPM_DIR}/../Gemfile"
+RUBY_AGENT_INSTALL_DIR="${INSTALL_DIR}"
+
 PREUNINSTALL_PATH="$FPM_DIR/preuninstall.sh"
 
 get_version() {
@@ -89,6 +92,14 @@ download_dotnet_agent() {
     rm -f /tmp/$pkg
 }
 
+download_ruby_agent() {
+    local dest="$1"
+    bundle install --path /tmp --gemfile=$RUBY_AGENT_GEMFILE_PATH
+    mkdir -p $dest/ruby/src
+    cp $FPM_DIR/autoinstrumentation.rb $dest/ruby/src/
+    cp -R /tmp/ruby/3.1.0/gems $dest/ruby/
+}
+
 setup_files_and_permissions() {
     local arch="$1"
     local buildroot="$2"
@@ -111,6 +122,10 @@ setup_files_and_permissions() {
         download_dotnet_agent "$dotnet_agent_release" "${buildroot}/${DOTNET_AGENT_INSTALL_DIR}"
         sudo chmod -R 755 "$buildroot/$DOTNET_AGENT_INSTALL_DIR"
     fi
+
+    download_ruby_agent "${buildroot}/${RUBY_AGENT_INSTALL_DIR}"
+    sudo chmod 755 -R "$buildroot/${RUBY_AGENT_INSTALL_DIR}"
+    ls "$buildroot/${RUBY_AGENT_INSTALL_DIR}"
 
     mkdir -p  "$buildroot/$CONFIG_DIR_INSTALL_PATH"
     cp -rf "$CONFIG_DIR_REPO_PATH"/* "$buildroot/$CONFIG_DIR_INSTALL_PATH"/

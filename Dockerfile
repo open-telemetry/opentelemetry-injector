@@ -1,5 +1,5 @@
 ARG DOCKER_REPO=docker.io
-FROM ${DOCKER_REPO}/debian:12@sha256:b6507e340c43553136f5078284c8c68d86ec8262b1724dde73c325e8d3dcdeba
+FROM ${DOCKER_REPO}/debian:12@sha256:731dd1380d6a8d170a695dbeb17fe0eade0e1c29f654cf0a3a07f372191c3f4b
 
 RUN apt-get update && \
     apt-get install -y build-essential

@@ -1,0 +1,3 @@
+# See https://dl-cdn.alpinelinux.org/alpine/edge/community, check for zig-*.apk for available versions.
+# Keep this in sync with .github/workflows/ci.yaml -> mlugg/setup-zig.with.version.
+ZIG_VERSION=0.14.1-r0

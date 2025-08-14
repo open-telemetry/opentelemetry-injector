@@ -1,0 +1,46 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+ARG base_image="node:22.15.0-bookworm-slim"
+FROM ${base_image}
+
+ARG arch_under_test
+RUN if [ -z "$arch_under_test" ]; then \
+      echo "Error: build argument arch_under_test is required but not set."; \
+      exit 1; \
+    fi
+ENV ARCH_UNDER_TEST=${arch_under_test}
+
+ARG libc_under_test
+RUN if [ -z "$libc_under_test" ]; then \
+      echo "Error: build argument libc_under_test is required but not set."; \
+      exit 1; \
+    fi
+ENV LIBC_UNDER_TEST=${libc_under_test}
+
+ARG injector_binary
+RUN if [ -z "$injector_binary" ]; then \
+      echo "Error: build argument injector_binary is required but not set."; \
+      exit 1; \
+    fi
+
+ARG create_sdk_dummy_files_script
+RUN if [ -z "$create_sdk_dummy_files_script" ]; then \
+      echo "Error: build argument create_sdk_dummy_files_script is required but not set."; \
+      exit 1; \
+    fi
+
+WORKDIR /usr/src/otel/injector/
+
+COPY test/scripts/run-tests-within-container.sh scripts/
+COPY test/scripts/create-*.sh scripts/
+COPY test/scripts/*.tests scripts/
+
+COPY dist/${injector_binary} /injector/libotelinject.so
+
+COPY test/apps/node_js app
+
+RUN ${create_sdk_dummy_files_script}
+
+USER node
+CMD ["scripts/run-tests-within-container.sh"]

@@ -1,0 +1,25 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+run_test_case \
+  "overrides NODE_OPTIONS if it is not present" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: --require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument"
+run_test_case \
+  "ask for NODE_OPTIONS (unset) twice" \
+  "app" \
+  "node index.js node-options-twice" \
+  "NODE_OPTIONS: --require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument; NODE_OPTIONS: --require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument"
+run_test_case \
+  "prepends to NODE_OPTIONS if it is present" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: --require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument --no-deprecation" \
+  "NODE_OPTIONS=--no-deprecation"
+run_test_case \
+  "ask for NODE_OPTIONS (set) twice" \
+  "app" \
+  "node index.js node-options-twice" \
+  "NODE_OPTIONS: --require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument --no-deprecation; NODE_OPTIONS: --require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument --no-deprecation" \
+  "NODE_OPTIONS=--no-deprecation"

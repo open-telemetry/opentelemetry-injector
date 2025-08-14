@@ -1,0 +1,17 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+# NODE_OPTIONS
+run_test_case \
+  "does not add NODE_OPTIONS if it the Node.js auto instrumentation is present but cannot be accessed" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: -"
+
+# JAVA_TOOL_OPTIONS
+run_test_case \
+  "does not add JAVA_TOOL_OPTIONS if it the Java auto instrumentation is present but cannot be accessed" \
+  "app" \
+  "node index.js java-tool-options" \
+  "JAVA_TOOL_OPTIONS: -"
+

@@ -51,7 +51,8 @@ case "$runtime" in
     dockerfile_name="test/docker/Dockerfile-jvm"
     base_image=eclipse-temurin:11
     if [[ "$LIBC" = "musl" ]]; then
-      base_image=eclipse-temurin:11-alpine
+      # Older images of eclipse-temurin:xx-alpine (before 21) are single platform and do not support arm64.
+      base_image=eclipse-temurin:21-alpine
     fi
     ;;
   *)
@@ -80,6 +81,7 @@ docker build \
   . \
   -f "$dockerfile_name" \
   -t "$image_name"
+{ set +x; } 2> /dev/null
 
 docker_run_extra_arguments=""
 if [ "${INTERACTIVE:-}" = "true" ]; then
@@ -93,6 +95,7 @@ if [ "${INTERACTIVE:-}" = "true" ]; then
   fi
 fi
 
+set -x
 docker run \
   --rm \
   --platform "$docker_platform" \
@@ -104,4 +107,3 @@ docker run \
   "$image_name" \
   $docker_run_extra_arguments
 { set +x; } 2> /dev/null
-

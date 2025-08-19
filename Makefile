@@ -62,6 +62,23 @@ uninstall:
 docker-run:
 	./start-injector-dev-container.sh
 
+.PHONY: zig-build
+zig-build:
+	@mkdir -p so
+	@zig build --prominent-compile-errors --summary none && echo $(shell date) build successful || echo $(shell date) build failed
+
+.PHONY: watch-zig-build
+watch-zig-build:
+	@fd -e zig | entr make zig-build
+
+.PHONY: zig-unit-test
+zig-unit-test:
+	@zig build test --prominent-compile-errors --summary none && echo $(shell date) tests successful || echo $(shell date) tests failed
+
+.PHONY: watch-zig-unit-tests
+watch-zig-unit-tests:
+	@fd -e zig | entr make zig-unit-test
+
 .PHONY: tests
 tests: test-java test-nodejs test-dotnet
 

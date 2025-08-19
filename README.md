@@ -54,37 +54,37 @@ The following methods are supported to manually activate and configure Auto Inst
    ```
 2. The default configuration files in the `/etc/opentelemetry/otelinject` directory includes the required environment variables
    to activate the respective agents with the default options:
-  - `/etc/opentelemetry/otelinject/java.conf`:
-    ```
-    JAVA_TOOL_OPTIONS=-javaagent:/usr/lib/opentelemetry/javaagent.jar
-    ```
-  - `/etc/opentelemetry/otelinject/node.conf`:
-    ```
-    NODE_OPTIONS=-r /usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
-    ```
-  - `/etc/opentelemetry/otelinject/dotnet.conf`:
-    ```
-    CORECLR_ENABLE_PROFILING=1
-    CORECLR_PROFILER={918728DD-259F-4A6A-AC2B-B85E1B658318}
-    CORECLR_PROFILER_PATH=/usr/lib/opentelemetry/otel-dotnet/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so
-    DOTNET_ADDITIONAL_DEPS=/usr/lib/opentelemetry/otel-dotnet/AdditionalDeps
-    DOTNET_SHARED_STORE=/usr/lib/opentelemetry/otel-dotnet/store
-    DOTNET_STARTUP_HOOKS=/usr/lib/opentelemetry/otel-dotnet/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll
-    OTEL_DOTNET_AUTO_HOME=/usr/lib/opentelemetry/otel-dotnet
-    ```
+   - `/etc/opentelemetry/otelinject/java.conf`:
+     ```
+     JAVA_TOOL_OPTIONS=-javaagent:/usr/lib/opentelemetry/javaagent.jar
+     ```
+   - `/etc/opentelemetry/otelinject/node.conf`:
+     ```
+     NODE_OPTIONS=-r /usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
+     ```
+   - `/etc/opentelemetry/otelinject/dotnet.conf`:
+     ```
+     CORECLR_ENABLE_PROFILING=1
+     CORECLR_PROFILER={918728DD-259F-4A6A-AC2B-B85E1B658318}
+     CORECLR_PROFILER_PATH=/usr/lib/opentelemetry/otel-dotnet/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so
+     DOTNET_ADDITIONAL_DEPS=/usr/lib/opentelemetry/otel-dotnet/AdditionalDeps
+     DOTNET_SHARED_STORE=/usr/lib/opentelemetry/otel-dotnet/store
+     DOTNET_STARTUP_HOOKS=/usr/lib/opentelemetry/otel-dotnet/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll
+     OTEL_DOTNET_AUTO_HOME=/usr/lib/opentelemetry/otel-dotnet
+     ```
    Configuration of the respective agents is supported by the adding/updating the following environment variables in
    each of these files (***any environment variable not in this list will be ignored***):
-  - `OTEL_EXPORTER_OTLP_ENDPOINT`
-  - `OTEL_EXPORTER_OTLP_PROTOCOL`
-  - `OTEL_LOGS_EXPORTER`
-  - `OTEL_METRICS_EXPORTER`
-  - `OTEL_RESOURCE_ATTRIBUTES`
-  - `OTEL_SERVICE_NAME`
+   - `OTEL_EXPORTER_OTLP_ENDPOINT`
+   - `OTEL_EXPORTER_OTLP_PROTOCOL`
+   - `OTEL_LOGS_EXPORTER`
+   - `OTEL_METRICS_EXPORTER`
+   - `OTEL_RESOURCE_ATTRIBUTES`
+   - `OTEL_SERVICE_NAME`
 
    Check the following for details about these environment variables and default values:
-  - [Java](https://opentelemetry.io/docs/zero-code/java/agent/configuration/)
-  - [Node.js](https://opentelemetry.io/docs/zero-code/js/configuration/)
-  - [.NET](https://opentelemetry.io/docs/zero-code/dotnet/configuration/)
+   - [Java](https://opentelemetry.io/docs/zero-code/java/agent/configuration/)
+   - [Node.js](https://opentelemetry.io/docs/zero-code/js/configuration/)
+   - [.NET](https://opentelemetry.io/docs/zero-code/dotnet/configuration/)
 3. Reboot the system or restart the applications/services for any changes to take effect. The `libotelinject.so` shared
    object library will then be preloaded for all subsequent processes and inject the environment variables from the
    `/etc/opentelemetry/otelinject` configuration files for Java and Node.js processes.
@@ -107,24 +107,24 @@ The following methods are supported to manually activate and configure Auto Inst
    mkdir -p /usr/lib/systemd/system.conf.d/ && cp /usr/lib/opentelemetry/examples/systemd/00-otelinject-instrumentation.conf /usr/lib/systemd/system.conf.d/
    ```
    This file includes the required environment variables to activate the respective agents with the default options:
-  - Java:
-    ```
-    DefaultEnvironment="JAVA_TOOL_OPTIONS=-javaagent:/usr/lib/opentelemetry/otel-javaagent.jar"
-    ```
-  - Node.js:
-    ```
-    DefaultEnvironment="NODE_OPTIONS=-r /usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry/auto-instrumentations-node/register"
-    ```
-  - .NET
-    ```
-    DefaultEnvironment="CORECLR_ENABLE_PROFILING=1"
-    DefaultEnvironment="CORECLR_PROFILER={918728DD-259F-4A6A-AC2B-B85E1B658318}"
-    DefaultEnvironment="CORECLR_PROFILER_PATH=/usr/lib/opentelemetry/otel-dotnet/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so"
-    DefaultEnvironment="DOTNET_ADDITIONAL_DEPS=/usr/lib/opentelemetry/otel-dotnet/AdditionalDeps"
-    DefaultEnvironment="DOTNET_SHARED_STORE=/usr/lib/opentelemetry/otel-dotnet/store"
-    DefaultEnvironment="DOTNET_STARTUP_HOOKS=/usr/lib/opentelemetry/otel-dotnet/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll"
-    DefaultEnvironment="OTEL_DOTNET_AUTO_HOME=/usr/lib/opentelemetry/otel-dotnet"
-    ```
+   - Java:
+     ```
+     DefaultEnvironment="JAVA_TOOL_OPTIONS=-javaagent:/usr/lib/opentelemetry/otel-javaagent.jar"
+     ```
+   - Node.js:
+     ```
+     DefaultEnvironment="NODE_OPTIONS=-r /usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry/auto-instrumentations-node/register"
+     ```
+   - .NET
+     ```
+     DefaultEnvironment="CORECLR_ENABLE_PROFILING=1"
+     DefaultEnvironment="CORECLR_PROFILER={918728DD-259F-4A6A-AC2B-B85E1B658318}"
+     DefaultEnvironment="CORECLR_PROFILER_PATH=/usr/lib/opentelemetry/otel-dotnet/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so"
+     DefaultEnvironment="DOTNET_ADDITIONAL_DEPS=/usr/lib/opentelemetry/otel-dotnet/AdditionalDeps"
+     DefaultEnvironment="DOTNET_SHARED_STORE=/usr/lib/opentelemetry/otel-dotnet/store"
+     DefaultEnvironment="DOTNET_STARTUP_HOOKS=/usr/lib/opentelemetry/otel-dotnet/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll"
+     DefaultEnvironment="OTEL_DOTNET_AUTO_HOME=/usr/lib/opentelemetry/otel-dotnet"
+     ```
 2. To configure the activated agents, add/update [`DefaultEnvironment`](
    https://www.freedesktop.org/software/systemd/man/systemd-system.conf.html#DefaultEnvironment=) within the target file
    from the previous step for the desired environment variables. For example:
@@ -136,9 +136,9 @@ The following methods are supported to manually activate and configure Auto Inst
    EOH
    ```
    Check the following for all supported environment variables and default values:
-  - [Java](https://opentelemetry.io/docs/zero-code/java/agent/configuration/)
-  - [Node.js](https://opentelemetry.io/docs/zero-code/js/configuration/)
-  - [.NET](https://opentelemetry.io/docs/zero-code/dotnet/configuration/)
+   - [Java](https://opentelemetry.io/docs/zero-code/java/agent/configuration/)
+   - [Node.js](https://opentelemetry.io/docs/zero-code/js/configuration/)
+   - [.NET](https://opentelemetry.io/docs/zero-code/dotnet/configuration/)
 3. Reboot the system, or run `systemctl daemon-reload` and then restart the applicable `systemd` services for any
    changes to take effect.
 

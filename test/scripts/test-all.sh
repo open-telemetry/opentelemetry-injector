@@ -143,7 +143,7 @@ for arch in "${all_architectures[@]}"; do
     fi
   fi
 
-  ARCH="$arch" make dist
+  make ARCH="$arch" dist
 done
 echo
 

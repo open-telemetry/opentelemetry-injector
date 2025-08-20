@@ -53,14 +53,14 @@ uninstall:
 	rm -f $(INSTALL_DIR)/javaagent.jar
 	rm -f $(INSTALL_DIR)/libotelinject.so
 
-# Run this from with this directory to buid and run the development container.
-# Once you have a command line inside the container, you can run zig build, zig build test, watch-zig-build.sh,
-# watch-zig-test.sh etc.
-# By explicitly setting ARCHITECTURE=arm64 or ARCHITECTURE=x86_64 you can run and test on different CPU platforms.
+# Run this from with this directory to build and run the development container.
+# Once you have a command line inside the container, you can zig-build, zig-unit-test, watch-zig-build,
+# watch-zig-unit-test etc.
+# By explicitly setting ARCH=arm64 or ARCH=amd64 you can run and test on different CPU platforms.
 # Mostly intended for development.
 .PHONY: docker-run
 docker-run:
-	./start-injector-dev-container.sh
+	ARCH=$(ARCH) ./start-injector-dev-container.sh
 
 .PHONY: zig-build
 zig-build:

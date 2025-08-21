@@ -97,11 +97,6 @@ run_test_case() {
     fi
   fi
 
-  if [ "${test_case_label#*"__environ"}" != "$test_case_label" ] && [ "${ARCH_UNDER_TEST:-}" = "amd64" ] && [ "${LIBC_UNDER_TEST:-}" = "musl" ]; then
-    echo "- skipping test case \"$test_case_label\": tests for no __environ are currently disabled for amd64/musl"
-    return
-  fi
-
   cd "$working_dir"
   full_command="LD_PRELOAD=""$injector_binary"" OTEL_INJECTOR_K8S_NAMESPACE_NAME=my-namespace OTEL_INJECTOR_K8S_POD_NAME=my-pod OTEL_INJECTOR_K8S_POD_UID=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff OTEL_INJECTOR_K8S_CONTAINER_NAME=test-app"
   # Note: add OTEL_INJECTOR_DEBUG=true to the list of env vars to see debug output from the injector.

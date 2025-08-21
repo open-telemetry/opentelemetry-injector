@@ -31,6 +31,8 @@ if [ -z "${TEST_SET:-}" ]; then
   TEST_SET=default.tests
 fi
 
+# Note: Runtime-independent test sets like default.tests, sdk-does-not-exist.tests, and sdk-cannot-be-accessed.tests
+# also use Node.js as the runtime for the container under test.
 runtime="node_js"
 if [[ "$TEST_SET" = "jvm.tests" ]]; then
   runtime="jvm"
@@ -41,18 +43,18 @@ image_name=otel-injector-test-$ARCH-$LIBC-$runtime
 
 base_image=unknown
 case "$runtime" in
-  "node_js")
-    base_image=node:22.15.0-bookworm-slim
-    if [[ "$LIBC" = "musl" ]]; then
-      base_image=node:22.15.0-alpine3.21
-    fi
-    ;;
   "jvm")
     dockerfile_name="test/docker/Dockerfile-jvm"
     base_image=eclipse-temurin:11
     if [[ "$LIBC" = "musl" ]]; then
       # Older images of eclipse-temurin:xx-alpine (before 21) are single platform and do not support arm64.
       base_image=eclipse-temurin:21-alpine
+    fi
+    ;;
+  "node_js")
+    base_image=node:22.15.0-bookworm-slim
+    if [[ "$LIBC" = "musl" ]]; then
+      base_image=node:22.15.0-alpine3.21
     fi
     ;;
   *)
@@ -75,8 +77,6 @@ docker build \
   --platform "$docker_platform" \
   --build-arg "base_image=${base_image}" \
   --build-arg "injector_binary=${injector_binary}" \
-  --build-arg "arch_under_test=${ARCH}" \
-  --build-arg "libc_under_test=${LIBC}" \
   --build-arg "create_sdk_dummy_files_script=${create_sdk_dummy_files_script}" \
   . \
   -f "$dockerfile_name" \

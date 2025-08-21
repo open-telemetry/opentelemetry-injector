@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>OpenTelemetry.AutoInstrumentation.StartupHook</AssemblyName>
+    <RootNamespace>OpenTelemetry.AutoInstrumentation.StartupHook</RootNamespace>
+    <Platforms>AnyCPU</Platforms>
+    <ApplicationIcon />
+    <OutputType>Library</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <StartupObject />
+  </PropertyGroup>
+</Project>

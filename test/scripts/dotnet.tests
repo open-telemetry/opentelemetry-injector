@@ -1,0 +1,8 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+run_test_case \
+  "adds the .NET profiler" \
+  "app" \
+  "./dotnetapp verify-startup-hook-has-been-injected" \
+  "otel_injector_dotnet_no_op_startup_hook_has_been_loaded: true"

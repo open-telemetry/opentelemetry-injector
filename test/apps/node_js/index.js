@@ -40,6 +40,9 @@ function main() {
     case 'java-tool-options':
       echoEnvVar('JAVA_TOOL_OPTIONS');
       break;
+    case 'dotnet-startup-hooks':
+      echoEnvVar('DOTNET_STARTUP_HOOKS');
+      break;
     default:
       console.error(`unknown test app command: ${command}`);
       process.exit(1);

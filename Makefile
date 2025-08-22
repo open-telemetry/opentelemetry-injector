@@ -54,8 +54,10 @@ uninstall:
 	rm -f $(INSTALL_DIR)/libotelinject.so
 
 # Run this from with this directory to build and run the development container.
-# Once you have a command line inside the container, you can zig-build, zig-unit-test, watch-zig-build,
-# watch-zig-unit-test etc.
+# Once you have a command line inside the container, you can run make zig-build, make zig-unit-tests,
+# make watch-zig-build, make watch-zig-unit-tests etc.
+# Alternatively, you can also use the same commands directly on your development machine, without using the development
+# container.
 # By explicitly setting ARCH=arm64 or ARCH=amd64 you can run and test on different CPU platforms.
 # Mostly intended for development.
 .PHONY: docker-run
@@ -71,13 +73,13 @@ zig-build:
 watch-zig-build:
 	@fd -e zig | entr make zig-build
 
-.PHONY: zig-unit-test
-zig-unit-test:
+.PHONY: zig-unit-tests
+zig-unit-tests:
 	@zig build test --prominent-compile-errors --summary none && echo $(shell date) tests successful || echo $(shell date) tests failed
 
 .PHONY: watch-zig-unit-tests
 watch-zig-unit-tests:
-	@fd -e zig | entr make zig-unit-test
+	@fd -e zig | entr make zig-unit-tests
 
 .PHONY: tests
 tests: test-java test-nodejs test-dotnet

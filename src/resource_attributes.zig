@@ -66,7 +66,7 @@ const mappings: [8]EnvToResourceAttributeMapping =
     };
 
 /// Derive the modified value for OTEL_RESOURCE_ATTRIBUTES based on the original value, and on other resource attributes
-/// provided via the OTEL_INJECTOR* environment variables.
+/// provided via the OTEL_INJECTOR_* environment variables.
 pub fn getModifiedOtelResourceAttributesValue(original_value_optional: ?[:0]const u8) ?types.NullTerminatedString {
     if (getResourceAttributes()) |resource_attributes| {
         defer alloc.page_allocator.free(resource_attributes);

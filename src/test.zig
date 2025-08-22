@@ -3,6 +3,7 @@
 
 // All files with unit tests need to be referenced here:
 pub const alloc = @import("allocator.zig");
+pub const config = @import("config.zig");
 pub const dotnet = @import("dotnet.zig");
 pub const jvm = @import("jvm.zig");
 pub const node_js = @import("node_js.zig");

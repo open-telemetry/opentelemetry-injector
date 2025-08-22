@@ -5,8 +5,10 @@ const builtin = @import("builtin");
 const std = @import("std");
 
 const alloc = @import("allocator.zig");
+const config = @import("config.zig");
 const print = @import("print.zig");
 const types = @import("types.zig");
+const test_util = @import("test_util.zig");
 
 const testing = std.testing;
 
@@ -46,15 +48,17 @@ const DotnetError = error{
 
 const LibCFlavor = enum { UNKNOWN, GNU_LIBC, MUSL };
 
-const dotnet_path_prefix = "/__otel_auto_instrumentation/dotnet";
-
 var cached_dotnet_values: ?DotnetValues = null;
 var cached_libc_flavor: ?LibCFlavor = null;
 
 const injection_happened_msg = "injecting the .NET OpenTelemetry instrumentation";
 var injection_happened_msg_has_been_printed = false;
 
-pub fn getDotnetValues() ?DotnetValues {
+pub fn getDotnetValues(configuration: config.InjectorConfiguration) ?DotnetValues {
+    return doGetDotnetValues(configuration.dotnet_auto_instrumentation_agent_path_prefix);
+}
+
+fn doGetDotnetValues(dotnet_path_prefix: []u8) ?DotnetValues {
     if (cached_dotnet_values) |val| {
         return val;
     }
@@ -69,7 +73,11 @@ pub fn getDotnetValues() ?DotnetValues {
     }
 
     if (cached_libc_flavor) |flavor| {
-        const dotnet_values = determineDotnetValues(flavor, builtin.cpu.arch) catch |err| {
+        const dotnet_values = determineDotnetValues(
+            dotnet_path_prefix,
+            flavor,
+            builtin.cpu.arch,
+        ) catch |err| {
             print.printError("Cannot determine .NET environment variables: {}", .{err});
             return null;
         };
@@ -95,8 +103,8 @@ pub fn getDotnetValues() ?DotnetValues {
     unreachable;
 }
 
-test "getDotnetValues: should return null value if the profiler path cannot be accessed" {
-    const dotnet_values = getDotnetValues();
+test "doGetDotnetValues: should return null value if the profiler path cannot be accessed" {
+    const dotnet_values = doGetDotnetValues(try std.fmt.allocPrint(test_util.test_allocator, "/invalid/path", .{}));
     try testing.expect(dotnet_values == null);
 }
 
@@ -254,7 +262,7 @@ test "doGetLibCFlavor: should return libc flavor unknown when file is not an ELF
     const allocator = std.heap.page_allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
-    const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/not-an-elf-binary" });
+    const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/dotnet/not-an-elf-binary" });
     defer allocator.free(absolute_path_to_binary);
     const libc_flavor = try doGetLibCFlavor(absolute_path_to_binary);
     try testing.expectEqual(libc_flavor, .UNKNOWN);
@@ -264,7 +272,7 @@ test "doGetLibCFlavor: should identify musl libc flavor (arm64)" {
     const allocator = std.heap.page_allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
-    const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/dotnet-app-arm64-musl" });
+    const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/dotnet/dotnet-app-arm64-musl" });
     defer allocator.free(absolute_path_to_binary);
     const libc_flavor = try doGetLibCFlavor(absolute_path_to_binary);
     try testing.expectEqual(libc_flavor, .MUSL);
@@ -274,7 +282,7 @@ test "doGetLibCFlavor: should identify musl libc flavor (x86_64)" {
     const allocator = std.heap.page_allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
-    const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/dotnet-app-x86_64-musl" });
+    const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/dotnet/dotnet-app-x86_64-musl" });
     defer allocator.free(absolute_path_to_binary);
     const libc_flavor = try doGetLibCFlavor(absolute_path_to_binary);
     try testing.expectEqual(libc_flavor, .MUSL);
@@ -284,7 +292,7 @@ test "doGetLibCFlavor: should identify glibc libc flavor (arm64)" {
     const allocator = std.heap.page_allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
-    const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/dotnet-app-arm64-glibc" });
+    const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/dotnet/dotnet-app-arm64-glibc" });
     defer allocator.free(absolute_path_to_binary);
     const libc_flavor = try doGetLibCFlavor(absolute_path_to_binary);
     try testing.expectEqual(libc_flavor, .GNU_LIBC);
@@ -294,13 +302,17 @@ test "doGetLibCFlavor: should identify glibc libc flavor (x86_64)" {
     const allocator = std.heap.page_allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
-    const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/dotnet-app-x86_64-glibc" });
+    const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/dotnet/dotnet-app-x86_64-glibc" });
     defer allocator.free(absolute_path_to_binary);
     const libc_flavor = try doGetLibCFlavor(absolute_path_to_binary);
     try testing.expectEqual(libc_flavor, .GNU_LIBC);
 }
 
-fn determineDotnetValues(libc_flavor: LibCFlavor, architecture: std.Target.Cpu.Arch) DotnetError!DotnetValues {
+fn determineDotnetValues(
+    dotnet_path_prefix: []const u8,
+    libc_flavor: LibCFlavor,
+    architecture: std.Target.Cpu.Arch,
+) DotnetError!DotnetValues {
     const libc_flavor_prefix =
         switch (libc_flavor) {
             .GNU_LIBC => "glibc",
@@ -355,15 +367,28 @@ fn determineDotnetValues(libc_flavor: LibCFlavor, architecture: std.Target.Cpu.A
 }
 
 test "determineDotnetValues: should return error for unsupported CPU architecture" {
-    try testing.expectError(error.UnsupportedCpuArchitecture, determineDotnetValues(.GNU_LIBC, .powerpc64le));
+    try testing.expectError(error.UnsupportedCpuArchitecture, determineDotnetValues(
+        "",
+        .GNU_LIBC,
+        .powerpc64le,
+    ));
 }
 
 test "determineDotnetValues: should return error for unknown libc flavor" {
-    try testing.expectError(error.UnknownLibCFlavor, determineDotnetValues(.UNKNOWN, .x86_64));
+    try testing.expectError(error.UnknownLibCFlavor, determineDotnetValues(
+        "",
+        .UNKNOWN,
+        .x86_64,
+    ));
 }
 
 test "determineDotnetValues: should return values for glibc/x86_64" {
-    const dotnet_values = try determineDotnetValues(.GNU_LIBC, .x86_64);
+    const dotnet_values =
+        try determineDotnetValues(
+            "/__otel_auto_instrumentation/dotnet",
+            .GNU_LIBC,
+            .x86_64,
+        );
     try testing.expectEqualStrings(
         "1",
         std.mem.span(dotnet_values.coreclr_enable_profiling),
@@ -395,7 +420,12 @@ test "determineDotnetValues: should return values for glibc/x86_64" {
 }
 
 test "determineDotnetValues: should return values for glibc/arm64" {
-    const dotnet_values = try determineDotnetValues(.GNU_LIBC, .aarch64);
+    const dotnet_values =
+        try determineDotnetValues(
+            "/__otel_auto_instrumentation/dotnet",
+            .GNU_LIBC,
+            .aarch64,
+        );
     try testing.expectEqualStrings(
         "1",
         std.mem.span(dotnet_values.coreclr_enable_profiling),
@@ -427,7 +457,12 @@ test "determineDotnetValues: should return values for glibc/arm64" {
 }
 
 test "determineDotnetValues: should return values for musl/x86_64" {
-    const dotnet_values = try determineDotnetValues(.MUSL, .x86_64);
+    const dotnet_values =
+        try determineDotnetValues(
+            "/__otel_auto_instrumentation/dotnet",
+            .MUSL,
+            .x86_64,
+        );
     try testing.expectEqualStrings(
         "1",
         std.mem.span(dotnet_values.coreclr_enable_profiling),
@@ -459,7 +494,12 @@ test "determineDotnetValues: should return values for musl/x86_64" {
 }
 
 test "determineDotnetValues: should return values for musl/arm64" {
-    const dotnet_values = try determineDotnetValues(.MUSL, .aarch64);
+    const dotnet_values =
+        try determineDotnetValues(
+            "/__otel_auto_instrumentation/dotnet",
+            .MUSL,
+            .aarch64,
+        );
     try testing.expectEqualStrings(
         "1",
         std.mem.span(dotnet_values.coreclr_enable_profiling),

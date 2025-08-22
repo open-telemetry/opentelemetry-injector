@@ -14,6 +14,7 @@ const testing = std.testing;
 // risk of even compiling the test mechanism to modify the environment.
 
 test "initDebugFlag: not set" {
+    print._resetIsDebug();
     const original_environ = try test_util.clearStdCEnviron();
     defer test_util.resetStdCEnviron(original_environ);
     print.initDebugFlag();
@@ -21,6 +22,7 @@ test "initDebugFlag: not set" {
 }
 
 test "initDebugFlag: false" {
+    print._resetIsDebug();
     const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"OTEL_INJECTOR_DEBUG=false"});
     defer test_util.resetStdCEnviron(original_environ);
 
@@ -29,6 +31,7 @@ test "initDebugFlag: false" {
 }
 
 test "initDebugFlag: true" {
+    print._resetIsDebug();
     const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"OTEL_INJECTOR_DEBUG=true"});
     defer test_util.resetStdCEnviron(original_environ);
 

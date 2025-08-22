@@ -5,6 +5,8 @@
 
 const std = @import("std");
 
+const testing = std.testing;
+
 pub const test_allocator: std.mem.Allocator = std.heap.page_allocator;
 
 /// Clears all entries from std.c.environ, i.e. all environment variables are discarded. The original content before
@@ -48,4 +50,45 @@ pub fn setStdCEnviron(env_vars: []const []const u8) anyerror![*:null]?[*:0]u8 {
 /// setStdCEnviron earler, to restore the original environment after the test is done.
 pub fn resetStdCEnviron(original_environ: [*:null]?[*:0]u8) void {
     std.c.environ = original_environ;
+}
+
+/// An extended version of std.testing.expect that prints a message in case of failure. Useful for tests that have
+/// multiple expects; this version should generally be used in favor of the original std.testing.expect function.
+pub fn expectWithMessage(
+    ok: bool,
+    comptime message: []const u8,
+) !void {
+    if (!ok) {
+        print("\n====== assertion failed: =========\n", .{});
+        print(message, .{});
+        print("\n==================================\n", .{});
+        return error.TestUnexpectedResult;
+    }
+}
+
+// Copied from Zig's std.testing module.
+fn print(comptime fmt: []const u8, args: anytype) void {
+    if (@inComptime()) {
+        @compileError(std.fmt.comptimePrint(fmt, args));
+    } else if (testing.backend_can_print) {
+        std.debug.print(fmt, args);
+    }
+}
+
+// Copied from Zig's std.testing module.
+fn printWithVisibleNewlines(source: []const u8) void {
+    var i: usize = 0;
+    while (std.mem.indexOfScalar(u8, source[i..], '\n')) |nl| : (i += nl + 1) {
+        printLine(source[i..][0..nl]);
+    }
+    print("{s}␃\n", .{source[i..]}); // End of Text symbol (ETX)
+}
+
+// Copied from Zig's std.testing module.
+fn printLine(line: []const u8) void {
+    if (line.len != 0) switch (line[line.len - 1]) {
+        ' ', '\t' => return print("{s}⏎\n", .{line}), // Return symbol
+        else => {},
+    };
+    print("{s}\n", .{line});
 }

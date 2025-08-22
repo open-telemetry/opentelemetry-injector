@@ -3,6 +3,7 @@
 
 const std = @import("std");
 
+const config = @import("config.zig");
 const dotnet = @import("dotnet.zig");
 const jvm = @import("jvm.zig");
 const node_js = @import("node_js.zig");
@@ -53,12 +54,12 @@ export fn getenv(name_z: types.NullTerminatedString) ?types.NullTerminatedString
     }
     std.os.environ = @as([*][*:0]u8, @ptrCast(environment_optional))[0..environment_count];
 
-    // Technically, a process could change the value of `OTEL_INJECTOR_DEBUG` after it started (mostly when we debug
-    // stuff in a REPL) so we look up the value every time.
     print.initDebugFlag();
     print.printDebug("getenv({s}) called", .{name});
 
-    const res = getEnvValue(name);
+    const configuration = config.readConfiguration();
+
+    const res = getEnvValue(name, configuration);
 
     if (res) |value| {
         print.printDebug("getenv({s}) -> '{s}'", .{ name, value });
@@ -69,7 +70,7 @@ export fn getenv(name_z: types.NullTerminatedString) ?types.NullTerminatedString
     return res;
 }
 
-fn getEnvValue(name: [:0]const u8) ?types.NullTerminatedString {
+fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) ?types.NullTerminatedString {
     const original_value = std.posix.getenv(name);
 
     if (std.mem.eql(
@@ -87,7 +88,7 @@ fn getEnvValue(name: [:0]const u8) ?types.NullTerminatedString {
     } else if (std.mem.eql(u8, name, jvm.java_tool_options_env_var_name)) {
         if (!modified_java_tool_options_value_calculated) {
             modified_java_tool_options_value =
-                jvm.checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(original_value);
+                jvm.checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(original_value, configuration);
             modified_java_tool_options_value_calculated = true;
         }
         if (modified_java_tool_options_value) |updated_value| {
@@ -96,38 +97,41 @@ fn getEnvValue(name: [:0]const u8) ?types.NullTerminatedString {
     } else if (std.mem.eql(u8, name, node_js.node_options_env_var_name)) {
         if (!modified_node_options_value_calculated) {
             modified_node_options_value =
-                node_js.checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(original_value);
+                node_js.checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+                    original_value,
+                    configuration,
+                );
             modified_node_options_value_calculated = true;
         }
         if (modified_node_options_value) |updated_value| {
             return updated_value;
         }
     } else if (std.mem.eql(u8, name, "CORECLR_ENABLE_PROFILING")) {
-        if (dotnet.getDotnetValues()) |v| {
+        if (dotnet.getDotnetValues(configuration)) |v| {
             return v.coreclr_enable_profiling;
         }
     } else if (std.mem.eql(u8, name, "CORECLR_PROFILER")) {
-        if (dotnet.getDotnetValues()) |v| {
+        if (dotnet.getDotnetValues(configuration)) |v| {
             return v.coreclr_profiler;
         }
     } else if (std.mem.eql(u8, name, "CORECLR_PROFILER_PATH")) {
-        if (dotnet.getDotnetValues()) |v| {
+        if (dotnet.getDotnetValues(configuration)) |v| {
             return v.coreclr_profiler_path;
         }
     } else if (std.mem.eql(u8, name, "DOTNET_ADDITIONAL_DEPS")) {
-        if (dotnet.getDotnetValues()) |v| {
+        if (dotnet.getDotnetValues(configuration)) |v| {
             return v.additional_deps;
         }
     } else if (std.mem.eql(u8, name, "DOTNET_SHARED_STORE")) {
-        if (dotnet.getDotnetValues()) |v| {
+        if (dotnet.getDotnetValues(configuration)) |v| {
             return v.shared_store;
         }
     } else if (std.mem.eql(u8, name, "DOTNET_STARTUP_HOOKS")) {
-        if (dotnet.getDotnetValues()) |v| {
+        if (dotnet.getDotnetValues(configuration)) |v| {
             return v.startup_hooks;
         }
     } else if (std.mem.eql(u8, name, "OTEL_DOTNET_AUTO_HOME")) {
-        if (dotnet.getDotnetValues()) |v| {
+        if (dotnet.getDotnetValues(configuration)) |v| {
             return v.otel_auto_home;
         }
     }

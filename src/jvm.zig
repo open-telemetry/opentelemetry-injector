@@ -4,22 +4,43 @@
 const std = @import("std");
 
 const alloc = @import("allocator.zig");
+const config = @import("config.zig");
 const print = @import("print.zig");
 const res_attrs = @import("resource_attributes.zig");
 const types = @import("types.zig");
+const test_util = @import("test_util.zig");
 
 const testing = std.testing;
 
 pub const java_tool_options_env_var_name = "JAVA_TOOL_OPTIONS";
-const java_auto_instrumentation_agent_path = "/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar";
-const javaagent_flag_value = "-javaagent:" ++ java_auto_instrumentation_agent_path;
 const injection_happened_msg = "injecting the Java OpenTelemetry agent";
 
-pub fn checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(original_value_optional: ?[:0]const u8) ?types.NullTerminatedString {
+pub fn checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+    original_value_optional: ?[:0]const u8,
+    configuration: config.InjectorConfiguration,
+) ?types.NullTerminatedString {
+    return doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+        original_value_optional,
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+}
+
+fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+    original_value_optional: ?[:0]const u8,
+    jvm_auto_instrumentation_agent_path: []u8,
+) ?types.NullTerminatedString {
     // Check the existence of the Jar file: by passing a `-javaagent` to a
     // jar file that does not exist or cannot be opened will crash the JVM
-    std.fs.cwd().access(java_auto_instrumentation_agent_path, .{}) catch |err| {
-        print.printError("Skipping injection of OTel Java agent in 'JAVA_TOOL_OPTIONS' because of an issue accessing the Jar file at {s}: {}", .{ java_auto_instrumentation_agent_path, err });
+    std.fs.cwd().access(jvm_auto_instrumentation_agent_path, .{}) catch |err| {
+        print.printError("Skipping injection of OTel Java agent in 'JAVA_TOOL_OPTIONS' because of an issue accessing the Jar file at {s}: {}", .{ jvm_auto_instrumentation_agent_path, err });
+        if (original_value_optional) |original_value| {
+            return original_value;
+        }
+        return null;
+    };
+
+    const javaagent_flag_value = std.fmt.allocPrintZ(alloc.page_allocator, "-javaagent:{s}", .{jvm_auto_instrumentation_agent_path}) catch |err| {
+        print.printError("Cannot allocate memory to manipulate the value of '{s}': {}", .{ java_tool_options_env_var_name, err });
         if (original_value_optional) |original_value| {
             return original_value;
         }
@@ -33,16 +54,25 @@ pub fn checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(original_value_op
         original_value_optional,
         original_otel_resource_attributes_env_var_value_optional,
         resource_attributes_optional,
+        javaagent_flag_value,
     );
 }
 
-test "checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return null value if the Java agent cannot be accessed" {
-    const modifiedJavaToolOptions = checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(null);
+test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return null value if the Java agent cannot be accessed" {
+    const modifiedJavaToolOptions =
+        doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+            null,
+            try std.fmt.allocPrint(test_util.test_allocator, "/invalid/path", .{}),
+        );
     try testing.expect(modifiedJavaToolOptions == null);
 }
 
-test "checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return the original value if the Java agent cannot be accessed" {
-    const modifiedJavaToolOptions = checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue("original value");
+test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return the original value if the Java agent cannot be accessed" {
+    const modifiedJavaToolOptions =
+        doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+            "original value",
+            try std.fmt.allocPrint(test_util.test_allocator, "/invalid/path", .{}),
+        );
     try testing.expectEqualStrings(
         "original value",
         std.mem.span(modifiedJavaToolOptions orelse "-"),
@@ -59,6 +89,7 @@ fn getModifiedJavaToolOptionsValue(
     original_java_tool_options_env_var_value_optional: ?[:0]const u8,
     original_otel_resource_attributes_env_var_value_optional: ?[:0]const u8,
     new_resource_attributes_optional: ?[]u8,
+    javaagent_flag_value: types.NullTerminatedString,
 ) ?types.NullTerminatedString {
     var original_otel_resource_attributes_env_var_key_value_pairs_prefix: [:0]const u8 = "";
     if (original_otel_resource_attributes_env_var_value_optional) |original_otel_resource_attributes_env_var_value| {
@@ -189,7 +220,7 @@ fn getModifiedJavaToolOptionsValue(
         } else {
             // JAVA_TOOL_OPTIONS is not set, and no new resource attributes have been provided. Simply return the -javaagent flag.
             print.printMessage(injection_happened_msg, .{});
-            return javaagent_flag_value[0..].ptr;
+            return javaagent_flag_value[0..];
         }
     }
 }
@@ -199,6 +230,7 @@ test "getModifiedJavaToolOptionsValue: should return -javaagent if original valu
         null,
         null,
         null,
+        "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
     );
     try testing.expectEqualStrings(
         "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
@@ -208,11 +240,7 @@ test "getModifiedJavaToolOptionsValue: should return -javaagent if original valu
 
 test "getModifiedJavaToolOptionsValue: should ignore OTEL_RESOURCE_ATTRIBUTES env var if if JAVA_TOOL_OPTIONS is unset and no resource attributes are provided" {
     const otel_resource_attributes_env_var_value: [:0]const u8 = "from_env_var_1=value1,from_env_var_2=value2"[0.. :0];
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
-        null,
-        otel_resource_attributes_env_var_value,
-        null,
-    );
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(null, otel_resource_attributes_env_var_value, null, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
     // OTEL_RESOURCE_ATTRIBUTES should be ignored here because we are not adding -Dotel.resource.attributes, so the
     // Java OTel SDK will pick up OTEL_RESOURCE_ATTRIBUTES.
     try testing.expectEqualStrings(
@@ -225,11 +253,7 @@ test "getModifiedJavaToolOptionsValue: should return -javaagent and -Dotel.resou
     const resource_attributes: []u8 = try alloc.page_allocator.alloc(u8, 15);
     var fbs = std.io.fixedBufferStream(resource_attributes);
     _ = try fbs.writer().write("aaa=bbb,ccc=ddd");
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
-        null,
-        null,
-        resource_attributes,
-    );
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(null, null, resource_attributes, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
     try testing.expectEqualStrings(
         "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar -Dotel.resource.attributes=aaa=bbb,ccc=ddd",
         std.mem.span(modifiedJavaToolOptions orelse "-"),
@@ -241,11 +265,7 @@ test "getModifiedJavaToolOptionsValue: should merge OTEL_RESOURCE_ATTRIBUTES env
     const resource_attributes: []u8 = try alloc.page_allocator.alloc(u8, 15);
     var fbs = std.io.fixedBufferStream(resource_attributes);
     _ = try fbs.writer().write("aaa=bbb,ccc=ddd");
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
-        null,
-        otel_resource_attributes_env_var_value,
-        resource_attributes,
-    );
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(null, otel_resource_attributes_env_var_value, resource_attributes, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
     // OTEL_RESOURCE_ATTRIBUTES must be merged into -Dotel.resource.attributes because we are adding this system
     // property and it will make the Java OTel SDK ignore the OTEL_RESOURCE_ATTRIBUTES env var.
     // Java OTel SDK will pick up OTEL_RESOURCE_ATTRIBUTES.
@@ -257,11 +277,7 @@ test "getModifiedJavaToolOptionsValue: should merge OTEL_RESOURCE_ATTRIBUTES env
 
 test "getModifiedJavaToolOptionsValue: should append -javaagent if original value exists and no resource attributes are provided" {
     const original_value: [:0]const u8 = "-Dsome.property=value"[0.. :0];
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
-        original_value,
-        null,
-        null,
-    );
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(original_value, null, null, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
     try testing.expectEqualStrings(
         "-Dsome.property=value -javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
         std.mem.span(modifiedJavaToolOptions orelse "-"),
@@ -271,11 +287,7 @@ test "getModifiedJavaToolOptionsValue: should append -javaagent if original valu
 test "getModifiedJavaToolOptionsValue: should ignore OTEL_RESOURCE_ATTRIBUTES env var if JAVA_TOOL_OPTIONS is set and no resource attributes are provided" {
     const otel_resource_attributes_env_var_value: [:0]const u8 = "from_env_var_1=value1,from_env_var_2=value2"[0.. :0];
     const original_value: [:0]const u8 = "-Dsome.property=value"[0.. :0];
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
-        original_value,
-        otel_resource_attributes_env_var_value,
-        null,
-    );
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(original_value, otel_resource_attributes_env_var_value, null, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
     // OTEL_RESOURCE_ATTRIBUTES should be ignored here because we are not adding -Dotel.resource.attributes, so the
     // Java OTel SDK will pick up OTEL_RESOURCE_ATTRIBUTES.
     try testing.expectEqualStrings(
@@ -286,11 +298,7 @@ test "getModifiedJavaToolOptionsValue: should ignore OTEL_RESOURCE_ATTRIBUTES en
 
 test "getModifiedJavaToolOptionsValue: should append -javaagent if original value exists and has -Dotel.resource.attributes but no new resource attributes are provided, " {
     const original_value: [:0]const u8 = "-Dsome.property=value -Dotel.resource.attributes=www=xxx,yyy=zzz"[0.. :0];
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
-        original_value,
-        null,
-        null,
-    );
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(original_value, null, null, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
     try testing.expectEqualStrings(
         "-Dsome.property=value -Dotel.resource.attributes=www=xxx,yyy=zzz -javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
         std.mem.span(modifiedJavaToolOptions orelse "-"),
@@ -300,11 +308,7 @@ test "getModifiedJavaToolOptionsValue: should append -javaagent if original valu
 test "getModifiedJavaToolOptionsValue: should ignore OTEL_RESOURCE_ATTRIBUTES env var if JAVA_TOOL_OPTIONS is set and has -Dotel.resource.attributes but no new resource attributes are provided, " {
     const otel_resource_attributes_env_var_value: [:0]const u8 = "from_env_var_1=value1,from_env_var_2=value2"[0.. :0];
     const original_value: [:0]const u8 = "-Dsome.property=value -Dotel.resource.attributes=www=xxx,yyy=zzz"[0.. :0];
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
-        original_value,
-        otel_resource_attributes_env_var_value,
-        null,
-    );
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(original_value, otel_resource_attributes_env_var_value, null, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
     // OTEL_RESOURCE_ATTRIBUTES should be ignored here because we are not _adding_ -Dotel.resource.attributes, it was
     // there already. The Java OTel SDK will ignore the OTEL_RESOURCE_ATTRIBUTES env var, but it would have ignored
     // it anyway, also without the injector. We deliberately avoid changing that behavior.
@@ -319,11 +323,7 @@ test "getModifiedJavaToolOptionsValue: should append -javaagent and -Dotel.resou
     const resource_attributes: []u8 = try alloc.page_allocator.alloc(u8, 15);
     var fbs = std.io.fixedBufferStream(resource_attributes);
     _ = try fbs.writer().write("aaa=bbb,ccc=ddd");
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
-        original_value,
-        null,
-        resource_attributes,
-    );
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(original_value, null, resource_attributes, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
     try testing.expectEqualStrings(
         "-Dsome.property=value -javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar -Dotel.resource.attributes=aaa=bbb,ccc=ddd",
         std.mem.span(modifiedJavaToolOptions orelse "-"),
@@ -336,11 +336,7 @@ test "getModifiedJavaToolOptionsValue: should merge OTEL_RESOURCE_ATTRIBUTES env
     const resource_attributes: []u8 = try alloc.page_allocator.alloc(u8, 15);
     var fbs = std.io.fixedBufferStream(resource_attributes);
     _ = try fbs.writer().write("aaa=bbb,ccc=ddd");
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
-        original_value,
-        otel_resource_attributes_env_var_value,
-        resource_attributes,
-    );
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(original_value, otel_resource_attributes_env_var_value, resource_attributes, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
     // OTEL_RESOURCE_ATTRIBUTES must be merged into -Dotel.resource.attributes because we are adding this system
     // property and it will make the Java OTel SDK ignore the OTEL_RESOURCE_ATTRIBUTES env var.
     // Java OTel SDK will pick up OTEL_RESOURCE_ATTRIBUTES.
@@ -355,11 +351,7 @@ test "getModifiedJavaToolOptionsValue: should merge new and existing -Dotel.reso
     const resource_attributes: []u8 = try alloc.page_allocator.alloc(u8, 15);
     var fbs = std.io.fixedBufferStream(resource_attributes);
     _ = try fbs.writer().write("aaa=bbb,ccc=ddd");
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
-        original_value,
-        null,
-        resource_attributes,
-    );
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(original_value, null, resource_attributes, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
     try testing.expectEqualStrings(
         "-Dotel.resource.attributes=eee=fff,ggg=hhh,aaa=bbb,ccc=ddd -javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
         std.mem.span(modifiedJavaToolOptions orelse "-"),
@@ -371,11 +363,7 @@ test "getModifiedJavaToolOptionsValue: should merge new and existing -Dotel.reso
     const resource_attributes: []u8 = try alloc.page_allocator.alloc(u8, 15);
     var fbs = std.io.fixedBufferStream(resource_attributes);
     _ = try fbs.writer().write("aaa=bbb,ccc=ddd");
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
-        original_value,
-        null,
-        resource_attributes,
-    );
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(original_value, null, resource_attributes, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
     try testing.expectEqualStrings(
         "-Dproperty1=value -Dotel.resource.attributes=eee=fff,ggg=hhh,aaa=bbb,ccc=ddd -javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
         std.mem.span(modifiedJavaToolOptions orelse "-"),
@@ -387,11 +375,7 @@ test "getModifiedJavaToolOptionsValue: should merge new and existing -Dotel.reso
     const resource_attributes: []u8 = try alloc.page_allocator.alloc(u8, 15);
     var fbs = std.io.fixedBufferStream(resource_attributes);
     _ = try fbs.writer().write("aaa=bbb,ccc=ddd");
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
-        original_value,
-        null,
-        resource_attributes,
-    );
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(original_value, null, resource_attributes, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
     try testing.expectEqualStrings(
         "-Dproperty1=value -Dotel.resource.attributes=eee=fff,ggg=hhh,aaa=bbb,ccc=ddd -Dproperty2=value -javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
         std.mem.span(modifiedJavaToolOptions orelse "-"),
@@ -403,11 +387,7 @@ test "getModifiedJavaToolOptionsValue: should merge new and existing -Dotel.reso
     const resource_attributes: []u8 = try alloc.page_allocator.alloc(u8, 15);
     var fbs = std.io.fixedBufferStream(resource_attributes);
     _ = try fbs.writer().write("aaa=bbb,ccc=ddd");
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
-        original_value,
-        null,
-        resource_attributes,
-    );
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(original_value, null, resource_attributes, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
     try testing.expectEqualStrings(
         "-Dproperty1=value -Dotel.resource.attributes=eee=fff,ggg=hhh,aaa=bbb,ccc=ddd -javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
         std.mem.span(modifiedJavaToolOptions orelse "-"),
@@ -420,11 +400,7 @@ test "getModifiedJavaToolOptionsValue: should ignore OTEL_RESOURCE_ATTRIBUTES en
     const resource_attributes: []u8 = try alloc.page_allocator.alloc(u8, 15);
     var fbs = std.io.fixedBufferStream(resource_attributes);
     _ = try fbs.writer().write("aaa=bbb,ccc=ddd");
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
-        original_value,
-        otel_resource_attributes_env_var_value,
-        resource_attributes,
-    );
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(original_value, otel_resource_attributes_env_var_value, resource_attributes, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
     // OTEL_RESOURCE_ATTRIBUTES should be ignored here because we are not _adding_ -Dotel.resource.attributes, it was
     // there already. The Java OTel SDK will ignore the OTEL_RESOURCE_ATTRIBUTES env var, but it would have ignored
     // it anyway, also without the injector. We deliberately avoid changing that behavior.

@@ -6,7 +6,7 @@ const std = @import("std");
 const otel_injector_debug_env_var_name = "OTEL_INJECTOR_DEBUG";
 const log_prefix = "[otel-injector] ";
 
-var is_debug: ?bool = false;
+var is_debug: ?bool = null;
 
 /// Initializes the is_debug flag based on the environment variable OTEL_INJECTOR_DEBUG.
 pub fn initDebugFlag() void {

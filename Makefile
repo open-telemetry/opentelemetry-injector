@@ -7,7 +7,6 @@ DOCKER_REPO?=docker.io
 .PHONY: all
 all: so/libotelinject.so
 
-# make -d: Prerequisite 'obj' is newer than target 'obj/logger.o'.
 so:
 	@mkdir -p so
 
@@ -16,13 +15,10 @@ obj:
 
 .PHONY: clean
 clean:
-	rm -f tests so/* obj/*
+	rm -f so/* dist/* && rm -rf zig-out .zig-cache
 
-obj/main.o: obj src/main.c
-	gcc -c -Wall -Werror -fpic -o obj/main.o src/main.c
-
-so/libotelinject.so: obj so obj/main.o
-	gcc -shared -o so/libotelinject.so obj/main.o
+so/libotelinject.so: so
+	zig build -Dcpu-arch=${ARCH} --prominent-compile-errors --summary none
 
 .PHONY: dist
 dist:
@@ -30,7 +26,7 @@ dist:
 	docker buildx build --platform linux/$(ARCH) --build-arg DOCKER_REPO=$(DOCKER_REPO) -o type=image,name=libotelinject-builder:$(ARCH),push=false .
 	docker rm -f libotelinject-builder 2>/dev/null || true
 	docker run -d --platform linux/$(ARCH) --name libotelinject-builder libotelinject-builder:$(ARCH) sleep inf
-	docker exec libotelinject-builder make all
+	docker exec libotelinject-builder make ARCH=$(ARCH) SHELL=/bin/sh all
 	docker cp libotelinject-builder:/libotelinject/so/libotelinject.so dist/libotelinject_$(ARCH).so
 	docker rm -f libotelinject-builder
 
@@ -57,17 +53,33 @@ uninstall:
 	rm -f $(INSTALL_DIR)/javaagent.jar
 	rm -f $(INSTALL_DIR)/libotelinject.so
 
-# Run this from within this directory to create the devel image (just debian with gcc and a jdk). You only have to run
-# this once-ish. Mostly intended for development.
-.PHONY: docker-build
-docker-build:
-	docker build -t instr-devel -f devel.Dockerfile .
-
-# Run this from with this directory to run and get a command line into the devel container created by dev-docker-build.
-# Once you have a command line, you can run `make test`. Mostly intended for development.
+# Run this from with this directory to build and run the development container.
+# Once you have a command line inside the container, you can run make zig-build, make zig-unit-tests,
+# make watch-zig-build, make watch-zig-unit-tests etc.
+# Alternatively, you can also use the same commands directly on your development machine, without using the development
+# container.
+# By explicitly setting ARCH=arm64 or ARCH=amd64 you can run and test on different CPU platforms.
+# Mostly intended for development.
 .PHONY: docker-run
 docker-run:
-	docker run --rm -it -v `pwd`:/instr instr-devel
+	ARCH=$(ARCH) ./start-injector-dev-container.sh
+
+.PHONY: zig-build
+zig-build:
+	@mkdir -p so
+	@zig build --prominent-compile-errors --summary none && echo $(shell date) build successful || echo $(shell date) build failed
+
+.PHONY: watch-zig-build
+watch-zig-build:
+	@fd -e zig | entr make zig-build
+
+.PHONY: zig-unit-tests
+zig-unit-tests:
+	@zig build test --prominent-compile-errors --summary none && echo $(shell date) tests successful || echo $(shell date) tests failed
+
+.PHONY: watch-zig-unit-tests
+watch-zig-unit-tests:
+	@fd -e zig | entr make zig-unit-tests
 
 .PHONY: tests
 tests: test-java test-nodejs test-dotnet
@@ -80,6 +92,8 @@ SHELL = /bin/bash
 .SHELLFLAGS = -o pipefail -c
 
 # SRC_ROOT is the top of the source tree.
+# TODO: This causes "/bin/sh: git: not found" when we are using the Makefile in containers that do not have git
+# installed.
 SRC_ROOT := $(shell git rev-parse --show-toplevel)
 TOOLS_BIN_DIR    := $(SRC_ROOT)/.tools
 CHLOGGEN_CONFIG  := .chloggen/config.yaml

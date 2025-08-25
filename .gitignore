@@ -1,8 +1,7 @@
-dist/
-obj/
+.zig-cache
+zig-out
+
 so/
-tests/dotnet/libotelinject.so
-tests/java/libotelinject.so
-tests/nodejs/libotelinject.so
+dist/
 
 .tools/

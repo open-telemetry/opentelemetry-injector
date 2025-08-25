@@ -1,3 +1,25 @@
+## OpenTelemetry Injector
+
+The OpenTelemetry injector is a small shared library (written in [Zig](https://ziglang.org/)) that is intended to be
+used via the environment variable [`LD_PRELOAD`](https://man7.org/linux/man-pages/man8/ld.so.8.html#ENVIRONMENT), the
+[`/etc/ld.so.preload`](https://man7.org/linux/man-pages/man8/ld.so.8.html#FILES) file, or similar mechanisms to inject
+environment variables into processes at startup.
+
+It serves two main purposes:
+* Inject an OpenTelemetry Auto Instrumentation agent into the process to capture and report distributed traces and
+  metrics to the [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) for supported runtimes.
+* Set resource attributes automatically, (for example Kubernetes related resource attributes and service related
+  resource attributes in environments where this is applicable).
+
+The injector can be used to enable automatic zero-touch instrumenation of processes.
+For this to work, the injector binary needs to be bundled together with the OpenTelemetry auto instrumentation agents
+for the target runtimes.
+RPM and DEB packages are available.
+
+TODO: merge with previous README.md content below...
+
+-----------
+
 # opentelemetry-injector
 
 The **OpenTelemetry Injector** Debian/RPM package

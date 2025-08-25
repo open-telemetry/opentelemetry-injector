@@ -17,8 +17,8 @@ const jvm_path_key = "jvm_auto_instrumentation_agent_path";
 const nodejs_path_key = "nodejs_auto_instrumentation_agent_path";
 
 const dotnet_path_env_var = "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
-const jvm_path_env_var="JVM_AUTO_INSTRUMENTATION_AGENT_PATH";
-const nodejs_path_env_var="NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
+const jvm_path_env_var = "JVM_AUTO_INSTRUMENTATION_AGENT_PATH";
+const nodejs_path_env_var = "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
 
 pub const InjectorConfiguration = struct {
     dotnet_auto_instrumentation_agent_path_prefix: []u8,
@@ -111,6 +111,18 @@ fn readConfigurationFile(cfg_file_path: []const u8, configuration: *InjectorConf
             },
             error.StreamTooLong => {
                 print.printError("ignoring overly long line in configuration file {s} with more than {d} characters", .{ cfg_file_path, max_line_length });
+                line_buffer_array.clearAndFree();
+
+                // If this happens, we have not consumed the overly long line completely until the end-of-line
+                // delimeter, because streamUntilDelimiter stops when max_line_length have been read. We need to make
+                // sure the rest of the line (until the next \n) is discarded as well.
+                config_file.reader().skipUntilDelimiterOrEof('\n') catch |e| {
+                    print.printError(
+                        "read error when skipping until the end of an overly long line while reading configuration file {s}: {}",
+                        .{ cfg_file_path, e },
+                    );
+                    break;
+                };
                 continue;
             },
             else => |e| {
@@ -215,6 +227,30 @@ test "readConfigurationFile: all configuration values plus whitespace and commen
     );
     try testing.expectEqualStrings(
         "/custom/path/to/node_js/node_modules/@opentelemetry-js/otel/instrument",
+        configuration.nodejs_auto_instrumentation_agent_path,
+    );
+}
+
+test "readConfigurationFile: does not parse overly long lines" {
+    const allocator = std.heap.page_allocator;
+    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    defer allocator.free(cwd_path);
+    const absolute_path_to_config_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/very_long_lines.conf" });
+    defer allocator.free(absolute_path_to_config_file);
+    var configuration = createDefaultConfiguration();
+
+    readConfigurationFile(absolute_path_to_config_file, &configuration);
+
+    try testing.expectEqualStrings(
+        default_dotnet_auto_instrumentation_agent_path_prefix,
+        configuration.dotnet_auto_instrumentation_agent_path_prefix,
+    );
+    try testing.expectEqualStrings(
+        "/this/line/should/be/parsed",
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        default_nodejs_auto_instrumentation_agent_path,
         configuration.nodejs_auto_instrumentation_agent_path,
     );
 }

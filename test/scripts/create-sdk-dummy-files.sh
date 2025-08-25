@@ -36,3 +36,9 @@ fi
 # An empty file works fine as a no-op Node.js module.
 mkdir -p /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument
 touch /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument/index.js
+
+# Provide instrumentation files also in two more locations, for testing configuration via
+# /etc/opentelemetry/otelinject.conf and via environment variables NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH and friends.
+mkdir -p /path/from
+cp -R /__otel_auto_instrumentation /path/from/config-file
+cp -R /__otel_auto_instrumentation /path/from/environment-variable

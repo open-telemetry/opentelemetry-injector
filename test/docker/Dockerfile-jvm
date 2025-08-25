@@ -16,6 +16,8 @@ RUN if [ -z "$create_sdk_dummy_files_script" ]; then \
       exit 1; \
     fi
 
+RUN mkdir -p /etc/opentelemetry && chmod 777 /etc/opentelemetry
+
 WORKDIR /usr/src/otel/injector/
 
 COPY test/docker/jvm/no-op-agent no-op-agent
@@ -30,6 +32,7 @@ RUN cd app && javac Main.java && \
 COPY test/scripts/run-tests-within-container.sh scripts/
 COPY test/scripts/create-*.sh scripts/
 COPY test/scripts/*.tests scripts/
+COPY test/docker/otelinject.conf otelinject.conf
 
 RUN ${create_sdk_dummy_files_script}
 

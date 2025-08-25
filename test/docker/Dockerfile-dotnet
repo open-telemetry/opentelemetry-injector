@@ -21,6 +21,8 @@ RUN dotnet publish --no-restore -o /app
 # final stage/image
 FROM ${base_image_run}
 
+RUN mkdir -p /etc/opentelemetry && chmod 777 /etc/opentelemetry
+
 WORKDIR /usr/src/otel/injector/
 COPY --from=build /no-op-startup-hook no-op-startup-hook
 COPY --from=build /app app
@@ -40,6 +42,7 @@ fi
 COPY test/scripts/run-tests-within-container.sh scripts/
 COPY test/scripts/create-*.sh scripts/
 COPY test/scripts/*.tests scripts/
+COPY test/docker/otelinject.conf otelinject.conf
 
 RUN ${create_sdk_dummy_files_script}
 

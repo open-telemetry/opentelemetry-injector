@@ -82,7 +82,7 @@ run_test_case() {
     IFS=,
     # shellcheck disable=SC2086
     set -- $TEST_CASES_CONTAINING""
-     run_this_test_case="false"
+    run_this_test_case="false"
     for selected_test_case in "$@"; do
       set +e
       match=$(expr "$test_case_label" : ".*$selected_test_case.*")
@@ -95,6 +95,14 @@ run_test_case() {
       echo "- skipping test case \"$test_case_label\""
       return
     fi
+  fi
+
+  set +e
+  match=$(expr "$test_case_label" : ".*configuration file.*")
+  set -e
+  if [ "$match" -gt 0 ]; then
+    echo "providing configuration file at /etc/opentelemetry/otelinject.conf for test case \"$test_case_label\""
+    cp otelinject.conf /etc/opentelemetry/otelinject.conf
   fi
 
   cd "$working_dir"

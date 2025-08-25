@@ -37,3 +37,10 @@ run_test_case \
   "node index.js node-options" \
   "NODE_OPTIONS: --require /path/from/environment-variable/node_js/node_modules/@opentelemetry-js/otel/instrument" \
   "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/environment-variable/node_js/node_modules/@opentelemetry-js/otel/instrument"
+
+run_test_case \
+  "setting NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH to the empty string disables the Node.js auto-instrumentation" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: -" \
+  "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH="

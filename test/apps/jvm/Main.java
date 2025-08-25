@@ -28,12 +28,13 @@ public class Main {
         }
     }
 
-    private static void echoEnvVar(String envVarName) {
-        System.out.println(envVarName + ": " + System.getenv(envVarName));
-    }
-
     public static void echoProperty(String propertyName) {
-        System.out.println(propertyName + ": " + System.getProperty(propertyName));
+        String value = System.getProperty(propertyName);
+        if (value != null) {
+            System.out.println(propertyName + ": " + value);
+        } else {
+            System.out.println(propertyName + ": -");
+        }
     }
 
     public static void echoProperties(String[] propertyNames) {

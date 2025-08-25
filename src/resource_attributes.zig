@@ -76,7 +76,7 @@ pub fn getModifiedOtelResourceAttributesValue(original_value_optional: ?[:0]cons
                 // Note: We must never free the return_buffer, or we may cause a USE_AFTER_FREE memory corruption in the
                 // parent process.
                 const return_buffer = std.fmt.allocPrintZ(alloc.page_allocator, "{s}", .{resource_attributes}) catch |err| {
-                    print.printError("Cannot allocate memory to manipulate the value of '{s}': {}", .{ otel_resource_attributes_env_var_name, err });
+                    print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ otel_resource_attributes_env_var_name, err });
                     return original_value;
                 };
                 print.printMessage(modification_happened_msg, .{otel_resource_attributes_env_var_name});
@@ -87,7 +87,7 @@ pub fn getModifiedOtelResourceAttributesValue(original_value_optional: ?[:0]cons
             // Note: We must never free the return_buffer, or we may cause a USE_AFTER_FREE memory corruption in the
             // parent process.
             const return_buffer = std.fmt.allocPrintZ(alloc.page_allocator, "{s},{s}", .{ resource_attributes, original_value }) catch |err| {
-                print.printError("Cannot allocate memory to manipulate the value of '{s}': {}", .{ otel_resource_attributes_env_var_name, err });
+                print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ otel_resource_attributes_env_var_name, err });
                 return original_value;
             };
             print.printMessage(modification_happened_msg, .{otel_resource_attributes_env_var_name});
@@ -96,7 +96,7 @@ pub fn getModifiedOtelResourceAttributesValue(original_value_optional: ?[:0]cons
             // Note: We must never free the return_buffer, or we may cause a USE_AFTER_FREE memory corruption in the
             // parent process.
             const return_buffer = std.fmt.allocPrintZ(alloc.page_allocator, "{s}", .{resource_attributes}) catch |err| {
-                print.printError("Cannot allocate memory to manipulate the value of '{s}': {}", .{ otel_resource_attributes_env_var_name, err });
+                print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ otel_resource_attributes_env_var_name, err });
                 return null;
             };
             print.printMessage(modification_happened_msg, .{otel_resource_attributes_env_var_name});
@@ -108,7 +108,7 @@ pub fn getModifiedOtelResourceAttributesValue(original_value_optional: ?[:0]cons
             // Note: We must never free the return_buffer, or we may cause a USE_AFTER_FREE memory corruption in the
             // parent process.
             const return_buffer = std.fmt.allocPrintZ(alloc.page_allocator, "{s}", .{original_value}) catch |err| {
-                print.printError("Cannot allocate memory to manipulate the value of '{s}': {}", .{ otel_resource_attributes_env_var_name, err });
+                print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ otel_resource_attributes_env_var_name, err });
                 return original_value;
             };
             return return_buffer.ptr;
@@ -162,19 +162,19 @@ pub fn getResourceAttributes() ?[]u8 {
                     is_first_token = false;
                 } else {
                     std.fmt.format(fbs.writer(), ",", .{}) catch |err| {
-                        print.printError("Cannot append ',' delimiter to resource attributes: {}", .{err});
+                        print.printError("Cannot append \",\" delimiter to resource attributes: {}", .{err});
                         return null;
                     };
                 }
 
                 if (mapping.resource_attributes_key) |attribute_key| {
                     std.fmt.format(fbs.writer(), "{s}={s}", .{ attribute_key, value }) catch |err| {
-                        print.printError("Cannot append '{s}={s}' from env var '{s}' to resource attributes: {}", .{ attribute_key, value, env_var_name, err });
+                        print.printError("Cannot append \"{s}={s}\" from env var \"{s}\" to resource attributes: {}", .{ attribute_key, value, env_var_name, err });
                         return null;
                     };
                 } else {
                     std.fmt.format(fbs.writer(), "{s}", .{value}) catch |err| {
-                        print.printError("Cannot append '{s}' from env var '{s}' to resource attributes: {}", .{ value, env_var_name, err });
+                        print.printError("Cannot append \"{s}\" from env var \"{s}\" to resource attributes: {}", .{ value, env_var_name, err });
                         return null;
                     };
                 }

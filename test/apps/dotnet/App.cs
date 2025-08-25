@@ -33,6 +33,11 @@ class App
 
     private static void EchoEnvVar(String envVarName)
     {
-        Console.WriteLine("{0}: {1}", envVarName, Environment.GetEnvironmentVariable(envVarName));
+        string value = Environment.GetEnvironmentVariable(envVarName);
+        if (value != null) {
+            Console.WriteLine("{0}: {1}", envVarName, value);
+        } else {
+            Console.WriteLine("{0}: -", envVarName);
+        }
     }
 }

@@ -29,10 +29,18 @@ fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
     original_value_optional: ?[:0]const u8,
     jvm_auto_instrumentation_agent_path: []u8,
 ) ?types.NullTerminatedString {
+    if (jvm_auto_instrumentation_agent_path.len == 0) {
+        print.printMessage("Skipping the injection of the OpenTelemetry Java agent in \"JAVA_TOOL_OPTIONS\" because it has been explicitly disabled.", .{});
+        if (original_value_optional) |original_value| {
+            return original_value;
+        }
+        return null;
+    }
+
     // Check the existence of the Jar file: by passing a `-javaagent` to a
     // jar file that does not exist or cannot be opened will crash the JVM
     std.fs.cwd().access(jvm_auto_instrumentation_agent_path, .{}) catch |err| {
-        print.printError("Skipping injection of OTel Java agent in 'JAVA_TOOL_OPTIONS' because of an issue accessing the Jar file at {s}: {}", .{ jvm_auto_instrumentation_agent_path, err });
+        print.printError("Skipping the injection of the OpenTelemetry Java agent in \"JAVA_TOOL_OPTIONS\" because of an issue accessing the Jar file at \"{s}\": {}", .{ jvm_auto_instrumentation_agent_path, err });
         if (original_value_optional) |original_value| {
             return original_value;
         }
@@ -40,7 +48,7 @@ fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
     };
 
     const javaagent_flag_value = std.fmt.allocPrintZ(alloc.page_allocator, "-javaagent:{s}", .{jvm_auto_instrumentation_agent_path}) catch |err| {
-        print.printError("Cannot allocate memory to manipulate the value of '{s}': {}", .{ java_tool_options_env_var_name, err });
+        print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ java_tool_options_env_var_name, err });
         if (original_value_optional) |original_value| {
             return original_value;
         }
@@ -105,7 +113,7 @@ fn getModifiedJavaToolOptionsValue(
                 "{s},",
                 .{original_otel_resource_attributes_env_var_value},
             ) catch |err| {
-                print.printError("Cannot allocate memory to prepare the original_otel_resource_attributes_env_var_key_value_pairs_prefix for the value of '{s}': {}", .{ java_tool_options_env_var_name, err });
+                print.printError("Cannot allocate memory to prepare the original_otel_resource_attributes_env_var_key_value_pairs_prefix for the value of \"{s}\": {}", .{ java_tool_options_env_var_name, err });
                 return null;
             };
     }
@@ -155,7 +163,7 @@ fn getModifiedJavaToolOptionsValue(
                     originalKvPairs,
                     new_resource_attributes,
                 }) catch |err| {
-                    print.printError("Cannot allocate memory to manipulate the value of '{s}': {}", .{ java_tool_options_env_var_name, err });
+                    print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ java_tool_options_env_var_name, err });
                     return original_java_tool_options_env_var_value;
                 };
                 defer alloc.page_allocator.free(mergedKvPairs);
@@ -166,7 +174,7 @@ fn getModifiedJavaToolOptionsValue(
                         remainingJavaToolOptions,
                         javaagent_flag_value,
                     }) catch |err| {
-                        print.printError("Cannot allocate memory to manipulate the value of '{s}': {}", .{ java_tool_options_env_var_name, err });
+                        print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ java_tool_options_env_var_name, err });
                         return original_java_tool_options_env_var_value;
                     };
                 print.printMessage(injection_happened_msg, .{});
@@ -183,7 +191,7 @@ fn getModifiedJavaToolOptionsValue(
                     original_otel_resource_attributes_env_var_key_value_pairs_prefix,
                     new_resource_attributes,
                 }) catch |err| {
-                    print.printError("Cannot allocate memory to manipulate the value of '{s}': {}", .{ java_tool_options_env_var_name, err });
+                    print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ java_tool_options_env_var_name, err });
                     return original_java_tool_options_env_var_value;
                 };
             print.printMessage(res_attrs.modification_happened_msg, .{java_tool_options_env_var_name});
@@ -196,7 +204,7 @@ fn getModifiedJavaToolOptionsValue(
                     original_java_tool_options_env_var_value,
                     javaagent_flag_value,
                 }) catch |err| {
-                    print.printError("Cannot allocate memory to manipulate the value of '{s}': {}", .{ java_tool_options_env_var_name, err });
+                    print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ java_tool_options_env_var_name, err });
                     return original_java_tool_options_env_var_value;
                 };
             print.printMessage(injection_happened_msg, .{});
@@ -211,7 +219,7 @@ fn getModifiedJavaToolOptionsValue(
                 original_otel_resource_attributes_env_var_key_value_pairs_prefix,
                 new_resource_attributes,
             }) catch |err| {
-                print.printError("Cannot allocate memory to manipulate the value of '{s}': {}", .{ java_tool_options_env_var_name, err });
+                print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ java_tool_options_env_var_name, err });
                 return null;
             };
             print.printMessage(res_attrs.modification_happened_msg, .{java_tool_options_env_var_name});

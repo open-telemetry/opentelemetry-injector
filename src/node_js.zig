@@ -28,18 +28,26 @@ fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
     original_value_optional: ?[:0]const u8,
     nodejs_auto_instrumentation_agent_path: []u8,
 ) ?types.NullTerminatedString {
+    if (nodejs_auto_instrumentation_agent_path.len == 0) {
+        print.printMessage("Skipping the injection of the Node.js OpenTelemetry auto instrumentation because it has been explicitly disabled.", .{});
+        if (original_value_optional) |original_value| {
+            return original_value;
+        }
+        return null;
+    }
+
     // Check the existence of the Node module: requiring or importing a module
     // that does not exist or cannot be opened will crash the Node.js process
     // with an 'ERR_MODULE_NOT_FOUND' error.
     std.fs.cwd().access(nodejs_auto_instrumentation_agent_path, .{}) catch |err| {
-        print.printError("Skipping injection of the Node.js OTel auto instrumentation agent in '{s}' because of an issue accessing the Node.js module at {s}: {}", .{ node_options_env_var_name, nodejs_auto_instrumentation_agent_path, err });
+        print.printError("Skipping the injection of the Node.js OpenTelemetry auto instrumentation in \"{s}\" because of an issue accessing the Node.js module at \"{s}\": {}", .{ node_options_env_var_name, nodejs_auto_instrumentation_agent_path, err });
         if (original_value_optional) |original_value| {
             return original_value;
         }
         return null;
     };
     const require_nodejs_auto_instrumentation_agent = std.fmt.allocPrintZ(alloc.page_allocator, "--require {s}", .{nodejs_auto_instrumentation_agent_path}) catch |err| {
-        print.printError("Cannot allocate memory to manipulate the value of '{s}': {}", .{ node_options_env_var_name, err });
+        print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ node_options_env_var_name, err });
         if (original_value_optional) |original_value| {
             return original_value;
         }
@@ -78,7 +86,7 @@ fn getModifiedNodeOptionsValue(original_value_optional: ?[:0]const u8, require_n
         // Note: We must never free the return_buffer, or we may cause a USE_AFTER_FREE memory corruption in the
         // parent process.
         const return_buffer = std.fmt.allocPrintZ(alloc.page_allocator, "{s} {s}", .{ require_nodejs_auto_instrumentation_agent, original_value }) catch |err| {
-            print.printError("Cannot allocate memory to manipulate the value of '{s}': {}", .{ node_options_env_var_name, err });
+            print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ node_options_env_var_name, err });
             return original_value;
         };
 

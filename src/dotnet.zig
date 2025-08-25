@@ -59,6 +59,11 @@ pub fn getDotnetValues(configuration: config.InjectorConfiguration) ?DotnetValue
 }
 
 fn doGetDotnetValues(dotnet_path_prefix: []u8) ?DotnetValues {
+    if (dotnet_path_prefix.len == 0) {
+        print.printMessage("Skipping the injection of the .NET OpenTelemetry instrumentation because it has been explicitly disabled.", .{});
+        return null;
+    }
+
     if (cached_dotnet_values) |val| {
         return val;
     }
@@ -68,7 +73,7 @@ fn doGetDotnetValues(dotnet_path_prefix: []u8) ?DotnetValues {
     }
 
     if (cached_libc_flavor == LibCFlavor.UNKNOWN) {
-        print.printError("Cannot determine LibC flavor", .{});
+        print.printError("Skipping the injection of the .NET OpenTelemetry instrumentation, cannot determine the LibC flavor.", .{});
         return null;
     }
 
@@ -91,7 +96,7 @@ fn doGetDotnetValues(dotnet_path_prefix: []u8) ?DotnetValues {
         };
         for (paths_to_check) |p| {
             std.fs.cwd().access(std.mem.span(p), .{}) catch |err| {
-                print.printError("Skipping injection of injecting the .NET OpenTelemetry instrumentation because of an issue accessing {s}: {}", .{ p, err });
+                print.printError("Skipping the injection of the .NET OpenTelemetry instrumentation because of an issue accessing \"{s}\": {}", .{ p, err });
                 return null;
             };
         }

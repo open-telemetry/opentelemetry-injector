@@ -62,7 +62,7 @@ export fn getenv(name_z: types.NullTerminatedString) ?types.NullTerminatedString
     const res = getEnvValue(name, configuration);
 
     if (res) |value| {
-        print.printDebug("getenv({s}) -> '{s}'", .{ name, value });
+        print.printDebug("getenv({s}) -> \"{s}\"", .{ name, value });
     } else {
         print.printDebug("getenv({s}) -> null", .{name});
     }

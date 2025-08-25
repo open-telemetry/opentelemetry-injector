@@ -391,21 +391,24 @@ test "parseLine: invalid line (line too long)" {
 
 fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void {
     if (std.posix.getenv(dotnet_path_env_var)) |value| {
-        const dotnet_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{value}) catch |err| {
+        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
+        const dotnet_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
         configuration.dotnet_auto_instrumentation_agent_path_prefix = dotnet_value;
     }
     if (std.posix.getenv(jvm_path_env_var)) |value| {
-        const jvm_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{value}) catch |err| {
+        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
+        const jvm_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
         configuration.jvm_auto_instrumentation_agent_path = jvm_value;
     }
     if (std.posix.getenv(nodejs_path_env_var)) |value| {
-        const nodejs_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{value}) catch |err| {
+        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
+        const nodejs_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };

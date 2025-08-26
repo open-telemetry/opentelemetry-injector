@@ -16,8 +16,8 @@ PKG_URL="https://github.com/open-telemetry/opentelemetry-injector"
 INSTALL_DIR="/usr/lib/opentelemetry"
 libotelinject_INSTALL_PATH="${INSTALL_DIR}/libotelinject.so"
 JAVA_AGENT_INSTALL_PATH="${INSTALL_DIR}/javaagent.jar"
-CONFIG_DIR_REPO_PATH="${FPM_DIR}/etc/opentelemetry/otelinject"
-CONFIG_DIR_INSTALL_PATH="/etc/opentelemetry/otelinject"
+CONFIG_DIR_REPO_PATH="${FPM_DIR}/etc/opentelemetry"
+CONFIG_DIR_INSTALL_PATH="/etc/opentelemetry"
 EXAMPLES_INSTALL_DIR="${INSTALL_DIR}/examples"
 EXAMPLES_DIR="${FPM_DIR}/examples"
 
@@ -107,17 +107,12 @@ setup_files_and_permissions() {
     download_nodejs_agent "$nodejs_agent_release" "${buildroot}/${NODEJS_AGENT_INSTALL_PATH}"
     sudo chmod 755 "$buildroot/$NODEJS_AGENT_INSTALL_PATH"
 
-    if [ "$arch" = "amd64" ]; then
-        download_dotnet_agent "$dotnet_agent_release" "${buildroot}/${DOTNET_AGENT_INSTALL_DIR}"
-        sudo chmod -R 755 "$buildroot/$DOTNET_AGENT_INSTALL_DIR"
-    fi
+    download_dotnet_agent "$dotnet_agent_release" "${buildroot}/${DOTNET_AGENT_INSTALL_DIR}"
+    sudo chmod -R 755 "$buildroot/$DOTNET_AGENT_INSTALL_DIR"
 
     mkdir -p  "$buildroot/$CONFIG_DIR_INSTALL_PATH"
     cp -rf "$CONFIG_DIR_REPO_PATH"/* "$buildroot/$CONFIG_DIR_INSTALL_PATH"/
     sudo chmod -R 755 "$buildroot/$CONFIG_DIR_INSTALL_PATH"
-    if [ "$arch" != "amd64" ]; then
-        rm -f "$buildroot/$CONFIG_DIR_INSTALL_PATH/dotnet.conf"
-    fi
 
     mkdir -p "$buildroot/$INSTALL_DIR"
     cp -rf "$EXAMPLES_DIR" "$buildroot/$INSTALL_DIR/"

@@ -15,7 +15,7 @@ obj:
 
 .PHONY: clean
 clean:
-	rm -f so/* dist/* && rm -rf zig-out .zig-cache
+	rm -rf so dist instrumentation zig-out .zig-cache
 
 so/libotelinject.so: so
 	zig build -Dcpu-arch=${ARCH} --prominent-compile-errors --summary none
@@ -125,6 +125,6 @@ chlog-update: $(CHLOGGEN)
 list:
 	@grep '^[^#[:space:]].*:' Makefile
 
-.PHONY: integration-test-java
-integration-test-%: dist
-	(cd packaging/tests/$* && ./run.sh)
+.PHONY: integration-test-deb-java
+integration-test-deb-java: dist deb-package
+	(cd packaging/tests/java && ARCH=$(ARCH) ./run.sh)

@@ -67,7 +67,7 @@ docker-dev-run:
 .PHONY: zig-build
 zig-build:
 	@mkdir -p so
-	@zig build --prominent-compile-errors --summary none && echo $(shell date) build successful || echo $(shell date) build failed
+	@(zig build --prominent-compile-errors --summary none && echo $(shell date) build successful) || (echo $(shell date) build failed && exit 1)
 
 .PHONY: watch-zig-build
 watch-zig-build:
@@ -75,7 +75,7 @@ watch-zig-build:
 
 .PHONY: zig-unit-tests
 zig-unit-tests:
-	@zig build test --prominent-compile-errors --summary none && echo $(shell date) tests successful || echo $(shell date) tests failed
+	@(zig build test --prominent-compile-errors --summary none && echo $(shell date) tests successful) || (echo $(shell date) tests failed && exit 1)
 
 .PHONY: watch-zig-unit-tests
 watch-zig-unit-tests:

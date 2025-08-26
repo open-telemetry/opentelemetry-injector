@@ -22,6 +22,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
+        with:
+          # maintenance note: This version needs to be kept in sync with the version referenced in the file /zig-version
+          # in the root of the repository.
+          version: 0.14.1
+
       - name: Run tests
         run: make tests ARCH=${{ matrix.ARCH }}
 

@@ -82,10 +82,14 @@ watch-zig-unit-tests:
 	@fd -e zig | entr make zig-unit-tests
 
 .PHONY: tests
-tests: zig-unit-tests injector-integration-tests
+tests: zig-unit-tests injector-integration-tests-for-one-architecture
 
-.PHONY: injector-integration-tests
-injector-integration-tests:
+.PHONY: injector-integration-tests-for-one-architecture
+injector-integration-tests-for-one-architecture:
+	ARCHITECTURES=$(ARCH) test/scripts/test-all.sh
+
+.PHONY: injector-integration-tests-for-all-architectures
+injector-integration-tests-for-all-architectures:
 	test/scripts/test-all.sh
 
 SHELL = /bin/bash
@@ -125,10 +129,10 @@ chlog-update: $(CHLOGGEN)
 list:
 	@grep '^[^#[:space:]].*:' Makefile
 
-.PHONY: integration-test-deb
-integration-test-deb-%: dist deb-package
+.PHONY: packaging-integration-test-deb
+packaging-integration-test-deb-%: dist deb-package
 	(cd packaging/tests/deb/$* && ARCH=$(ARCH) ./run.sh)
 
-.PHONY: integration-test-rpm
-integration-test-rpm-%: dist rpm-package
+.PHONY: packaging-integration-test-rpm
+packaging-integration-test-rpm-%: dist rpm-package
 	(cd packaging/tests/rpm/$* && ARCH=$(ARCH) ./run.sh)

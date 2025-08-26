@@ -12,12 +12,24 @@ We gratefully welcome improvements to documentation as well as to code.
 
 * Docker version 23.0.0 or greater.
 
-### Local development cheat sheet
+### Local development
 
-* `make test` to run unit tests
+The injector is written in [Zig](https://ziglang.org/). To work on the injector [source code](src) it is recommended to install Zig on your machine. You can find the installation instructions [here](https://ziglang.org/download/). Install the version referenced in [zig-version](zig-version).
+
+See the page [Zig Learn](https://ziglang.org/learn/) for more information about the language.
+
+### Makefile commaneds
+
+* `make zig-build` to build the injector binary locally on your machine
+* `make watch-zig-build` to continuually rebuild the Zig sources on every change (requires [`fd`](https://github.com/sharkdp/fd) and [`entr`](https://github.com/eradman/entr) to be installed)
+* `make zig-unit-tests` to run the unit tests
+* `watch-zig-unit-tests` to continually run the Zig unit tests on every change (requires [`fd`](https://github.com/sharkdp/fd) and [`entr`](https://github.com/eradman/entr) to be installed)
+* `make tests` to run the unit tests and the injector integration tests
+* `make tests` to run unit tests and the injector integration tests
 * `make rpm-package deb-package` to build the RPM and Debian package
+* `make packaging-integration-test-deb packaging-integration-test-rpm` to rebuild the RPM and Debian packages and run integration tests against the newly built packages.
 
-### Workflow
+### Github PR Workflow
 
 It is recommended to follow the ["GitHub Workflow"](https://guides.github.com/introduction/flow/). When using [GitHub's CLI](https://github.com/cli/cli), here's how it typically looks like:
 

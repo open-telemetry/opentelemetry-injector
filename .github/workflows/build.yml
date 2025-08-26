@@ -28,6 +28,10 @@ jobs:
           # in the root of the repository.
           version: 0.14.1
 
+      - name: lint source code
+        run: |
+          make lint
+
       - name: Run Zig unit tests
         run: make zig-unit-tests ARCH=${{ matrix.ARCH }}
 

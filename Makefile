@@ -64,21 +64,29 @@ uninstall:
 docker-dev-run:
 	ARCH=$(ARCH) ./start-injector-dev-container.sh
 
+.PHONY: check-zig-installed
+check-zig-installed:
+	@set +x
+	@if ! zig version > /dev/null; then \
+	  echo "error: zig is not installed. Run 'brew install zig' or similar."; \
+	  exit 1; \
+	fi
+
 .PHONY: zig-build
-zig-build:
+zig-build: check-zig-installed
 	@mkdir -p so
 	@(zig build --prominent-compile-errors --summary none && echo $(shell date) build successful) || (echo $(shell date) build failed && exit 1)
 
 .PHONY: watch-zig-build
-watch-zig-build:
+watch-zig-build: check-zig-installed
 	@fd -e zig | entr make zig-build
 
 .PHONY: zig-unit-tests
-zig-unit-tests:
+zig-unit-tests: check-zig-installed
 	@(zig build test --prominent-compile-errors --summary none && echo $(shell date) tests successful) || (echo $(shell date) tests failed && exit 1)
 
 .PHONY: watch-zig-unit-tests
-watch-zig-unit-tests:
+watch-zig-unit-tests: check-zig-installed
 	@fd -e zig | entr make zig-unit-tests
 
 .PHONY: tests
@@ -91,6 +99,31 @@ injector-integration-tests-for-one-architecture:
 .PHONY: injector-integration-tests-for-all-architectures
 injector-integration-tests-for-all-architectures:
 	test/scripts/test-all.sh
+
+.PHONY: lint
+lint: zig-fmt-check # TODO add the `shellcheck-lint` target here as well, in a follow-up PR.
+
+.PHONY: zig-fmt-check
+zig-fmt-check: check-zig-installed
+	@zig fmt --check src
+
+# Run this to auto-format Zig code.
+.PHONY: zig-fmt
+zig-fmt: check-zig-installed
+	zig fmt src
+
+.PHONY: check-shellcheck-installed
+check-shellcheck-installed:
+	@set +x
+	@if ! shellcheck --version > /dev/null; then \
+	echo "error: shellcheck is not installed. See https://github.com/koalaman/shellcheck?tab=readme-ov-file#installing for installation instructions."; \
+	exit 1; \
+	fi
+
+.PHONY: shellcheck-lint
+shellcheck-lint: check-shellcheck-installed
+	@echo "linting shell scripts with shellcheck"
+	find . -name \*.sh | xargs shellcheck -x
 
 SHELL = /bin/bash
 .SHELLFLAGS = -o pipefail -c

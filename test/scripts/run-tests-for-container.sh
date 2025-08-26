@@ -112,6 +112,7 @@ if [ "${INTERACTIVE:-}" = "true" ]; then
 fi
 
 set -x
+# shellcheck disable=SC2086
 docker run $docker_run_extra_options \
   --rm \
   --platform "$docker_platform" \

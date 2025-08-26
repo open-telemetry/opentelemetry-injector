@@ -40,7 +40,7 @@ test_sets=""
 if [[ -n "${TEST_SETS:-}" ]]; then
   test_sets=("${TEST_SETS//,/ }")
   echo Only running a subset of test sets: "${test_sets[@]}"
-  for test_set_id in $test_sets; do
+  for test_set_id in "${test_sets[@]}"; do
     test_set_file_name="test/scripts/$test_set_id.tests"
     if [[ ! -f "$test_set_file_name" ]]; then
       echo "Error: test set \"$test_set_id\" does not exist. Available test sets are: ${all_test_sets_string//\.tests/}"

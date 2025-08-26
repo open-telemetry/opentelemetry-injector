@@ -37,11 +37,12 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
+        SYS_PACKAGE: [ "deb", "rpm" ]
         lang: [ "java" ]
     steps:
       - name: Check out the codebase.
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
-      - name: Run integration tests for ${{ matrix.lang }}
-        run: make integration-test-${{ matrix.lang }}
+      - name: Run integration tests for ${{ matrix.SYS_PACKAGE }}/${{ matrix.lang }}
+        run: make integration-test-${{ matrix.SYS_PACKAGE }}-${{ matrix.lang }}

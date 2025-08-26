@@ -60,8 +60,8 @@ uninstall:
 # container.
 # By explicitly setting ARCH=arm64 or ARCH=amd64 you can run and test on different CPU platforms.
 # Mostly intended for development.
-.PHONY: docker-run
-docker-run:
+.PHONY: docker-dev-run
+docker-dev-run:
 	ARCH=$(ARCH) ./start-injector-dev-container.sh
 
 .PHONY: zig-build
@@ -125,6 +125,10 @@ chlog-update: $(CHLOGGEN)
 list:
 	@grep '^[^#[:space:]].*:' Makefile
 
-.PHONY: integration-test-deb-java
-integration-test-deb-java: dist deb-package
-	(cd packaging/tests/java && ARCH=$(ARCH) ./run.sh)
+.PHONY: integration-test-deb
+integration-test-deb-%: dist deb-package
+	(cd packaging/tests/deb/$* && ARCH=$(ARCH) ./run.sh)
+
+.PHONY: integration-test-rpm
+integration-test-rpm-%: dist rpm-package
+	(cd packaging/tests/rpm/$* && ARCH=$(ARCH) ./run.sh)

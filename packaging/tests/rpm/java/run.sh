@@ -27,4 +27,4 @@ docker build \
 docker run \
   --platform "$docker_platform" \
   --rm \
-  -it "instrumentation-java-$arch"
+  "instrumentation-java-$arch"

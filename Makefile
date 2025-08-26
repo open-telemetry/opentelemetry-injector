@@ -82,11 +82,11 @@ watch-zig-unit-tests:
 	@fd -e zig | entr make zig-unit-tests
 
 .PHONY: tests
-tests: test-java test-nodejs test-dotnet
+tests: zig-unit-tests injector-integration-tests
 
-.PHONY: test-dotnet-java-nodejs
-test-%: dist
-	(cd tests/$* && ARCH=$(ARCH) ./test.sh)
+.PHONY: injector-integration-tests
+injector-integration-tests:
+	test/scripts/test-all.sh
 
 SHELL = /bin/bash
 .SHELLFLAGS = -o pipefail -c

@@ -1,0 +1,46 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+run_test_case \
+  "overrides NODE_OPTIONS if it is not present" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: --require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument"
+run_test_case \
+  "ask for NODE_OPTIONS (unset) twice" \
+  "app" \
+  "node index.js node-options-twice" \
+  "NODE_OPTIONS: --require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument; NODE_OPTIONS: --require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument"
+run_test_case \
+  "prepends to NODE_OPTIONS if it is present" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: --require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument --no-deprecation" \
+  "NODE_OPTIONS=--no-deprecation"
+run_test_case \
+  "ask for NODE_OPTIONS (set) twice" \
+  "app" \
+  "node index.js node-options-twice" \
+  "NODE_OPTIONS: --require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument --no-deprecation; NODE_OPTIONS: --require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument --no-deprecation" \
+  "NODE_OPTIONS=--no-deprecation"
+
+# For test cases with the "configuration file" substring in their label, test/scripts/run-tests-within-container.sh
+# will provide a configuration file in the expected location (/etc/opentelemetry/otelinject.conf).
+run_test_case \
+  "uses NODE_OPTIONS path from the configuration file" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: --require /path/from/config-file/node_js/node_modules/@opentelemetry-js/otel/instrument"
+run_test_case \
+  "the NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH environment variable overrides the NODE_OPTIONS path from the configuration file" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: --require /path/from/environment-variable/node_js/node_modules/@opentelemetry-js/otel/instrument" \
+  "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/environment-variable/node_js/node_modules/@opentelemetry-js/otel/instrument"
+
+run_test_case \
+  "setting NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH to the empty string disables the Node.js auto-instrumentation" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: -" \
+  "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH="

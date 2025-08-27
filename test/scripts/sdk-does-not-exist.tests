@@ -1,0 +1,37 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+# DOTNET_STARTUP_HOOKS
+run_test_case \
+  "does not add DOTNET_STARTUP_HOOKS if it the .NET auto instrumentation is not present" \
+  "app" \
+  "node index.js dotnet-startup-hooks" \
+  "DOTNET_STARTUP_HOOKS: -"
+
+# NODE_OPTIONS
+run_test_case \
+  "does not add NODE_OPTIONS if it the Node.js auto instrumentation agent is not present" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: -"
+run_test_case \
+  "does not modify existing NODE_OPTIONS if it the Node.js auto instrumentation agent is not present" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: --no-deprecation" \
+  "NODE_OPTIONS=--no-deprecation"
+
+# JAVA_TOOL_OPTIONS (note: we are using a Node.js app to verify the content of JAVA_TOOL_OPTIONS here, just because
+# is is more convenient)
+run_test_case \
+  "does not add JAVA_TOOL_OPTIONS if it the Java auto instrumentation agent is not present" \
+  "app" \
+  "node index.js java-tool-options" \
+  "JAVA_TOOL_OPTIONS: -"
+run_test_case \
+  "does not modify existing JAVA_TOOL_OPTIONS if it the Java auto instrumentation is not present" \
+  "app" \
+  "node index.js java-tool-options" \
+  "JAVA_TOOL_OPTIONS: existing-value" \
+  "JAVA_TOOL_OPTIONS=existing-value"
+

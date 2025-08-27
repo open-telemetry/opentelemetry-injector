@@ -1,0 +1,41 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+ARG base_image_run="eclipse-temurin:11"
+FROM ${base_image_run}
+
+ARG injector_binary
+RUN if [ -z "$injector_binary" ]; then \
+      echo "Error: build argument injector_binary is required but not set."; \
+      exit 1; \
+    fi
+
+ARG create_sdk_dummy_files_script
+RUN if [ -z "$create_sdk_dummy_files_script" ]; then \
+      echo "Error: build argument create_sdk_dummy_files_script is required but not set."; \
+      exit 1; \
+    fi
+
+RUN mkdir -p /etc/opentelemetry && chmod 777 /etc/opentelemetry
+
+WORKDIR /usr/src/otel/injector/
+
+COPY test/docker/jvm/no-op-agent no-op-agent
+RUN cd no-op-agent/src/main/java && javac io/opentelemetry/javaagent/NoOpAgent.java && \
+    jar -c -m manifest.mf -f no-op-agent.jar io/opentelemetry/javaagent/NoOpAgent.class && \
+    cp no-op-agent.jar ../../../
+
+COPY test/apps/jvm app
+RUN cd app && javac Main.java && \
+    jar cfe Main.jar Main Main.class
+
+COPY test/scripts/run-tests-within-container.sh scripts/
+COPY test/scripts/create-*.sh scripts/
+COPY test/scripts/*.tests scripts/
+COPY test/docker/otelinject.conf otelinject.conf
+
+RUN ${create_sdk_dummy_files_script}
+
+COPY dist/${injector_binary} /injector/libotelinject.so
+
+CMD ["scripts/run-tests-within-container.sh"]

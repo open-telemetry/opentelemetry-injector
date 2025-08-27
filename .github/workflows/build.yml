@@ -22,26 +22,56 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run tests
-        run: make tests ARCH=${{ matrix.ARCH }}
+      - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
+        with:
+          # maintenance note: This version needs to be kept in sync with the version referenced in the file /zig-version
+          # in the root of the repository.
+          version: 0.14.1
+
+      - name: lint source code
+        run: |
+          make lint
+
+      - name: Run Zig unit tests
+        run: make zig-unit-tests ARCH=${{ matrix.ARCH }}
+
+      - name: Run Injector integration tests
+        run: make injector-integration-tests-for-one-architecture ARCH=${{ matrix.ARCH }}
+
+      # TODO I think we should split the build-package job at this point. Everything above is independent of SYS_PACKAGE.
+      # In particular the make injector-integration-tests-for-one-architecture ARCH=${{ matrix.ARCH }} step is not
+      # super cheap and right now we are running it twice for each CPU arch, once for deb and once for rpm, although
+      # it is independent of SYS_PACKAGE. The remaining steps below should be a separate job (named build-and-upload
+      # package) and the steps above should be a job named run-tests or verify or something like that.
+      # However, I'll leave that to a separate follow up PR.
 
       - name: Build ${{ matrix.ARCH }} ${{ matrix.SYS_PACKAGE }} package
         run: make ${{ matrix.SYS_PACKAGE }}-package ARCH="${{ matrix.ARCH }}"
 
+      # TODO This seems to be a no-op currently? GH actions says:
+      #   "Warning: No files were found with the provided path: ./dist/*.deb. No artifacts will be uploaded."
+      # I think the path should be instrumentation/dist/*.${{ matrix.SYS_PACKAGE }} instead.
+      # But it is unclear to me why we upload the packages.
       - name: Upload artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: otelinject-${{ matrix.ARCH }}-${{ matrix.SYS_PACKAGE }}
           path: ./dist/*.${{ matrix.SYS_PACKAGE }}
-  integration-tests:
+
+  packaging-integration-tests:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
+        SYS_PACKAGE: [ "deb", "rpm" ]
         lang: [ "java" ]
     steps:
       - name: Check out the codebase.
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
-      - name: Run integration tests for ${{ matrix.lang }}
-        run: make integration-test-${{ matrix.lang }}
+      # TODO we currently build the RPM and DEB for at least once CPU architectures twice, once in the build-package job
+      # in the step "Build ${{ matrix.ARCH }} ${{ matrix.SYS_PACKAGE }} package", and once here in the context of
+      # running the packacking integration tests. We should run the packaging integration tests for both CPU
+      # architectures (instead of only amd64), but ideally only build each combination of CPU arch & SYS_PACKAGE once.
+      - name: Run packaging integration tests for ${{ matrix.SYS_PACKAGE }}/${{ matrix.lang }}
+        run: make packaging-integration-test-${{ matrix.SYS_PACKAGE }}-${{ matrix.lang }}

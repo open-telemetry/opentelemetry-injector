@@ -1,0 +1,29 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+run_test_case \
+  "adds the .NET profiler" \
+  "app" \
+  "./dotnetapp verify-startup-hook-has-been-injected" \
+  "otel_injector_dotnet_no_op_startup_hook_has_been_loaded: true"
+
+# For test cases with the "configuration file" substring in their label, test/scripts/run-tests-within-container.sh
+# will provide a configuration file in the expected location (/etc/opentelemetry/otelinject.conf).
+run_test_case \
+  "uses the .NET profiler path from the configuration file" \
+  "app" \
+  "./dotnetapp verify-startup-hook-has-been-injected" \
+  "otel_injector_dotnet_no_op_startup_hook_has_been_loaded: true"
+run_test_case \
+  "the DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX environment variable overrides .NET profiler path from the configuration file" \
+  "app" \
+  "./dotnetapp verify-startup-hook-has-been-injected" \
+  "otel_injector_dotnet_no_op_startup_hook_has_been_loaded: true" \
+  "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/environment-variable/dotnet"
+
+run_test_case \
+  "setting DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX to the empty string disables the .NET auto-instrumentation" \
+  "app" \
+  "./dotnetapp verify-startup-hook-has-been-injected" \
+  "otel_injector_dotnet_no_op_startup_hook_has_been_loaded: -" \
+  "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX="

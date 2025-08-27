@@ -29,7 +29,9 @@ NODEJS_AGENT_RELEASE_PATH="${FPM_DIR}/../nodejs-agent-release.txt"
 NODEJS_AGENT_INSTALL_PATH="${INSTALL_DIR}/otel-js.tgz"
 
 DOTNET_AGENT_RELEASE_PATH="${FPM_DIR}/../dotnet-agent-release.txt"
-DOTNET_AGENT_RELEASE_URL="https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases"
+DOTNET_ARTIFACE_BASE_NAME="opentelemetry-dotnet-instrumentation"
+DOTNET_OS_NAME="linux"
+DOTNET_AGENT_RELEASE_URL="https://github.com/open-telemetry/$DOTNET_ARTIFACE_BASE_NAME/releases/download"
 DOTNET_AGENT_INSTALL_DIR="${INSTALL_DIR}/dotnet"
 
 PREUNINSTALL_PATH="$FPM_DIR/preuninstall.sh"
@@ -66,7 +68,6 @@ download_java_agent() {
 download_nodejs_agent() {
     local tag="$1"
     local dest="$2"
-    npm pack @opentelemetry/auto-instrumentations-node@${tag#v}
     mkdir -p "$( dirname $dest )"
     pushd "$( dirname $dest )"
     npm pack @opentelemetry/auto-instrumentations-node@${tag#v}
@@ -77,15 +78,39 @@ download_nodejs_agent() {
 download_dotnet_agent() {
     local tag="$1"
     local dest="$2"
-    local pkg="opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip"
-    local dl_url="$DOTNET_AGENT_RELEASE_URL/download/$tag/$pkg"
+
+    case "$ARCH" in
+      amd64) local dotnet_arch="x64" ;;
+      arm64) local dotnet_arch="arm64" ;;
+      *)
+        echo "Set the architecture type using the ARCH environment variable. Supported values: amd64, arm64." >&2
+        exit 1
+        ;;
+    esac
+
+    download_and_unzip_dotnet_agent_for_libc_flavor "$tag" "$dest" "$dotnet_arch" glibc
+
+    # Arguably, encountering binaries that bind musl on systems which use Debian or RPM packages will be extremely rare,
+    # but it is technically possible. Thus, we provide the musl-variant of the .NET auto-instrumentation agent for the
+    # target CPU architecture as well.
+    download_and_unzip_dotnet_agent_for_libc_flavor "$tag" "$dest" "$dotnet_arch" musl
+}
+
+download_and_unzip_dotnet_agent_for_libc_flavor() {
+    local tag="$1"
+    local dest="$2"
+    local dotnet_arch="$3"
+    local libc_flavor="$4"
+    local destination_folder_for_libc_flavor="$dest/$libc_flavor"
+    local pkg="$DOTNET_ARTIFACE_BASE_NAME-$DOTNET_OS_NAME-$libc_flavor-$dotnet_arch.zip"
+    local dl_url="$DOTNET_AGENT_RELEASE_URL/$tag/$pkg"
 
     echo "Downloading $dl_url ..."
-    curl -sfL "$dl_url" -o /tmp/$pkg
+    curl -sSfL "$dl_url" -o /tmp/$pkg
 
-    echo "Extracting $pkg to $dest ..."
-    mkdir -p "$dest"
-    unzip -d $dest /tmp/$pkg
+    echo "Extracting $pkg to $destination_folder_for_libc_flavor ..."
+    mkdir -p "$destination_folder_for_libc_flavor"
+    unzip -d "$destination_folder_for_libc_flavor" /tmp/$pkg
     rm -f /tmp/$pkg
 }
 

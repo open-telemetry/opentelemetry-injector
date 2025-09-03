@@ -64,7 +64,7 @@ The following methods are supported to manually activate and configure Auto Inst
 
    However, the configuration file `/etc/opentelemetry/otelinject.conf` can also be used to selectively disable
    auto-instrumentation for a specific runtime, by setting the respective path to an empty string.
-   For exapmle, the following file would leave JVM and Node.js auto-instrumentation active, while disabling .NET
+   For example, the following file would leave JVM and Node.js auto-instrumentation active, while disabling .NET
    auto-instrumentation:
    ```
    dotnet_auto_instrumentation_agent_path_prefix=

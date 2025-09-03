@@ -3,5 +3,5 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-echo "not creating and OTel auto instrumentation dummy files"
+echo "not creating any OTel auto instrumentation dummy files"
 

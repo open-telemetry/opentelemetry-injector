@@ -11,7 +11,7 @@ It serves two main purposes:
 * Set resource attributes automatically, (for example Kubernetes related resource attributes and service related
   resource attributes in environments where this is applicable).
 
-The injector can be used to enable automatic zero-touch instrumenation of processes.
+The injector can be used to enable automatic zero-touch instrumentation of processes.
 For this to work, the injector binary needs to be bundled together with the OpenTelemetry auto-instrumentation agents
 for the target runtimes.
 

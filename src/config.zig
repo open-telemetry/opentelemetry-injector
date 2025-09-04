@@ -101,6 +101,9 @@ fn readConfigurationFile(cfg_file_path: []const u8, configuration: *InjectorConf
             max_line_length,
         ) catch |err| switch (err) {
             error.EndOfStream => {
+                // streamUntilDelimiter writes you the very last line (which is not terminated by \n) to
+                // line_buffer_array while simultaneously returning error.EndOfStream. That means we still need to call
+                // parseLine call here once, otherwise we would accidentally ignore the very last line of the file.
                 const line = line_buffer_array.toOwnedSlice() catch |e| {
                     print.printError("error in toOwnedSlice while reading configuration file {s}: {}", .{ cfg_file_path, e });
                     break;

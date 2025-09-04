@@ -14,7 +14,12 @@ We gratefully welcome improvements to documentation as well as to code.
 
 ### Local development
 
-The injector is written in [Zig](https://ziglang.org/). To work on the injector [source code](src) it is recommended to install Zig on your machine. You can find the installation instructions [here](https://ziglang.org/download/). Install the version referenced in [zig-version](zig-version).
+The injector is written in [Zig](https://ziglang.org/). To work on the injector [source code](src) it is recommended to
+install Zig on your machine.
+You can find the installation instructions [here](https://ziglang.org/download/).
+Install the version referenced in [zig-version](zig-version).
+The [Zig Version Manager](https://github.com/tristanisham/zvm) is also a good alternative to installing one specific
+version of Zig.
 
 See the page [Zig Learn](https://ziglang.org/learn/) for more information about the language.
 

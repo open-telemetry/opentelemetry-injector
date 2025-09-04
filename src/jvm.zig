@@ -147,11 +147,21 @@ fn getModifiedJavaToolOptionsValue(
 
             if (std.mem.indexOf(u8, original_java_tool_options_env_var_value, "-Dotel.resource.attributes=")) |startIdx| {
                 // JAVA_TOOL_OPTIONS already contains -Dotel.resource.attribute, we need to merge the existing with the new key-value list.
-                const actualStartIdx = startIdx + 27;
-                // assume the list of key-value pairs is terminated by a space of the end of the string
+                var actualStartIdx = startIdx + 27;
+                // By default, we assume the -Dotel.resource.attribute value is terminated by a space or by the end of
+                // the string (-Dotel.resource.attribute=a=b,c=d).
+                var terminating_character = " ";
+                var key_value_pairs_are_quoted = false;
+                // The -Dotel.resource.attribute value could also be quoted (-Dotel.resource.attribute="a=b,c=d"), which
+                // we can detect by inspecting the first character of the value.
+                if (original_java_tool_options_env_var_value[actualStartIdx] == '"') {
+                    key_value_pairs_are_quoted = true;
+                    terminating_character = "\"";
+                    actualStartIdx += 1;
+                }
                 var originalKvPairs: []const u8 = "";
                 var remainingJavaToolOptions: []const u8 = "";
-                if (std.mem.indexOfPos(u8, original_java_tool_options_env_var_value, actualStartIdx, " ")) |endIdx| {
+                if (std.mem.indexOfPos(u8, original_java_tool_options_env_var_value, actualStartIdx, terminating_character)) |endIdx| {
                     originalKvPairs = original_java_tool_options_env_var_value[actualStartIdx..endIdx];
                     remainingJavaToolOptions = original_java_tool_options_env_var_value[endIdx..];
                 } else {
@@ -168,8 +178,9 @@ fn getModifiedJavaToolOptionsValue(
                 };
                 defer alloc.page_allocator.free(mergedKvPairs);
                 const return_buffer =
-                    std.fmt.allocPrintZ(alloc.page_allocator, "{s}-Dotel.resource.attributes={s}{s} {s}", .{
+                    std.fmt.allocPrintZ(alloc.page_allocator, "{s}-Dotel.resource.attributes={s}{s}{s} {s}", .{
                         original_java_tool_options_env_var_value[0..startIdx],
+                        (if (key_value_pairs_are_quoted) "\"" else ""),
                         mergedKvPairs,
                         remainingJavaToolOptions,
                         javaagent_flag_value,
@@ -398,6 +409,18 @@ test "getModifiedJavaToolOptionsValue: should merge new and existing -Dotel.reso
     const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(original_value, null, resource_attributes, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
     try testing.expectEqualStrings(
         "-Dproperty1=value -Dotel.resource.attributes=eee=fff,ggg=hhh,aaa=bbb,ccc=ddd -javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
+        std.mem.span(modifiedJavaToolOptions orelse "-"),
+    );
+}
+
+test "getModifiedJavaToolOptionsValue: should merge new and existing -Dotel.resource.attributes (with quotes)" {
+    const original_value: [:0]const u8 = "-Dproperty1=\"value\" -Dotel.resource.attributes=\"eee=fff,ggg=hhh\" -Dproperty2=\"value\""[0.. :0];
+    const resource_attributes: []u8 = try alloc.page_allocator.alloc(u8, 15);
+    var fbs = std.io.fixedBufferStream(resource_attributes);
+    _ = try fbs.writer().write("aaa=bbb,ccc=ddd");
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(original_value, null, resource_attributes, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
+    try testing.expectEqualStrings(
+        "-Dproperty1=\"value\" -Dotel.resource.attributes=\"eee=fff,ggg=hhh,aaa=bbb,ccc=ddd\" -Dproperty2=\"value\" -javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
         std.mem.span(modifiedJavaToolOptions orelse "-"),
     );
 }

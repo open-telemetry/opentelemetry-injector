@@ -35,7 +35,7 @@ Instrumentation agents:
 The following methods are supported to manually activate and configure Auto Instrumentation after installation of the
 `opentelemetry-injector` deb/rpm package (requires `root` privileges):
 
-- [System-wide](#system-wide)
+- [System-wide](#system-wide-or-per-process)
 - [`Systemd` services only](#systemd-services-only)
 
 > **Note**: To prevent conflicts and duplicate traces/metrics, only one method should be activated on the target system.

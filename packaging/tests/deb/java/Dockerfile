@@ -1,6 +1,5 @@
 FROM debian:12
 
-# TODO: Get arch target
 ARG ARCH=amd64
 
 COPY instrumentation/dist/*${ARCH}.deb injector.deb

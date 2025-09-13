@@ -1,7 +1,7 @@
 ARG DOCKER_REPO=docker.io
 FROM ${DOCKER_REPO}/alpine:3.22.1@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1 AS build-injector
 
-RUN apk add --no-cache make
+RUN apk add --no-cache make git
 
 COPY zig-version /otel-injector-test-build/zig-version
 RUN source /otel-injector-test-build/zig-version && \

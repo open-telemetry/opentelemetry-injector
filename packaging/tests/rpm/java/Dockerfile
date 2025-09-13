@@ -14,7 +14,7 @@ ADD ${tomcat_download_url} apache-tomcat.tar.gz
 RUN tar xzvf apache-tomcat.tar.gz && mv apache-tomcat-10.* apache-tomcat
 
 # TODO The otel collector version needs to be kept up to date, potentially with renovate.
-RUN wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.128.0/otelcol-contrib_0.128.0_linux_${ARCH}.rpm
+ADD https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.128.0/otelcol-contrib_0.128.0_linux_${ARCH}.rpm otelcol-contrib_0.128.0_linux_${ARCH}.rpm
 RUN rpm -i otelcol-contrib_0.128.0_linux_${ARCH}.rpm
 
 COPY instrumentation/dist/*${RPM_ARCH}.rpm injector.rpm

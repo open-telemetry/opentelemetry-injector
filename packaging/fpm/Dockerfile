@@ -14,4 +14,3 @@ RUN /install-deps.sh
 
 RUN git config --global --add safe.directory /repo
 
-CMD ./packaging/fpm/$PACKAGE/build.sh "$VERSION" "$ARCH" "$OUTPUT_DIR"

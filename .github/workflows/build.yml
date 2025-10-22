@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - ".*"
   pull_request:
 
 permissions:
@@ -45,18 +47,25 @@ jobs:
       # package) and the steps above should be a job named run-tests or verify or something like that.
       # However, I'll leave that to a separate follow up PR.
 
-      - name: Build ${{ matrix.ARCH }} ${{ matrix.SYS_PACKAGE }} package
-        run: make ${{ matrix.SYS_PACKAGE }}-package ARCH="${{ matrix.ARCH }}"
+      - name: Determine version
+        id: github_tag
+        run: |
+          TAG="${GITHUB_REF##*/}"
+          if [[ -z "$TAG" ]]
+          then
+            echo "version=$TAG" >> $GITHUB_OUTPUT
+          else
+            echo "version=dev" >> $GITHUB_OUTPUT
+          fi
 
-      # TODO This seems to be a no-op currently? GH actions says:
-      #   "Warning: No files were found with the provided path: ./dist/*.deb. No artifacts will be uploaded."
-      # I think the path should be instrumentation/dist/*.${{ matrix.SYS_PACKAGE }} instead.
-      # But it is unclear to me why we upload the packages.
+      - name: Build ${{ matrix.ARCH }} ${{ matrix.SYS_PACKAGE }} package
+        run: make ${{ matrix.SYS_PACKAGE }}-package ARCH="${{ matrix.ARCH }}" VERSION="${{ steps.github_tag.version.version }}"
+
       - name: Upload artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: otelinject-${{ matrix.ARCH }}-${{ matrix.SYS_PACKAGE }}
-          path: ./dist/*.${{ matrix.SYS_PACKAGE }}
+          path: ./instrumentation/dist/*.${{ matrix.SYS_PACKAGE }}
 
   packaging-integration-tests:
     runs-on: ubuntu-24.04
@@ -75,3 +84,27 @@ jobs:
       # architectures (instead of only amd64), but ideally only build each combination of CPU arch & SYS_PACKAGE once.
       - name: Run packaging integration tests for ${{ matrix.SYS_PACKAGE }}/${{ matrix.lang }}
         run: make packaging-integration-test-${{ matrix.SYS_PACKAGE }}-${{ matrix.lang }}
+
+  publish-stable:
+    runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/tags/') && github.repository == 'open-telemetry/opentelemetry-injector'
+    needs: build-package
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - run: mkdir -p artifacts
+      - name: Download artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: ./artifacts/
+      - name: Prepare release notes
+        run: ./.github/workflows/scripts/prepare-release-notes.sh
+        env:
+          RELEASE_TAG: ${{ steps.github_tag.outputs.tag }}
+      - name: Release
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2
+        with:
+          body_path: release-notes.md
+          files: |
+            artifacts/*

@@ -7,9 +7,13 @@ on:
       candidate:
         required: true
         description: Release candidate version (like 0.70.0)
+permissions:
+  contents: read
 jobs:
   # Releasing opentelemetry-injector
   prepare-release:
+    permissions:
+      contents: write # required for pushing changes in prepare-release.sh
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4

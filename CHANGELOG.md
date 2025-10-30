@@ -4,3 +4,22 @@
 
 <!-- next version -->
 
+## v0.0.1-20251030
+
+### 🛑 Breaking changes 🛑
+
+- `injector`: Replace the C-based OpenTelemetry injector with an injector written in Zig, donated by Dash0. (#230)
+  This new injector will be the foundation for future enhancements of LD_PRELOAD based auto-instrumentation.
+  It replaces the current injector (written in C) with its setenv-based approach with a new injector (written in Zig)
+  that overrides getenv.
+  The previous injector was built in a way that binds to a libc. This works when the injector is distributed as an RPM
+  or DEB package, but is not suitable for instrumenting workloads on systems where the libc flavor (glibc or musl)
+  is not known ahead of time, e.g. instrumenting arbitrary Kubernetes workloads.
+  Furthermore, the new injector behaves more gracefully when the environment variable that is to be injected (e.g.
+  JAVA_TOOL_OPTIONS, or NODE_OPTIONS) is already present, as it merges existing options with the key-value pairs it
+  injects.
+  Since this change is a complete rewrite, it is marked as a breaking change.
+  
+
+<!-- previous-version -->
+

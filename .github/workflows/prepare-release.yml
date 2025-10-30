@@ -16,6 +16,11 @@ jobs:
       contents: write # required for pushing changes in prepare-release.sh
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/create-github-app-token@67018539274d69449ef7c02e8e71183d1719ab42 # v2.1.4
+        id: otelbot-token
+        with:
+          app-id: ${{ vars.OTELBOT_APP_ID }}
+          private-key: ${{ secrets.OTELBOT_PRIVATE_KEY }}
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
         with:
@@ -23,7 +28,7 @@ jobs:
           cache: false
       - name: Prepare release for injector
         env:
-          GITHUB_TOKEN: ${{ secrets.OPENTELEMETRYBOT_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.otelbot-token.outputs.token }}
           REPO: open-telemetry/opentelemetry-injector
           CANDIDATE: ${{ inputs.candidate }}
         run: ./.github/workflows/scripts/prepare-release.sh

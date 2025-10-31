@@ -16,8 +16,7 @@ For this to work, the injector binary needs to be bundled together with the Open
 for the target runtimes.
 
 Official RPM and DEB packages that contain the injector as well as the auto-instrumentation agents are available, and
-can be downloaded from the [releases page](https://github.com/open-telemetry/opentelemetry-injector/releases)
-(once the first relase has been published).
+can be downloaded from the [releases page](https://github.com/open-telemetry/opentelemetry-injector/releases).
 The OpenTelemetry injector Debian/RPM packages install the OpenTelemetry auto-instrumentation agents, the
 `libotelinject.so` shared object library, and a default configuration file to automatically instrument applications and
 services to capture and report distributed traces and metrics to the

@@ -5,7 +5,7 @@ RUN apk add --no-cache make
 
 COPY zig-version /otel-injector-test-build/zig-version
 RUN source /otel-injector-test-build/zig-version && \
-  apk add zig="$ZIG_VERSION" --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community
+  apk add zig="$ZIG_VERSION" git --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community
 
 WORKDIR /libotelinject
 
@@ -13,3 +13,4 @@ COPY Makefile .
 COPY build.zig .
 COPY build.zig.zon .
 COPY src src
+COPY .git .git

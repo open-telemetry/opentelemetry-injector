@@ -27,6 +27,7 @@ JAVA_AGENT_INSTALL_PATH="${INSTALL_DIR}/javaagent.jar"
 
 NODEJS_AGENT_RELEASE_PATH="${FPM_DIR}/../nodejs-agent-release.txt"
 NODEJS_AGENT_INSTALL_PATH="${INSTALL_DIR}/otel-js.tgz"
+NODEJS_AGENT_INSTALL_DIR="${INSTALL_DIR}/js"
 
 DOTNET_AGENT_RELEASE_PATH="${FPM_DIR}/../dotnet-agent-release.txt"
 DOTNET_ARTIFACE_BASE_NAME="opentelemetry-dotnet-instrumentation"
@@ -68,10 +69,14 @@ download_java_agent() {
 download_nodejs_agent() {
     local tag="$1"
     local dest="$2"
-    mkdir -p "$( dirname $dest )"
-    pushd "$( dirname $dest )"
+    pushd "$(dirname "$dest")"
+    mkdir -p "js"
+    pushd "js"
     npm pack @opentelemetry/auto-instrumentations-node@${tag#v}
     mv *.tgz otel-js.tgz
+    npm install --global=false otel-js.tgz
+    rm otel-js.tgz
+    popd
     popd
 }
 
@@ -130,7 +135,7 @@ setup_files_and_permissions() {
     sudo chmod 755 "$buildroot/$JAVA_AGENT_INSTALL_PATH"
 
     download_nodejs_agent "$nodejs_agent_release" "${buildroot}/${NODEJS_AGENT_INSTALL_PATH}"
-    sudo chmod 755 "$buildroot/$NODEJS_AGENT_INSTALL_PATH"
+    sudo chmod -R 755 "$buildroot/$NODEJS_AGENT_INSTALL_DIR"
 
     download_dotnet_agent "$dotnet_agent_release" "${buildroot}/${DOTNET_AGENT_INSTALL_DIR}"
     sudo chmod -R 755 "$buildroot/$DOTNET_AGENT_INSTALL_DIR"

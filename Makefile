@@ -129,9 +129,7 @@ SHELL = /bin/bash
 .SHELLFLAGS = -o pipefail -c
 
 # SRC_ROOT is the top of the source tree.
-# TODO: This causes "/bin/sh: git: not found" when we are using the Makefile in containers that do not have git
-# installed.
-SRC_ROOT := $(shell git rev-parse --show-toplevel)
+SRC_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 TOOLS_BIN_DIR    := $(SRC_ROOT)/.tools
 CHLOGGEN_CONFIG  := .chloggen/config.yaml
 CHLOGGEN         := $(TOOLS_BIN_DIR)/chloggen

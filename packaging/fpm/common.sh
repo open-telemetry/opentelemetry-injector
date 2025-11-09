@@ -18,8 +18,6 @@ libotelinject_INSTALL_PATH="${INSTALL_DIR}/libotelinject.so"
 JAVA_AGENT_INSTALL_PATH="${INSTALL_DIR}/javaagent.jar"
 CONFIG_DIR_REPO_PATH="${FPM_DIR}/etc/opentelemetry"
 CONFIG_DIR_INSTALL_PATH="/etc/opentelemetry"
-EXAMPLES_INSTALL_DIR="${INSTALL_DIR}/examples"
-EXAMPLES_DIR="${FPM_DIR}/examples"
 
 JAVA_AGENT_RELEASE_PATH="${FPM_DIR}/../java-agent-release.txt"
 JAVA_AGENT_RELEASE_URL="https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases"
@@ -145,8 +143,6 @@ setup_files_and_permissions() {
     sudo chmod -R 755 "$buildroot/$CONFIG_DIR_INSTALL_PATH"
 
     mkdir -p "$buildroot/$INSTALL_DIR"
-    cp -rf "$EXAMPLES_DIR" "$buildroot/$INSTALL_DIR/"
-    sudo chmod -R 755 "$buildroot/$EXAMPLES_INSTALL_DIR"
 
     sudo chown -R root:root "$buildroot"
 }

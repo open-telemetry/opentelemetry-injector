@@ -68,11 +68,12 @@ jobs:
           path: ./instrumentation/dist/*.${{ matrix.SYS_PACKAGE }}
 
   packaging-integration-tests:
-    runs-on: ubuntu-24.04
     strategy:
       matrix:
         SYS_PACKAGE: [ "deb", "rpm" ]
         lang: [ "java", "nodejs", "dotnet" ]
+        arch: [ "amd64", "arm64" ]
+    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     steps:
       - name: Check out the codebase.
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -82,8 +83,8 @@ jobs:
       # in the step "Build ${{ matrix.ARCH }} ${{ matrix.SYS_PACKAGE }} package", and once here in the context of
       # running the packacking integration tests. We should run the packaging integration tests for both CPU
       # architectures (instead of only amd64), but ideally only build each combination of CPU arch & SYS_PACKAGE once.
-      - name: Run packaging integration tests for ${{ matrix.SYS_PACKAGE }}/${{ matrix.lang }}
-        run: make packaging-integration-test-${{ matrix.SYS_PACKAGE }}-${{ matrix.lang }}
+      - name: Run packaging integration tests for ${{ matrix.SYS_PACKAGE }}/${{ matrix.lang }}/${{ matrix.arch }}
+        run: ARCH=${{ matrix.arch }} make packaging-integration-test-${{ matrix.SYS_PACKAGE }}-${{ matrix.lang }}
 
   publish-stable:
     runs-on: ubuntu-24.04

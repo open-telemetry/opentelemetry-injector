@@ -12,4 +12,4 @@ download_page=https://tomcat.apache.org/download-10.cgi
 
 tomcat_download_url=$(curl -sS "$download_page" | grep \
  '>tar.gz</a>' | head -1 | grep -E -o 'https://[a-z0-9:./-]+.tar.gz')
-echo $tomcat_download_url
+echo "$tomcat_download_url"

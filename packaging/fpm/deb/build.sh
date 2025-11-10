@@ -5,8 +5,10 @@
 
 set -euxo pipefail
 
-SCRIPT_DIR="$( cd "$( dirname ${BASH_SOURCE[0]} )" && pwd )"
-. $SCRIPT_DIR/../common.sh
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# shellcheck disable=SC1091 # Including common.sh
+. "$SCRIPT_DIR/../common.sh"
 
 VERSION="${1:-}"
 ARCH="${2:-amd64}"

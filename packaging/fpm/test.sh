@@ -2,8 +2,10 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$( cd "$( dirname ${BASH_SOURCE[0]} )" && pwd )"
-. $SCRIPT_DIR/common.sh
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# shellcheck disable=SC1091 # Including common.sh
+. "$SCRIPT_DIR/common.sh"
 
 PKG_TYPE="${1:-rpm}"
 ARCH="${2:-amd64}"
@@ -27,7 +29,7 @@ PKG_PATH="${REPO_DIR}/instrumentation/dist/${PKG_NAME}*${ARCH}.${PKG_TYPE}"
 
 # install
 echo "Installing $PKG_PATH"
-$INSTALL_CMD $PKG_PATH
+$INSTALL_CMD "$PKG_PATH"
 if [ ! -f /etc/ld.so.preload ]; then
     echo "/etc/ld.so.preload not found" >&2
     exit 1
@@ -41,7 +43,7 @@ ldd "$LIBOTELINJECT_INSTALL_PATH"
 
 # upgrade
 echo "Upgrading $PKG_PATH"
-$UPGRADE_CMD $PKG_PATH
+$UPGRADE_CMD "$PKG_PATH"
 if [ ! -f /etc/ld.so.preload ]; then
     echo "/etc/ld.so.preload not found" >&2
     exit 1
@@ -64,7 +66,7 @@ fi
 # install with pre-existing /etc/ld.so.preload
 touch /etc/ld.so.preload
 echo "Installing $PKG_PATH"
-$INSTALL_CMD $PKG_PATH
+$INSTALL_CMD "$PKG_PATH"
 if [ ! -f /etc/ld.so.preload ]; then
     echo "/etc/ld.so.preload not found" >&2
     exit 1

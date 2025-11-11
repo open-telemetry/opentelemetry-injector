@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2317 # unreachable command. TODO: after bumping a shellcheck version, remove it
 
 cd my_express_app
 node app.js &

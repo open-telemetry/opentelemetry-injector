@@ -1,4 +1,4 @@
-ARCH=amd64
+ARCH?=amd64
 INSTALL_DIR=/usr/lib/opentelemetry/otelinject
 
 # Docker repository used.

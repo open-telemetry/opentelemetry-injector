@@ -72,7 +72,7 @@ download_nodejs_agent() {
     mkdir -p "js"
     pushd "js"
     npm pack "@opentelemetry/auto-instrumentations-node@${tag#v}"
-    mv ./*.tgz otel-js.tgz
+    mv *.tgz otel-js.tgz
     npm install --global=false otel-js.tgz
     rm otel-js.tgz
     popd
@@ -83,8 +83,7 @@ download_dotnet_agent() {
     local tag="$1"
     local dest="$2"
 
-    # shellcheck disable=SC2153 # ARCH is defined in Makefile
-    case "$ARCH" in
+    case "${ARCH:-}" in
       amd64) local dotnet_arch="x64" ;;
       arm64) local dotnet_arch="arm64" ;;
       *)

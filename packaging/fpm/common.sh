@@ -72,7 +72,7 @@ download_nodejs_agent() {
     mkdir -p "js"
     pushd "js"
     npm pack "@opentelemetry/auto-instrumentations-node@${tag#v}"
-    mv *.tgz otel-js.tgz
+    mv ./*.tgz otel-js.tgz
     npm install --global=false otel-js.tgz
     rm otel-js.tgz
     popd

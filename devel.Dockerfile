@@ -4,7 +4,7 @@
 # It also enables running unit tests on different architectures (x86_64 vs aarm64).
 # Use `make docker-run` build and run the container.
 
-ARG base_image=debian:13@sha256:72547dd722cd005a8c2aa2079af9ca0ee93aad8e589689135feaed60b0a8c08d
+ARG base_image=debian:13@sha256:01a723bf5bfb21b9dda0c9a33e0538106e4d02cce8f557e118dd61259553d598
 FROM ${base_image}
 
 ARG zig_architecture

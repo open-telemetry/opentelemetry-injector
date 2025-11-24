@@ -1,19 +1,16 @@
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+ARG ARCH=amd64
+
+FROM mcr.microsoft.com/dotnet/sdk:9.0-bookworm-slim-${ARCH}
+
+ENV LANG=C.UTF-8
+
 WORKDIR /src
 COPY "packaging/tests/shared/dotnet/DotNetTestApp.csproj" .
 RUN dotnet restore "DotNetTestApp.csproj"
 COPY "packaging/tests/shared/dotnet/*.cs" .
-RUN dotnet build "DotNetTestApp.csproj" -c Release -o /app/build
+RUN dotnet build "DotNetTestApp.csproj" -c Release -o /app/build -r linux-${ARCH}
 
-FROM build AS publish
-RUN dotnet publish "DotNetTestApp.csproj" -c Release -o /app/publish
-
-FROM mcr.microsoft.com/dotnet/aspnet:9.0-bookworm-slim AS final
-
-ARG ARCH=amd64
-ARG RPM_ARCH=x86_64
-
-ENV LANG=C.UTF-8
+RUN dotnet publish "DotNetTestApp.csproj" -c Release -o /app/publish -r linux-${ARCH}
 
 RUN apt-get update
 RUN apt install -y  wget
@@ -28,7 +25,7 @@ RUN dpkg -i injector.deb
 
 RUN echo /usr/lib/opentelemetry/libotelinject.so >> /etc/ld.so.preload
 
-COPY --from=publish /app/publish .
+RUN cp /app/publish/* .
 COPY packaging/tests/shared/dotnet/test.sh test.sh
 
 CMD ["./test.sh"]

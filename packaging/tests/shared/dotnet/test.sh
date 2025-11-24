@@ -1,7 +1,5 @@
 #!/bin/bash
 
-ls -lah *
-
 dotnet DotNetTestApp.dll &
 
 # If the .NET process is instrumented successfully, we should see a log report:

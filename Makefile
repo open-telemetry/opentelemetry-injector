@@ -101,7 +101,7 @@ injector-integration-tests-for-all-architectures:
 	test/scripts/test-all.sh
 
 .PHONY: lint
-lint: zig-fmt-check # TODO add the `shellcheck-lint` target here as well, in a follow-up PR.
+lint: zig-fmt-check shellcheck-lint
 
 .PHONY: zig-fmt-check
 zig-fmt-check: check-zig-installed

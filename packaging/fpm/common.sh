@@ -1,9 +1,10 @@
 #!/bin/bash
+# shellcheck disable=SC2034 # Some of the variables are used in other scripts
 
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-FPM_DIR="$( cd "$( dirname ${BASH_SOURCE[0]} )" && pwd )"
+FPM_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_DIR="$( cd "$FPM_DIR/../../" && pwd )"
 
 PKG_NAME="opentelemetry-injector"
@@ -60,7 +61,7 @@ download_java_agent() {
     fi
 
     echo "Downloading $dl_url ..."
-    mkdir -p "$( dirname $dest )"
+    mkdir -p "$( dirname "$dest" )"
     curl -sfL "$dl_url" -o "$dest"
 }
 
@@ -70,8 +71,8 @@ download_nodejs_agent() {
     pushd "$(dirname "$dest")"
     mkdir -p "js"
     pushd "js"
-    npm pack @opentelemetry/auto-instrumentations-node@${tag#v}
-    mv *.tgz otel-js.tgz
+    npm pack "@opentelemetry/auto-instrumentations-node@${tag#v}"
+    mv ./*.tgz otel-js.tgz
     npm install --global=false otel-js.tgz
     rm otel-js.tgz
     popd
@@ -82,7 +83,7 @@ download_dotnet_agent() {
     local tag="$1"
     local dest="$2"
 
-    case "$ARCH" in
+    case "${ARCH:-}" in
       amd64) local dotnet_arch="x64" ;;
       arm64) local dotnet_arch="arm64" ;;
       *)
@@ -109,21 +110,24 @@ download_and_unzip_dotnet_agent_for_libc_flavor() {
     local dl_url="$DOTNET_AGENT_RELEASE_URL/$tag/$pkg"
 
     echo "Downloading $dl_url ..."
-    curl -sSfL "$dl_url" -o /tmp/$pkg
+    curl -sSfL "$dl_url" -o "/tmp/$pkg"
 
     echo "Extracting $pkg to $destination_folder_for_libc_flavor ..."
     mkdir -p "$destination_folder_for_libc_flavor"
-    unzip -d "$destination_folder_for_libc_flavor" /tmp/$pkg
-    rm -f /tmp/$pkg
+    unzip -d "$destination_folder_for_libc_flavor" "/tmp/$pkg"
+    rm -f "/tmp/$pkg"
 }
 
 setup_files_and_permissions() {
     local arch="$1"
     local buildroot="$2"
     local libotelinject="$REPO_DIR/dist/libotelinject_${arch}.so"
-    local java_agent_release="$(cat "$JAVA_AGENT_RELEASE_PATH" | tail -n 1)"
-    local nodejs_agent_release="$(cat "$NODEJS_AGENT_RELEASE_PATH" | tail -n 1)"
-    local dotnet_agent_release="$(cat "$DOTNET_AGENT_RELEASE_PATH" | tail -n 1)"
+    local java_agent_release
+    local nodejs_agent_release
+    local dotnet_agent_release
+    java_agent_release="$(tail -n 1 <"$JAVA_AGENT_RELEASE_PATH")"
+    nodejs_agent_release="$(tail -n 1 <"$NODEJS_AGENT_RELEASE_PATH")"
+    dotnet_agent_release="$(tail -n 1 <"$DOTNET_AGENT_RELEASE_PATH")"
 
     mkdir -p "$buildroot/$(dirname $libotelinject_INSTALL_PATH)"
     cp -f "$libotelinject" "$buildroot/$libotelinject_INSTALL_PATH"

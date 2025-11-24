@@ -1,13 +1,15 @@
 #!/bin/bash
+# shellcheck disable=SC2317 # unreachable command. TODO: after bumping a shellcheck version, remove it
 
 cd my_express_app
 node app.js &
 nodepid=$!
 loop=0
 
+# shellcheck disable=SC2329 # Function is used as SIGINT handler
 function stop()
 {
-  kill $nodepid
+  kill "$nodepid"
   loop=1
   echo "Good bye"
 }

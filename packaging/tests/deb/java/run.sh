@@ -12,8 +12,8 @@ else
   exit 1
 fi
 
-SCRIPT_DIR="$( cd "$( dirname ${BASH_SOURCE[0]} )" && pwd )"
-cd $SCRIPT_DIR/../../../..
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR/../../../.."
 
 tomcat_download_url=$(packaging/tests/shared/determine-tomcat-download-url.sh)
 if [[ ! "$tomcat_download_url" =~ dlcdn.apache.org ]]; then

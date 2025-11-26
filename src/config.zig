@@ -16,33 +16,33 @@ const dotnet_path_key = "dotnet_auto_instrumentation_agent_path_prefix";
 const jvm_path_key = "jvm_auto_instrumentation_agent_path";
 const nodejs_path_key = "nodejs_auto_instrumentation_agent_path";
 
-const all_env_path_key = "all_auto_instrumentation_env_path";
-const dotnet_env_path_key = "dotnet_auto_instrumentation_env_path";
-const jvm_env_path_key = "jvm_auto_instrumentation_env_path";
-const nodejs_env_path_key = "nodejs_auto_instrumentation_env_path";
+const all_agent_env_path_key = "all_auto_instrumentation_agent_env_path";
+const dotnet_agent_env_path_key = "dotnet_auto_instrumentation_agent_env_path";
+const jvm_agent_env_path_key = "jvm_auto_instrumentation_agent_env_path";
+const nodejs_agent_env_path_key = "nodejs_auto_instrumentation_agent_env_path";
 
 const dotnet_path_env_var = "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
 const jvm_path_env_var = "JVM_AUTO_INSTRUMENTATION_AGENT_PATH";
 const nodejs_path_env_var = "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
 
 pub const InjectorConfiguration = struct {
-    all_auto_instrumentation_env_path: []u8,
+    all_auto_instrumentation_agent_env_path: []u8,
     dotnet_auto_instrumentation_agent_path_prefix: []u8,
-    dotnet_auto_instrumentation_env_path: []u8,
+    dotnet_auto_instrumentation_agent_env_path: []u8,
     jvm_auto_instrumentation_agent_path: []u8,
-    jvm_auto_instrumentation_env_path: []u8,
+    jvm_auto_instrumentation_agent_env_path: []u8,
     nodejs_auto_instrumentation_agent_path: []u8,
-    nodejs_auto_instrumentation_env_path: []u8,
+    nodejs_auto_instrumentation_agent_env_path: []u8,
 };
 
 const default_dotnet_auto_instrumentation_agent_path_prefix = "/__otel_auto_instrumentation/dotnet";
 const default_jvm_auto_instrumentation_agent_path = "/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar";
 const default_nodejs_auto_instrumentation_agent_path = "/__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument";
 
-const default_all_auto_instrumentation_env_path = "/etc/opentelemetry/env.conf";
-const default_dotnet_auto_instrumentation_env_path = "/etc/opentelemetry/dotnet/env.conf";
-const default_jvm_auto_instrumentation_env_path = "/etc/opentelemetry/jvm/env.conf";
-const default_nodejs_auto_instrumentation_env_path = "/etc/opentelemetry/node_js/env.conf";
+const default_all_auto_instrumentation_agent_env_path = "/etc/opentelemetry/env.conf";
+const default_dotnet_auto_instrumentation_agent_env_path = "/etc/opentelemetry/dotnet/env.conf";
+const default_jvm_auto_instrumentation_agent_env_path = "/etc/opentelemetry/jvm/env.conf";
+const default_nodejs_auto_instrumentation_agent_env_path = "/etc/opentelemetry/node_js/env.conf";
 
 var cached_configuration_optional: ?InjectorConfiguration = null;
 
@@ -65,13 +65,13 @@ pub fn readConfiguration() InjectorConfiguration {
 
 fn createDefaultConfiguration() InjectorConfiguration {
     const empty_configuration = InjectorConfiguration{
-        .all_auto_instrumentation_env_path = "",
+        .all_auto_instrumentation_agent_env_path = "",
         .dotnet_auto_instrumentation_agent_path_prefix = "",
-        .dotnet_auto_instrumentation_env_path = "",
+        .dotnet_auto_instrumentation_agent_env_path = "",
         .jvm_auto_instrumentation_agent_path = "",
-        .jvm_auto_instrumentation_env_path = "",
+        .jvm_auto_instrumentation_agent_env_path = "",
         .nodejs_auto_instrumentation_agent_path = "",
-        .nodejs_auto_instrumentation_env_path = "",
+        .nodejs_auto_instrumentation_agent_env_path = "",
     };
     const errorHandler = struct {
         fn printErrorReturnEmpty(err: std.fmt.AllocPrintError) InjectorConfiguration {
@@ -80,36 +80,36 @@ fn createDefaultConfiguration() InjectorConfiguration {
         }
     };
 
-    const all_env_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_all_auto_instrumentation_env_path}) catch |err| {
+    const all_env_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_all_auto_instrumentation_agent_env_path}) catch |err| {
         return errorHandler.printErrorReturnEmpty(err);
     };
     const dotnet_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_dotnet_auto_instrumentation_agent_path_prefix}) catch |err| {
         return errorHandler.printErrorReturnEmpty(err);
     };
-    const dotnet_env_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_dotnet_auto_instrumentation_env_path}) catch |err| {
+    const dotnet_env_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_dotnet_auto_instrumentation_agent_env_path}) catch |err| {
         return errorHandler.printErrorReturnEmpty(err);
     };
     const jvm_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_jvm_auto_instrumentation_agent_path}) catch |err| {
         return errorHandler.printErrorReturnEmpty(err);
     };
-    const jvm_env_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_jvm_auto_instrumentation_env_path}) catch |err| {
+    const jvm_env_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_jvm_auto_instrumentation_agent_env_path}) catch |err| {
         return errorHandler.printErrorReturnEmpty(err);
     };
     const nodejs_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_nodejs_auto_instrumentation_agent_path}) catch |err| {
         return errorHandler.printErrorReturnEmpty(err);
     };
-    const nodejs_env_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_nodejs_auto_instrumentation_env_path}) catch |err| {
+    const nodejs_env_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_nodejs_auto_instrumentation_agent_env_path}) catch |err| {
         return errorHandler.printErrorReturnEmpty(err);
     };
 
     return InjectorConfiguration{
-        .all_auto_instrumentation_env_path = all_env_default,
+        .all_auto_instrumentation_agent_env_path = all_env_default,
         .dotnet_auto_instrumentation_agent_path_prefix = dotnet_default,
-        .dotnet_auto_instrumentation_env_path = dotnet_env_default,
+        .dotnet_auto_instrumentation_agent_env_path = dotnet_env_default,
         .jvm_auto_instrumentation_agent_path = jvm_default,
-        .jvm_auto_instrumentation_env_path = jvm_env_default,
+        .jvm_auto_instrumentation_agent_env_path = jvm_env_default,
         .nodejs_auto_instrumentation_agent_path = nodejs_default,
-        .nodejs_auto_instrumentation_env_path = nodejs_env_default,
+        .nodejs_auto_instrumentation_agent_env_path = nodejs_env_default,
     };
 }
 
@@ -176,32 +176,32 @@ test "readConfigurationFile: file does not exist" {
     readConfigurationFile("/does/not/exist", &configuration);
 
     try testing.expectEqualStrings(
-        default_all_auto_instrumentation_env_path,
-        configuration.all_auto_instrumentation_env_path,
+        default_all_auto_instrumentation_agent_env_path,
+        configuration.all_auto_instrumentation_agent_env_path,
     );
     try testing.expectEqualStrings(
         default_dotnet_auto_instrumentation_agent_path_prefix,
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        default_dotnet_auto_instrumentation_env_path,
-        configuration.dotnet_auto_instrumentation_env_path,
+        default_dotnet_auto_instrumentation_agent_env_path,
+        configuration.dotnet_auto_instrumentation_agent_env_path,
     );
     try testing.expectEqualStrings(
         default_jvm_auto_instrumentation_agent_path,
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        default_jvm_auto_instrumentation_env_path,
-        configuration.jvm_auto_instrumentation_env_path,
+        default_jvm_auto_instrumentation_agent_env_path,
+        configuration.jvm_auto_instrumentation_agent_env_path,
     );
     try testing.expectEqualStrings(
         default_nodejs_auto_instrumentation_agent_path,
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        default_nodejs_auto_instrumentation_env_path,
-        configuration.nodejs_auto_instrumentation_env_path,
+        default_nodejs_auto_instrumentation_agent_env_path,
+        configuration.nodejs_auto_instrumentation_agent_env_path,
     );
 }
 
@@ -217,16 +217,32 @@ test "readConfigurationFile: empty file" {
     readConfigurationFile(absolute_path_to_config_file, &configuration);
 
     try testing.expectEqualStrings(
+        default_all_auto_instrumentation_agent_env_path,
+        configuration.all_auto_instrumentation_agent_env_path,
+    );
+    try testing.expectEqualStrings(
         default_dotnet_auto_instrumentation_agent_path_prefix,
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
+    );
+    try testing.expectEqualStrings(
+        default_dotnet_auto_instrumentation_agent_env_path,
+        configuration.dotnet_auto_instrumentation_agent_env_path,
     );
     try testing.expectEqualStrings(
         default_jvm_auto_instrumentation_agent_path,
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
+        default_jvm_auto_instrumentation_agent_env_path,
+        configuration.jvm_auto_instrumentation_agent_env_path,
+    );
+    try testing.expectEqualStrings(
         default_nodejs_auto_instrumentation_agent_path,
         configuration.nodejs_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        default_nodejs_auto_instrumentation_agent_env_path,
+        configuration.nodejs_auto_instrumentation_agent_env_path,
     );
 }
 
@@ -242,7 +258,7 @@ test "readConfigurationFile: all configuration values" {
 
     try testing.expectEqualStrings(
         "/custom/path/to/env.conf",
-        configuration.all_auto_instrumentation_env_path,
+        configuration.all_auto_instrumentation_agent_env_path,
     );
     try testing.expectEqualStrings(
         "/custom/path/to/dotnet/instrumentation",
@@ -250,7 +266,7 @@ test "readConfigurationFile: all configuration values" {
     );
     try testing.expectEqualStrings(
         "/custom/path/to/dotnet/env.conf",
-        configuration.dotnet_auto_instrumentation_env_path,
+        configuration.dotnet_auto_instrumentation_agent_env_path,
     );
     try testing.expectEqualStrings(
         "/custom/path/to/jvm/opentelemetry-javaagent.jar",
@@ -258,7 +274,7 @@ test "readConfigurationFile: all configuration values" {
     );
     try testing.expectEqualStrings(
         "/custom/path/to/jvm/env.conf",
-        configuration.jvm_auto_instrumentation_env_path,
+        configuration.jvm_auto_instrumentation_agent_env_path,
     );
     try testing.expectEqualStrings(
         "/custom/path/to/node_js/node_modules/@opentelemetry-js/otel/instrument",
@@ -266,7 +282,7 @@ test "readConfigurationFile: all configuration values" {
     );
     try testing.expectEqualStrings(
         "/custom/path/to/node_js/env.conf",
-        configuration.nodejs_auto_instrumentation_env_path,
+        configuration.nodejs_auto_instrumentation_agent_env_path,
     );
 }
 
@@ -282,7 +298,7 @@ test "readConfigurationFile: all configuration values plus whitespace and commen
 
     try testing.expectEqualStrings(
         "/custom/path/to/env.conf",
-        configuration.all_auto_instrumentation_env_path,
+        configuration.all_auto_instrumentation_agent_env_path,
     );
     try testing.expectEqualStrings(
         "/custom/path/to/dotnet/instrumentation",
@@ -290,7 +306,7 @@ test "readConfigurationFile: all configuration values plus whitespace and commen
     );
     try testing.expectEqualStrings(
         "/custom/path/to/dotnet/env.conf",
-        configuration.dotnet_auto_instrumentation_env_path,
+        configuration.dotnet_auto_instrumentation_agent_env_path,
     );
     try testing.expectEqualStrings(
         "/custom/path/to/jvm/opentelemetry-javaagent.jar",
@@ -298,7 +314,7 @@ test "readConfigurationFile: all configuration values plus whitespace and commen
     );
     try testing.expectEqualStrings(
         "/custom/path/to/jvm/env.conf",
-        configuration.jvm_auto_instrumentation_env_path,
+        configuration.jvm_auto_instrumentation_agent_env_path,
     );
     try testing.expectEqualStrings(
         "/custom/path/to/node_js/node_modules/@opentelemetry-js/otel/instrument",
@@ -306,7 +322,7 @@ test "readConfigurationFile: all configuration values plus whitespace and commen
     );
     try testing.expectEqualStrings(
         "/custom/path/to/node_js/env.conf",
-        configuration.nodejs_auto_instrumentation_env_path,
+        configuration.nodejs_auto_instrumentation_agent_env_path,
     );
 }
 
@@ -358,26 +374,26 @@ fn parseLine(line: []u8, cfg_file_path: []const u8, configuration: *InjectorConf
             print.printError("error in allocPrint while trimming value from configuration file {s}: {}", .{ cfg_file_path, err });
             return false;
         };
-        if (std.mem.eql(u8, key, all_env_path_key)) {
-            configuration.all_auto_instrumentation_env_path = value;
+        if (std.mem.eql(u8, key, all_agent_env_path_key)) {
+            configuration.all_auto_instrumentation_agent_env_path = value;
             return true;
         } else if (std.mem.eql(u8, key, dotnet_path_key)) {
             configuration.dotnet_auto_instrumentation_agent_path_prefix = value;
             return true;
-        } else if (std.mem.eql(u8, key, dotnet_env_path_key)) {
-            configuration.dotnet_auto_instrumentation_env_path = value;
+        } else if (std.mem.eql(u8, key, dotnet_agent_env_path_key)) {
+            configuration.dotnet_auto_instrumentation_agent_env_path = value;
             return true;
         } else if (std.mem.eql(u8, key, jvm_path_key)) {
             configuration.jvm_auto_instrumentation_agent_path = value;
             return true;
-        } else if (std.mem.eql(u8, key, jvm_env_path_key)) {
-            configuration.jvm_auto_instrumentation_env_path = value;
+        } else if (std.mem.eql(u8, key, jvm_agent_env_path_key)) {
+            configuration.jvm_auto_instrumentation_agent_env_path = value;
             return true;
         } else if (std.mem.eql(u8, key, nodejs_path_key)) {
             configuration.nodejs_auto_instrumentation_agent_path = value;
             return true;
-        } else if (std.mem.eql(u8, key, nodejs_env_path_key)) {
-            configuration.nodejs_auto_instrumentation_env_path = value;
+        } else if (std.mem.eql(u8, key, nodejs_agent_env_path_key)) {
+            configuration.nodejs_auto_instrumentation_agent_env_path = value;
             return true;
         } else {
             print.printError("ignoring unknown configuration key in {s}: {s}={s}", .{ cfg_file_path, key, value });

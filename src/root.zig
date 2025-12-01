@@ -71,6 +71,10 @@ export fn getenv(name_z: types.NullTerminatedString) ?types.NullTerminatedString
 }
 
 fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) ?types.NullTerminatedString {
+    if (configuration.all_auto_instrumentation_agent_env_vars.get(name)) |value| {
+        return value;
+    }
+
     const original_value = std.posix.getenv(name);
 
     if (std.mem.eql(

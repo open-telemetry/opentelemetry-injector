@@ -22,6 +22,9 @@ public class Main {
             case "otel-resource-attributes":
                 echoProperty("otel.resource.attributes");
                 break;
+            case "custom-env-var":
+                echoEnvVar("CUSTOM_ENV_VAR");
+                break;
             default:
                 System.out.println("error: unknown test app command: " +  command);
                 System.exit(1);
@@ -34,6 +37,15 @@ public class Main {
             System.out.println(propertyName + ": " + value);
         } else {
             System.out.println(propertyName + ": -");
+        }
+    }
+
+    public static void echoEnvVar(String envName) {
+        String value = System.getenv(envName);
+        if (value != null) {
+            System.out.println(envName + ": " + value);
+        } else {
+            System.out.println(envName + ": -");
         }
     }
 

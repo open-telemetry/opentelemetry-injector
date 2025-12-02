@@ -44,3 +44,9 @@ run_test_case \
   "node index.js node-options" \
   "NODE_OPTIONS: -" \
   "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH="
+
+run_test_case \
+  "custom env var is returned with env file provided" \
+  "app" \
+  "node index.js custom-env-var" \
+  "CUSTOM_ENV_VAR: custom-value-123"

@@ -126,14 +126,18 @@ fn readConfigurationFile(cfg_file_path: []const u8, configuration: *InjectorConf
 fn readAllAgentEnvFile(env_file_path: []const u8, configuration: *InjectorConfiguration) void {
     const fns = struct {
         fn applyKeyValue(key: []const u8, value: []u8, _file_path: []const u8, _configuration: *InjectorConfiguration) void {
-            const null_terminated_key = std.fmt.allocPrintZ(alloc.page_allocator, "{s}", .{key}) catch {
-                return;
-            };
             defer alloc.page_allocator.free(key);
-            const null_terminated_value = std.fmt.allocPrintZ(alloc.page_allocator, "{s}", .{value}) catch {
+            defer alloc.page_allocator.free(value);
+
+            const null_terminated_key = std.fmt.allocPrintZ(alloc.page_allocator, "{s}", .{key}) catch |err| {
+                print.printError("error allocating null-terminated key for environment variable {s} from file {s}: {}", .{ key, _file_path, err });
                 return;
             };
-            defer alloc.page_allocator.free(value);
+            const null_terminated_value = std.fmt.allocPrintZ(alloc.page_allocator, "{s}", .{value}) catch |err| {
+                print.printError("error allocating null-terminated value for environment variable {s} from file {s}: {}", .{ key, _file_path, err });
+                alloc.page_allocator.free(null_terminated_key);
+                return;
+            };
 
             _configuration.all_auto_instrumentation_agent_env_vars.put(null_terminated_key, null_terminated_value) catch |e| {
                 print.printError("error storing environment variable {s} from file {s}: {}", .{ key, _file_path, e });

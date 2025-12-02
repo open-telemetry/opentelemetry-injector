@@ -23,6 +23,9 @@ class App
             case "verify-startup-hook-has-been-injected":
                 EchoEnvVar("otel_injector_dotnet_no_op_startup_hook_has_been_loaded");
                 break;
+            case "custom-env-var":
+                EchoEnvVar("CUSTOM_ENV_VAR");
+                break;
             default:
                 Console.WriteLine("error: unknown test app command: " +  command);
                 return 1;

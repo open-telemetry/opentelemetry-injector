@@ -10,6 +10,7 @@ const node_js = @import("node_js.zig");
 const print = @import("print.zig");
 const res_attrs = @import("resource_attributes.zig");
 const types = @import("types.zig");
+const pattern_matcher = @import("patterns_matcher.zig");
 
 const assert = std.debug.assert;
 const testing = std.testing;
@@ -72,6 +73,31 @@ export fn getenv(name_z: types.NullTerminatedString) ?types.NullTerminatedString
 
 fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) ?types.NullTerminatedString {
     const original_value = std.posix.getenv(name);
+
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const exe_path = std.fs.selfExePathAlloc(allocator) catch |err| {
+        print.printDebug("failed to get executable path: {any}", .{err});
+        if (original_value) |val| {
+            return val.ptr;
+        }
+        return null;
+    };
+    defer allocator.free(exe_path);
+    print.printDebug("executable: {s}", .{exe_path});
+
+    const allow = (configuration.include_paths.len == 0) or pattern_matcher.matchesAnyPattern(exe_path, configuration.include_paths);
+    const deny = (configuration.exclude_paths.len > 0) and pattern_matcher.matchesAnyPattern(exe_path, configuration.exclude_paths);
+
+    if (!allow or deny) {
+        print.printDebug("executable with path {s} ignored. allow ({any} <- patterns: {any}), deny ({any} <- patterns: {any})", .{ exe_path, allow, configuration.include_paths, deny, configuration.exclude_paths });
+        if (original_value) |val| {
+            return val.ptr;
+        }
+        return null;
+    }
 
     if (std.mem.eql(
         u8,

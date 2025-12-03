@@ -6,6 +6,7 @@ const std = @import("std");
 const alloc = @import("allocator.zig");
 const print = @import("print.zig");
 const test_util = @import("test_util.zig");
+const patterns_util = @import("patterns_util.zig");
 
 const testing = std.testing;
 
@@ -20,10 +21,16 @@ const dotnet_path_env_var = "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
 const jvm_path_env_var = "JVM_AUTO_INSTRUMENTATION_AGENT_PATH";
 const nodejs_path_env_var = "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
 
+/// Configuration options for choosing what to instrument or exclude from instrumentation
+const include_paths_key = "include_paths";
+const exclude_paths_key = "exclude_paths";
+
 pub const InjectorConfiguration = struct {
     dotnet_auto_instrumentation_agent_path_prefix: []u8,
     jvm_auto_instrumentation_agent_path: []u8,
     nodejs_auto_instrumentation_agent_path: []u8,
+    include_paths: [][]const u8,
+    exclude_paths: [][]const u8,
 };
 
 const default_dotnet_auto_instrumentation_agent_path_prefix = "/__otel_auto_instrumentation/dotnet";
@@ -57,6 +64,8 @@ fn createDefaultConfiguration() InjectorConfiguration {
                 .dotnet_auto_instrumentation_agent_path_prefix = "",
                 .jvm_auto_instrumentation_agent_path = "",
                 .nodejs_auto_instrumentation_agent_path = "",
+                .include_paths = &.{},
+                .exclude_paths = &.{},
             };
         };
     const jvm_default =
@@ -66,6 +75,8 @@ fn createDefaultConfiguration() InjectorConfiguration {
                 .dotnet_auto_instrumentation_agent_path_prefix = "",
                 .jvm_auto_instrumentation_agent_path = "",
                 .nodejs_auto_instrumentation_agent_path = "",
+                .include_paths = &.{},
+                .exclude_paths = &.{},
             };
         };
     const nodejs_default =
@@ -75,6 +86,8 @@ fn createDefaultConfiguration() InjectorConfiguration {
                 .dotnet_auto_instrumentation_agent_path_prefix = "",
                 .jvm_auto_instrumentation_agent_path = "",
                 .nodejs_auto_instrumentation_agent_path = "",
+                .include_paths = &.{},
+                .exclude_paths = &.{},
             };
         };
 
@@ -82,6 +95,8 @@ fn createDefaultConfiguration() InjectorConfiguration {
         .dotnet_auto_instrumentation_agent_path_prefix = dotnet_default,
         .jvm_auto_instrumentation_agent_path = jvm_default,
         .nodejs_auto_instrumentation_agent_path = nodejs_default,
+        .include_paths = &.{},
+        .exclude_paths = &.{},
     };
 }
 
@@ -290,6 +305,18 @@ fn parseLine(line: []u8, cfg_file_path: []const u8, configuration: *InjectorConf
             return true;
         } else if (std.mem.eql(u8, key, nodejs_path_key)) {
             configuration.nodejs_auto_instrumentation_agent_path = value;
+            return true;
+        } else if (std.mem.eql(u8, key, include_paths_key)) {
+            configuration.include_paths = patterns_util.splitByComma(value, cfg_file_path) catch |err| {
+                print.printError("error parsing include_paths value from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
+            return true;
+        } else if (std.mem.eql(u8, key, exclude_paths_key)) {
+            configuration.exclude_paths = patterns_util.splitByComma(value, cfg_file_path) catch |err| {
+                print.printError("error parsing exclude_paths value from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
             return true;
         } else {
             print.printError("ignoring unknown configuration key in {s}: {s}={s}", .{ cfg_file_path, key, value });

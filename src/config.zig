@@ -77,6 +77,8 @@ fn createDefaultConfiguration() InjectorConfiguration {
                 .nodejs_auto_instrumentation_agent_path = "",
                 .include_paths = &.{},
                 .exclude_paths = &.{},
+                .include_args = &.{},
+                .exclude_args = &.{},
             };
         };
     const jvm_default =
@@ -88,6 +90,8 @@ fn createDefaultConfiguration() InjectorConfiguration {
                 .nodejs_auto_instrumentation_agent_path = "",
                 .include_paths = &.{},
                 .exclude_paths = &.{},
+                .include_args = &.{},
+                .exclude_args = &.{},
             };
         };
     const nodejs_default =
@@ -99,6 +103,8 @@ fn createDefaultConfiguration() InjectorConfiguration {
                 .nodejs_auto_instrumentation_agent_path = "",
                 .include_paths = &.{},
                 .exclude_paths = &.{},
+                .include_args = &.{},
+                .exclude_args = &.{},
             };
         };
 
@@ -108,6 +114,8 @@ fn createDefaultConfiguration() InjectorConfiguration {
         .nodejs_auto_instrumentation_agent_path = nodejs_default,
         .include_paths = &.{},
         .exclude_paths = &.{},
+        .include_args = &.{},
+        .exclude_args = &.{},
     };
 }
 
@@ -521,7 +529,6 @@ fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void 
             print.printError("error parsing include_paths value from the environment {s}: {}", .{ include_paths_value, err });
             return;
         };
-        return;
     }
     if (std.posix.getenv(exclude_paths_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
@@ -533,7 +540,6 @@ fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void 
             print.printError("error parsing exclude_paths value from the environment {s}: {}", .{ exclude_paths_value, err });
             return;
         };
-        return;
     }
     if (std.posix.getenv(include_args_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
@@ -545,7 +551,6 @@ fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void 
             print.printError("error parsing include_arguments value from the environment {s}: {}", .{ include_args_value, err });
             return;
         };
-        return;
     }
     if (std.posix.getenv(exclude_args_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
@@ -557,6 +562,5 @@ fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void 
             print.printError("error parsing exclude_arguments value from the environment {s}: {}", .{ exclude_args_value, err });
             return;
         };
-        return;
     }
 }

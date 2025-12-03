@@ -11,6 +11,7 @@ const print = @import("print.zig");
 const res_attrs = @import("resource_attributes.zig");
 const types = @import("types.zig");
 const pattern_matcher = @import("patterns_matcher.zig");
+const args_parser = @import("args_parser.zig");
 
 const assert = std.debug.assert;
 const testing = std.testing;
@@ -78,6 +79,7 @@ fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) 
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+    // Get the program full executable path
     const exe_path = std.fs.selfExePathAlloc(allocator) catch |err| {
         print.printDebug("failed to get executable path: {any}", .{err});
         if (original_value) |val| {
@@ -88,19 +90,32 @@ fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) 
     defer allocator.free(exe_path);
     print.printDebug("executable: {s}", .{exe_path});
 
-    // Get all command line arguments (the program name is the first argument)
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    // Get all command line arguments from the process information, std.process.argsAlloc returns empty list and so
+    // does std.os.argv.
+    const args = args_parser.cmdLineForPID(allocator, std.os.linux.getpid()) catch |err| {
+        print.printDebug("failed to get executable arguments: {any}", .{err});
+        if (original_value) |val| {
+            return val.ptr;
+        }
+        return null;
+    };
+
+    defer {
+        for (args) |arg| {
+            allocator.free(arg);
+        }
+        allocator.free(args);
+    }
 
     if (print.isDebug()) {
         for (args, 0..) |arg, i| {
-            print.printDebug("arg[{d}]: {s}", .{ i, arg });
+            print.printDebug("Arg[{d}]: {s}", .{ i, arg });
         }
     }
 
-    const allow = (configuration.include_paths.len == 0) or pattern_matcher.matchesAnyPattern(exe_path, configuration.include_paths);
+    var allow = (configuration.include_paths.len == 0) or pattern_matcher.matchesAnyPattern(exe_path, configuration.include_paths);
     allow = allow or (configuration.include_args.len == 0) or pattern_matcher.matchesManyAnyPattern(args, configuration.include_args);
-    const deny = (configuration.exclude_paths.len > 0) and pattern_matcher.matchesAnyPattern(exe_path, configuration.exclude_paths);
+    var deny = (configuration.exclude_paths.len > 0) and pattern_matcher.matchesAnyPattern(exe_path, configuration.exclude_paths);
     deny = deny or ((configuration.exclude_args.len > 0) and pattern_matcher.matchesManyAnyPattern(args, configuration.exclude_args));
 
     if (!allow or deny) {

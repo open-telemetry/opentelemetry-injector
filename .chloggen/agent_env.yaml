@@ -18,7 +18,7 @@ issues: [82]
 subtext: |
   Now it is possible to pass custom environment variables to agents.
 
-  New `all_auto_instrumentation_agent_env_path` configuration option is used to specify the path to
+  New `all_auto_instrumentation_agent_env_path` configuration option is used to specify path to
   the env.conf - where custom environment variables could be specified. Injector will pass these variables
   to agents.
 

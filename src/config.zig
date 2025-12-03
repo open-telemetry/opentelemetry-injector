@@ -202,6 +202,8 @@ test "readConfigurationFile: empty file" {
         default_nodejs_auto_instrumentation_agent_path,
         configuration.nodejs_auto_instrumentation_agent_path,
     );
+    try testing.expectEqual(0, configuration.include_paths.len);
+    try testing.expectEqual(0, configuration.exclude_paths.len);
 }
 
 test "readConfigurationFile: all configuration values" {
@@ -226,6 +228,12 @@ test "readConfigurationFile: all configuration values" {
         "/custom/path/to/node_js/node_modules/@opentelemetry-js/otel/instrument",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
+    try testing.expectEqual(2, configuration.include_paths.len);
+    try testing.expectEqualStrings("/app/*", configuration.include_paths[0]);
+    try testing.expectEqualStrings("/home/user/test/*", configuration.include_paths[1]);
+    try testing.expectEqual(2, configuration.exclude_paths.len);
+    try testing.expectEqualStrings("/usr/*", configuration.exclude_paths[0]);
+    try testing.expectEqualStrings("/opt/*", configuration.exclude_paths[1]);
 }
 
 test "readConfigurationFile: all configuration values plus whitespace and comments" {

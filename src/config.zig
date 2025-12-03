@@ -28,12 +28,20 @@ const exclude_paths_key = "exclude_paths";
 const include_paths_env_var = "OTEL_INJECT_INCLUDE_PATHS";
 const exclude_paths_env_var = "OTEL_INJECT_EXCLUDE_PATHS";
 
+const include_args_key = "include_arguments";
+const exclude_args_key = "exclude_arguments";
+
+const include_args_env_var = "OTEL_INJECT_INCLUDE_ARGUMENTS";
+const exclude_args_env_var = "OTEL_INJECT_EXCLUDE_ARGUMENTS";
+
 pub const InjectorConfiguration = struct {
     dotnet_auto_instrumentation_agent_path_prefix: []u8,
     jvm_auto_instrumentation_agent_path: []u8,
     nodejs_auto_instrumentation_agent_path: []u8,
     include_paths: [][]const u8,
     exclude_paths: [][]const u8,
+    include_args: [][]const u8,
+    exclude_args: [][]const u8,
 };
 
 const default_dotnet_auto_instrumentation_agent_path_prefix = "/__otel_auto_instrumentation/dotnet";
@@ -329,6 +337,18 @@ fn parseLine(line: []u8, cfg_file_path: []const u8, configuration: *InjectorConf
                 return false;
             };
             return true;
+        } else if (std.mem.eql(u8, key, include_args_key)) {
+            configuration.include_args = patterns_util.splitByComma(value) catch |err| {
+                print.printError("error parsing include_arguments value from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
+            return true;
+        } else if (std.mem.eql(u8, key, exclude_args_key)) {
+            configuration.exclude_args = patterns_util.splitByComma(value) catch |err| {
+                print.printError("error parsing exclude_arguments value from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
+            return true;
         } else {
             print.printError("ignoring unknown configuration key in {s}: {s}={s}", .{ cfg_file_path, key, value });
             return true;
@@ -511,6 +531,30 @@ fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void 
         };
         configuration.exclude_paths = patterns_util.splitByComma(exclude_paths_value) catch |err| {
             print.printError("error parsing exclude_paths value from the environment {s}: {}", .{ exclude_paths_value, err });
+            return;
+        };
+        return;
+    }
+    if (std.posix.getenv(include_args_env_var)) |value| {
+        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
+        const include_args_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
+            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
+            return;
+        };
+        configuration.include_args = patterns_util.splitByComma(include_args_value) catch |err| {
+            print.printError("error parsing include_arguments value from the environment {s}: {}", .{ include_args_value, err });
+            return;
+        };
+        return;
+    }
+    if (std.posix.getenv(exclude_args_env_var)) |value| {
+        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
+        const exclude_args_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
+            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
+            return;
+        };
+        configuration.exclude_args = patterns_util.splitByComma(exclude_args_value) catch |err| {
+            print.printError("error parsing exclude_arguments value from the environment {s}: {}", .{ exclude_args_value, err });
             return;
         };
         return;

@@ -6,7 +6,7 @@ const testing = std.testing;
 
 /// Matches a string against a glob pattern supporting * (any sequence) and ? (single char).
 /// Returns true if the text matches the pattern.
-pub fn matchGlob(pattern: []const u8, text: []const u8) bool {
+fn matchGlob(pattern: []const u8, text: []const u8) bool {
     return matchGlobRecursive(pattern, text, 0, 0);
 }
 
@@ -54,6 +54,23 @@ pub fn matchesAnyPattern(path: []const u8, patterns: []const []const u8) bool {
             return true;
         }
     }
+    return false;
+}
+
+pub fn matchesManyAnyPattern(args: []const []const u8, patterns: []const []const u8) bool {
+    if (args.len < 2) {
+        return false;
+    }
+    // args[0] is the program name/path
+    // args[1..] are the actual arguments
+    for (args[1..]) |arg| {
+        for (patterns) |pattern| {
+            if (matchGlob(pattern, arg)) {
+                return true;
+            }
+        }
+    }
+
     return false;
 }
 
@@ -123,4 +140,74 @@ test "matchesAnyPattern: multiple patterns" {
     try testing.expect(matchesAnyPattern("/opt/local/bin/app", patterns));
     try testing.expect(matchesAnyPattern("script.sh", patterns));
     try testing.expect(!matchesAnyPattern("/home/user/app", patterns));
+}
+
+test "matchesManyAnyPattern: empty args" {
+    const patterns: []const []const u8 = &.{"/usr/bin/*"};
+    try testing.expect(!matchesManyAnyPattern(&.{}, patterns));
+}
+
+test "matchesManyAnyPattern: only program name" {
+    const patterns: []const []const u8 = &.{"/usr/bin/*"};
+    const args: []const []const u8 = &.{"/usr/bin/myprogram"};
+    try testing.expect(!matchesManyAnyPattern(args, patterns));
+}
+
+test "matchesManyAnyPattern: empty patterns" {
+    const args: []const []const u8 = &.{ "/usr/bin/myprogram", "/usr/bin/bash", "arg2" };
+    try testing.expect(!matchesManyAnyPattern(args, &.{}));
+}
+
+test "matchesManyAnyPattern: single arg matches" {
+    const patterns: []const []const u8 = &.{"-javaagent*"};
+    const args: []const []const u8 = &.{ "/usr/bin/myprogram", "-javaagent=myagent.jar" };
+    try testing.expect(matchesManyAnyPattern(args, patterns));
+}
+
+test "matchesManyAnyPattern: single arg no match" {
+    const patterns: []const []const u8 = &.{"/usr/bin/*"};
+    const args: []const []const u8 = &.{ "/usr/bin/myprogram", "/opt/bin/bash" };
+    try testing.expect(!matchesManyAnyPattern(args, patterns));
+}
+
+test "matchesManyAnyPattern: multiple args first matches" {
+    const patterns: []const []const u8 = &.{"*.sh"};
+    const args: []const []const u8 = &.{ "/usr/bin/myprogram", "script.sh", "file.txt" };
+    try testing.expect(matchesManyAnyPattern(args, patterns));
+}
+
+test "matchesManyAnyPattern: multiple args last matches" {
+    const patterns: []const []const u8 = &.{"*.txt"};
+    const args: []const []const u8 = &.{ "/usr/bin/myprogram", "script.sh", "file.txt" };
+    try testing.expect(matchesManyAnyPattern(args, patterns));
+}
+
+test "matchesManyAnyPattern: multiple patterns and args" {
+    const patterns: []const []const u8 = &.{ "/usr/bin/*", "*.sh", "/opt/*/bin/*" };
+    const args: []const []const u8 = &.{ "/usr/bin/myprogram", "file.txt", "/usr/bin/bash", "data.log" };
+    try testing.expect(matchesManyAnyPattern(args, patterns));
+}
+
+test "matchesManyAnyPattern: multiple args none match" {
+    const patterns: []const []const u8 = &.{ "/usr/bin/*", "*.sh" };
+    const args: []const []const u8 = &.{ "/usr/bin/myprogram", "/opt/bin/app", "file.txt" };
+    try testing.expect(!matchesManyAnyPattern(args, patterns));
+}
+
+test "matchesManyAnyPattern: wildcard matches multiple args" {
+    const patterns: []const []const u8 = &.{"*"};
+    const args: []const []const u8 = &.{ "/usr/bin/myprogram", "anything", "will", "match" };
+    try testing.expect(matchesManyAnyPattern(args, patterns));
+}
+
+test "matchesManyAnyPattern: complex patterns" {
+    const patterns: []const []const u8 = &.{ "/usr/*/ba?h", "*.conf", "/opt/*/*" };
+    const args: []const []const u8 = &.{ "/usr/bin/myprogram", "/usr/local/bash", "script.sh" };
+    try testing.expect(matchesManyAnyPattern(args, patterns));
+}
+
+test "matchesManyAnyPattern: program name not matched" {
+    const patterns: []const []const u8 = &.{"/usr/bin/myprogram"};
+    const args: []const []const u8 = &.{ "/usr/bin/myprogram", "arg1" };
+    try testing.expect(!matchesManyAnyPattern(args, patterns));
 }

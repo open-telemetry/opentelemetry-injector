@@ -88,21 +88,47 @@ fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) 
     defer allocator.free(exe_path);
     print.printDebug("executable: {s}", .{exe_path});
 
+    // Get all command line arguments (the program name is the first argument)
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
+
+    if (print.isDebug()) {
+        for (args, 0..) |arg, i| {
+            print.printDebug("arg[{d}]: {s}", .{ i, arg });
+        }
+    }
+
     const allow = (configuration.include_paths.len == 0) or pattern_matcher.matchesAnyPattern(exe_path, configuration.include_paths);
+    allow = allow or (configuration.include_args.len == 0) or pattern_matcher.matchesManyAnyPattern(args, configuration.include_args);
     const deny = (configuration.exclude_paths.len > 0) and pattern_matcher.matchesAnyPattern(exe_path, configuration.exclude_paths);
+    deny = deny or ((configuration.exclude_args.len > 0) and pattern_matcher.matchesManyAnyPattern(args, configuration.exclude_args));
 
     if (!allow or deny) {
         print.printDebug("executable with path {s} ignored. allow={any}, deny={any}", .{ exe_path, allow, deny });
-        if (configuration.include_paths.len > 0) {
-            print.printDebug("  include_paths:", .{});
-            for (configuration.include_paths) |pattern| {
-                print.printDebug("    - {s}", .{pattern});
+        if (print.isDebug()) {
+            if (configuration.include_paths.len > 0) {
+                print.printDebug("  include_paths:", .{});
+                for (configuration.include_paths) |pattern| {
+                    print.printDebug("    - {s}", .{pattern});
+                }
             }
-        }
-        if (configuration.exclude_paths.len > 0) {
-            print.printDebug("  exclude_paths:", .{});
-            for (configuration.exclude_paths) |pattern| {
-                print.printDebug("    - {s}", .{pattern});
+            if (configuration.include_args.len > 0) {
+                print.printDebug("  include_arguments:", .{});
+                for (configuration.include_args) |pattern| {
+                    print.printDebug("    - {s}", .{pattern});
+                }
+            }
+            if (configuration.exclude_paths.len > 0) {
+                print.printDebug("  exclude_paths:", .{});
+                for (configuration.exclude_paths) |pattern| {
+                    print.printDebug("    - {s}", .{pattern});
+                }
+            }
+            if (configuration.exclude_args.len > 0) {
+                print.printDebug("  exclude_arguments:", .{});
+                for (configuration.exclude_args) |pattern| {
+                    print.printDebug("    - {s}", .{pattern});
+                }
             }
         }
         if (original_value) |val| {

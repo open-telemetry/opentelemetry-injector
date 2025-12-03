@@ -28,11 +28,11 @@ const exclude_paths_key = "exclude_paths";
 const include_paths_env_var = "OTEL_INJECT_INCLUDE_PATHS";
 const exclude_paths_env_var = "OTEL_INJECT_EXCLUDE_PATHS";
 
-const include_args_key = "include_arguments";
-const exclude_args_key = "exclude_arguments";
+const include_args_key = "include_with_arguments";
+const exclude_args_key = "exclude_with_arguments";
 
-const include_args_env_var = "OTEL_INJECT_INCLUDE_ARGUMENTS";
-const exclude_args_env_var = "OTEL_INJECT_EXCLUDE_ARGUMENTS";
+const include_args_env_var = "OTEL_INJECT_INCLUDE_WITH_ARGUMENTS";
+const exclude_args_env_var = "OTEL_INJECT_EXCLUDE_WITH_ARGUMENTS";
 
 pub const InjectorConfiguration = struct {
     dotnet_auto_instrumentation_agent_path_prefix: []u8,
@@ -250,6 +250,13 @@ test "readConfigurationFile: all configuration values" {
     try testing.expectEqual(2, configuration.exclude_paths.len);
     try testing.expectEqualStrings("/usr/*", configuration.exclude_paths[0]);
     try testing.expectEqualStrings("/opt/*", configuration.exclude_paths[1]);
+    try testing.expectEqual(3, configuration.include_args.len);
+    try testing.expectEqualStrings("-jar", configuration.include_args[0]);
+    try testing.expectEqualStrings("*my-app*", configuration.include_args[1]);
+    try testing.expectEqualStrings("*.js", configuration.include_args[2]);
+    try testing.expectEqual(2, configuration.exclude_args.len);
+    try testing.expectEqualStrings("-javaagent*", configuration.exclude_args[0]);
+    try testing.expectEqualStrings("*@opentelemetry-js*", configuration.exclude_args[1]);
 }
 
 test "readConfigurationFile: all configuration values plus whitespace and comments" {

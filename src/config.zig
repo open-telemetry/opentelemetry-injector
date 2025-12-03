@@ -5,7 +5,6 @@ const std = @import("std");
 
 const alloc = @import("allocator.zig");
 const print = @import("print.zig");
-const nts_hash_map = @import("null_terminated_string_hash_map.zig");
 const test_util = @import("test_util.zig");
 
 const testing = std.testing;
@@ -25,7 +24,7 @@ const nodejs_path_env_var = "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
 
 pub const InjectorConfiguration = struct {
     all_auto_instrumentation_agent_env_path: []u8,
-    all_auto_instrumentation_agent_env_vars: nts_hash_map.NullTerminatedStringHashMap,
+    all_auto_instrumentation_agent_env_vars: std.StringHashMap([]u8),
     dotnet_auto_instrumentation_agent_path_prefix: []u8,
     jvm_auto_instrumentation_agent_path: []u8,
     nodejs_auto_instrumentation_agent_path: []u8,
@@ -60,7 +59,7 @@ pub fn readConfiguration() InjectorConfiguration {
 }
 
 fn createDefaultConfiguration() InjectorConfiguration {
-    const all_agent_env_vars = nts_hash_map.NullTerminatedStringHashMap.init(alloc.page_allocator);
+    const all_agent_env_vars = std.StringHashMap([]u8).init(alloc.page_allocator);
     const errorHandler = struct {
         fn printErrorReturnEmpty(err: std.fmt.AllocPrintError) InjectorConfiguration {
             print.printError("Cannot allocate memory for the default injector configuration: {}", .{err});
@@ -69,7 +68,7 @@ fn createDefaultConfiguration() InjectorConfiguration {
                 .jvm_auto_instrumentation_agent_path = "",
                 .nodejs_auto_instrumentation_agent_path = "",
                 .all_auto_instrumentation_agent_env_path = "",
-                .all_auto_instrumentation_agent_env_vars = nts_hash_map.NullTerminatedStringHashMap.init(alloc.page_allocator),
+                .all_auto_instrumentation_agent_env_vars = std.StringHashMap([]u8).init(alloc.page_allocator),
             };
         }
     };
@@ -126,23 +125,8 @@ fn readConfigurationFile(cfg_file_path: []const u8, configuration: *InjectorConf
 fn readAllAgentEnvFile(env_file_path: []const u8, configuration: *InjectorConfiguration) void {
     const fns = struct {
         fn applyKeyValue(key: []const u8, value: []u8, _file_path: []const u8, _configuration: *InjectorConfiguration) void {
-            defer alloc.page_allocator.free(key);
-            defer alloc.page_allocator.free(value);
-
-            const null_terminated_key = std.fmt.allocPrintZ(alloc.page_allocator, "{s}", .{key}) catch |err| {
-                print.printError("error allocating null-terminated key for environment variable {s} from file {s}: {}", .{ key, _file_path, err });
-                return;
-            };
-            const null_terminated_value = std.fmt.allocPrintZ(alloc.page_allocator, "{s}", .{value}) catch |err| {
-                print.printError("error allocating null-terminated value for environment variable {s} from file {s}: {}", .{ key, _file_path, err });
-                alloc.page_allocator.free(null_terminated_key);
-                return;
-            };
-
-            _configuration.all_auto_instrumentation_agent_env_vars.put(null_terminated_key, null_terminated_value) catch |e| {
+            _configuration.all_auto_instrumentation_agent_env_vars.put(key, value) catch |e| {
                 print.printError("error storing environment variable {s} from file {s}: {}", .{ key, _file_path, e });
-                alloc.page_allocator.free(null_terminated_key);
-                alloc.page_allocator.free(null_terminated_value);
             };
         }
     };

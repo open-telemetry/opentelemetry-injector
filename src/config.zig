@@ -25,6 +25,9 @@ const nodejs_path_env_var = "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
 const include_paths_key = "include_paths";
 const exclude_paths_key = "exclude_paths";
 
+const include_paths_env_var = "OTEL_INJECT_INCLUDE_PATHS";
+const exclude_paths_env_var = "OTEL_INJECT_EXCLUDE_PATHS";
+
 pub const InjectorConfiguration = struct {
     dotnet_auto_instrumentation_agent_path_prefix: []u8,
     jvm_auto_instrumentation_agent_path: []u8,
@@ -307,13 +310,13 @@ fn parseLine(line: []u8, cfg_file_path: []const u8, configuration: *InjectorConf
             configuration.nodejs_auto_instrumentation_agent_path = value;
             return true;
         } else if (std.mem.eql(u8, key, include_paths_key)) {
-            configuration.include_paths = patterns_util.splitByComma(value, cfg_file_path) catch |err| {
+            configuration.include_paths = patterns_util.splitByComma(value) catch |err| {
                 print.printError("error parsing include_paths value from configuration file {s}: {}", .{ cfg_file_path, err });
                 return false;
             };
             return true;
         } else if (std.mem.eql(u8, key, exclude_paths_key)) {
-            configuration.exclude_paths = patterns_util.splitByComma(value, cfg_file_path) catch |err| {
+            configuration.exclude_paths = patterns_util.splitByComma(value) catch |err| {
                 print.printError("error parsing exclude_paths value from configuration file {s}: {}", .{ cfg_file_path, err });
                 return false;
             };
@@ -479,5 +482,29 @@ fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void 
             return;
         };
         configuration.nodejs_auto_instrumentation_agent_path = nodejs_value;
+    }
+    if (std.posix.getenv(include_paths_env_var)) |value| {
+        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
+        const include_paths_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
+            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
+            return;
+        };
+        configuration.include_paths = patterns_util.splitByComma(include_paths_value) catch |err| {
+            print.printError("error parsing include_paths value from the environment {s}: {}", .{ include_paths_value, err });
+            return;
+        };
+        return;
+    }
+    if (std.posix.getenv(exclude_paths_env_var)) |value| {
+        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
+        const exclude_paths_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
+            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
+            return;
+        };
+        configuration.exclude_paths = patterns_util.splitByComma(exclude_paths_value) catch |err| {
+            print.printError("error parsing exclude_paths value from the environment {s}: {}", .{ exclude_paths_value, err });
+            return;
+        };
+        return;
     }
 }

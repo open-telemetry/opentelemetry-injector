@@ -92,7 +92,19 @@ fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) 
     const deny = (configuration.exclude_paths.len > 0) and pattern_matcher.matchesAnyPattern(exe_path, configuration.exclude_paths);
 
     if (!allow or deny) {
-        print.printDebug("executable with path {s} ignored. allow ({any} <- patterns: {any}), deny ({any} <- patterns: {any})", .{ exe_path, allow, configuration.include_paths, deny, configuration.exclude_paths });
+        print.printDebug("executable with path {s} ignored. allow={any}, deny={any}", .{ exe_path, allow, deny });
+        if (configuration.include_paths.len > 0) {
+            print.printDebug("  include_paths:", .{});
+            for (configuration.include_paths) |pattern| {
+                print.printDebug("    - {s}", .{pattern});
+            }
+        }
+        if (configuration.exclude_paths.len > 0) {
+            print.printDebug("  exclude_paths:", .{});
+            for (configuration.exclude_paths) |pattern| {
+                print.printDebug("    - {s}", .{pattern});
+            }
+        }
         if (original_value) |val| {
             return val.ptr;
         }

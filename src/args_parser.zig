@@ -7,10 +7,8 @@ const std = @import("std");
 /// Returns the executable path and a slice of arguments (excluding the executable).
 /// The cmdline file contains null-separated arguments.
 /// Caller owns the returned memory and must free it.
-pub fn cmdLineForPID(allocator: std.mem.Allocator, pid: i32) ![]const []const u8 {
-    // Build the path: /proc/<pid>/cmdline
-    const cmdline_path = try std.fmt.allocPrint(allocator, "/proc/{d}/cmdline", .{pid});
-    defer allocator.free(cmdline_path);
+pub fn cmdLineForPID(allocator: std.mem.Allocator) ![]const []const u8 {
+    const cmdline_path = "/proc/self/cmdline";
 
     const file = std.fs.openFileAbsolute(cmdline_path, .{}) catch |err| {
         return err;

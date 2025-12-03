@@ -3,6 +3,7 @@
 
 const std = @import("std");
 
+const alloc = @import("allocator.zig");
 const config = @import("config.zig");
 const dotnet = @import("dotnet.zig");
 const jvm = @import("jvm.zig");
@@ -34,6 +35,12 @@ var modified_node_options_value_calculated = false;
 var modified_node_options_value: ?types.NullTerminatedString = null;
 var modified_otel_resource_attributes_value_calculated = false;
 var modified_otel_resource_attributes_value: ?types.NullTerminatedString = null;
+
+// Cache for executable path and command line arguments (processed once)
+var cached_executable_path_calculated = false;
+var cached_executable_path: []u8 = &[_]u8{};
+var cached_cmdline_args_calculated = false;
+var cached_cmdline_args: []const []const u8 = &[_][]const u8{};
 
 export fn getenv(name_z: types.NullTerminatedString) ?types.NullTerminatedString {
     const name = std.mem.sliceTo(name_z, 0);
@@ -75,43 +82,8 @@ export fn getenv(name_z: types.NullTerminatedString) ?types.NullTerminatedString
 fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) ?types.NullTerminatedString {
     const original_value = std.posix.getenv(name);
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    // Get the program full executable path
-    const exe_path = std.fs.selfExePathAlloc(allocator) catch |err| {
-        print.printDebug("failed to get executable path: {any}", .{err});
-        if (original_value) |val| {
-            return val.ptr;
-        }
-        return null;
-    };
-    defer allocator.free(exe_path);
-    print.printDebug("executable: {s}", .{exe_path});
-
-    // Get all command line arguments from the process information, std.process.argsAlloc returns empty list and so
-    // does std.os.argv.
-    const args = args_parser.cmdLineForPID(allocator, std.os.linux.getpid()) catch |err| {
-        print.printDebug("failed to get executable arguments: {any}", .{err});
-        if (original_value) |val| {
-            return val.ptr;
-        }
-        return null;
-    };
-
-    defer {
-        for (args) |arg| {
-            allocator.free(arg);
-        }
-        allocator.free(args);
-    }
-
-    if (print.isDebug()) {
-        for (args, 0..) |arg, i| {
-            print.printDebug("Arg[{d}]: {s}", .{ i, arg });
-        }
-    }
+    const exe_path = getExecutablePath();
+    const args = getCommandLineArgs();
 
     var allow = (configuration.include_paths.len == 0) or pattern_matcher.matchesAnyPattern(exe_path, configuration.include_paths);
     allow = allow or (configuration.include_args.len == 0) or pattern_matcher.matchesManyAnyPattern(args, configuration.include_args);
@@ -223,4 +195,44 @@ fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) 
 
     // The requested environment variable is not one that we want to modify, and it does not exist. Return null.
     return null;
+}
+
+fn getCommandLineArgs() []const []const u8 {
+    // Get command line arguments (cached after first read)
+    // Dynamically injected libraries don't get std.process.argsAlloc populated and
+    // neither does std.os.argv. We read using the /proc/{pid}/cmdline.
+    if (!cached_cmdline_args_calculated) {
+        cached_cmdline_args = args_parser.cmdLineForPID(alloc.page_allocator) catch |err| {
+            print.printDebug("failed to get executable arguments: {any}", .{err});
+            cached_cmdline_args = &[_][]const u8{};
+            cached_cmdline_args_calculated = true;
+            return cached_cmdline_args;
+        };
+        cached_cmdline_args_calculated = true;
+
+        if (print.isDebug()) {
+            for (cached_cmdline_args, 0..) |arg, i| {
+                print.printDebug("arg[{d}]: {s}", .{ i, arg });
+            }
+        }
+    }
+
+    return cached_cmdline_args;
+}
+
+fn getExecutablePath() []u8 {
+    if (!cached_executable_path_calculated) {
+        // Get the program full executable path
+        cached_executable_path = std.fs.selfExePathAlloc(alloc.page_allocator) catch |err| {
+            print.printDebug("failed to get executable path: {any}", .{err});
+            cached_executable_path_calculated = true;
+            cached_executable_path = &[_]u8{};
+            return cached_executable_path;
+        };
+
+        cached_executable_path_calculated = true;
+        print.printDebug("executable: {s}", .{cached_executable_path});
+    }
+
+    return cached_executable_path;
 }

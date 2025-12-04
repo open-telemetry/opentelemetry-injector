@@ -95,7 +95,7 @@ This method requires `root` privileges.
 
       include_paths=/app/*,/utilities/*,*.exe
       exclude_with_arguments=-javaagent:*,*@opentelemetry-js*
-      include_with_arguments=*MyProject*.jar,*app.js,-Xmx?m
+      exclude_with_arguments=*MyProject*.jar,*app.js,-Xmx?m
      ```
      In the example above we'll instrument:
        - any programs that run from the `/app` and `/utilities` directories

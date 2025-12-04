@@ -114,6 +114,22 @@ This method requires `root` privileges.
      standard way of deploying all of your applications, you can create a default `otelinject.conf`
      file that will ensure you get only the telemetry you want.
 
+     The `include_paths`, `exclude_paths`, `include_with_arguments` and `exclude_with_arguments` settings in
+     the configuration file are additive. This means that if you define multiple lines of these settings, the resulting 
+     patterns list will be a union of all of the settings. This allows for easier manipulation of the configuration
+     file with automated tools. Essentially, you can list each include or exclude rule on a separate line.
+     For example, the following two configuration files have an identical outcome:
+     ```
+      include_paths=/app/*,/utilities/*,*.exe
+     ```
+     is the same as:
+     ```
+      include_paths=/app/*
+      include_paths=/utilities/*
+      include_paths=*.exe
+     ```
+
+
    The paths set in `/etc/opentelemetry/otelinject.conf` can be overridden with environment variables.
    (This should usually not be necessary.)
    - `DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the .NET Auto Instrumentation

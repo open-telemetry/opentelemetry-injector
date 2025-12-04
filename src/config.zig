@@ -193,6 +193,10 @@ test "readConfigurationFile: file does not exist" {
         default_nodejs_auto_instrumentation_agent_path,
         configuration.nodejs_auto_instrumentation_agent_path,
     );
+    try testing.expectEqual(0, configuration.include_paths.len);
+    try testing.expectEqual(0, configuration.exclude_paths.len);
+    try testing.expectEqual(0, configuration.include_args.len);
+    try testing.expectEqual(0, configuration.exclude_args.len);
 }
 
 test "readConfigurationFile: empty file" {
@@ -220,6 +224,8 @@ test "readConfigurationFile: empty file" {
     );
     try testing.expectEqual(0, configuration.include_paths.len);
     try testing.expectEqual(0, configuration.exclude_paths.len);
+    try testing.expectEqual(0, configuration.include_args.len);
+    try testing.expectEqual(0, configuration.exclude_args.len);
 }
 
 test "readConfigurationFile: all configuration values" {
@@ -244,19 +250,23 @@ test "readConfigurationFile: all configuration values" {
         "/custom/path/to/node_js/node_modules/@opentelemetry-js/otel/instrument",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
-    try testing.expectEqual(2, configuration.include_paths.len);
+    try testing.expectEqual(3, configuration.include_paths.len);
     try testing.expectEqualStrings("/app/*", configuration.include_paths[0]);
     try testing.expectEqualStrings("/home/user/test/*", configuration.include_paths[1]);
-    try testing.expectEqual(2, configuration.exclude_paths.len);
+    try testing.expectEqualStrings("/another_dir/*", configuration.include_paths[2]);
+    try testing.expectEqual(3, configuration.exclude_paths.len);
     try testing.expectEqualStrings("/usr/*", configuration.exclude_paths[0]);
     try testing.expectEqualStrings("/opt/*", configuration.exclude_paths[1]);
-    try testing.expectEqual(3, configuration.include_args.len);
+    try testing.expectEqualStrings("/another_excluded_dir/*", configuration.exclude_paths[2]);
+    try testing.expectEqual(4, configuration.include_args.len);
     try testing.expectEqualStrings("-jar", configuration.include_args[0]);
     try testing.expectEqualStrings("*my-app*", configuration.include_args[1]);
     try testing.expectEqualStrings("*.js", configuration.include_args[2]);
-    try testing.expectEqual(2, configuration.exclude_args.len);
+    try testing.expectEqualStrings("*.dll", configuration.include_args[3]);
+    try testing.expectEqual(3, configuration.exclude_args.len);
     try testing.expectEqualStrings("-javaagent*", configuration.exclude_args[0]);
     try testing.expectEqualStrings("*@opentelemetry-js*", configuration.exclude_args[1]);
+    try testing.expectEqualStrings("-debug", configuration.exclude_args[2]);
 }
 
 test "readConfigurationFile: all configuration values plus whitespace and comments" {
@@ -341,26 +351,42 @@ fn parseLine(line: []u8, cfg_file_path: []const u8, configuration: *InjectorConf
             configuration.nodejs_auto_instrumentation_agent_path = value;
             return true;
         } else if (std.mem.eql(u8, key, include_paths_key)) {
-            configuration.include_paths = patterns_util.splitByComma(value) catch |err| {
+            const new_patterns = patterns_util.splitByComma(value) catch |err| {
                 print.printError("error parsing include_paths value from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
+            configuration.include_paths = std.mem.concat(alloc.page_allocator, []const u8, &.{ configuration.include_paths, new_patterns }) catch |err| {
+                print.printError("error concatenating include_paths from configuration file {s}: {}", .{ cfg_file_path, err });
                 return false;
             };
             return true;
         } else if (std.mem.eql(u8, key, exclude_paths_key)) {
-            configuration.exclude_paths = patterns_util.splitByComma(value) catch |err| {
+            const new_patterns = patterns_util.splitByComma(value) catch |err| {
                 print.printError("error parsing exclude_paths value from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
+            configuration.exclude_paths = std.mem.concat(alloc.page_allocator, []const u8, &.{ configuration.exclude_paths, new_patterns }) catch |err| {
+                print.printError("error concatenating exclude_paths from configuration file {s}: {}", .{ cfg_file_path, err });
                 return false;
             };
             return true;
         } else if (std.mem.eql(u8, key, include_args_key)) {
-            configuration.include_args = patterns_util.splitByComma(value) catch |err| {
+            const new_patterns = patterns_util.splitByComma(value) catch |err| {
                 print.printError("error parsing include_arguments value from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
+            configuration.include_args = std.mem.concat(alloc.page_allocator, []const u8, &.{ configuration.include_args, new_patterns }) catch |err| {
+                print.printError("error concatenating include_arguments from configuration file {s}: {}", .{ cfg_file_path, err });
                 return false;
             };
             return true;
         } else if (std.mem.eql(u8, key, exclude_args_key)) {
-            configuration.exclude_args = patterns_util.splitByComma(value) catch |err| {
+            const new_patterns = patterns_util.splitByComma(value) catch |err| {
                 print.printError("error parsing exclude_arguments value from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
+            configuration.exclude_args = std.mem.concat(alloc.page_allocator, []const u8, &.{ configuration.exclude_args, new_patterns }) catch |err| {
+                print.printError("error concatenating exclude_arguments from configuration file {s}: {}", .{ cfg_file_path, err });
                 return false;
             };
             return true;

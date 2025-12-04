@@ -28,7 +28,7 @@ jobs:
         with:
           # maintenance note: This version needs to be kept in sync with the version referenced in the file /zig-version
           # in the root of the repository.
-          version: 0.14.1
+          version: 0.15.2
 
       - name: lint source code
         run: |

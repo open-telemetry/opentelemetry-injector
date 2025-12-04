@@ -32,18 +32,18 @@ fn getCmdLineFromContent(allocator: std.mem.Allocator, content: []const u8) ![]c
     }
 
     // Split by null bytes to get arguments
-    var arg_list = std.ArrayList([]const u8).init(allocator);
-    errdefer arg_list.deinit();
+    var arg_list: std.ArrayList([]const u8) = .empty;
+    errdefer arg_list.deinit(allocator);
 
     var iter = std.mem.splitScalar(u8, content, 0);
     while (iter.next()) |arg| {
         if (arg.len > 0) { // Skip empty strings
             const arg_copy = try allocator.dupe(u8, arg);
-            try arg_list.append(arg_copy);
+            try arg_list.append(allocator, arg_copy);
         }
     }
 
-    const all_args = try arg_list.toOwnedSlice();
+    const all_args = try arg_list.toOwnedSlice(allocator);
 
     if (all_args.len == 0) {
         return error.NoCmdlineArgs;

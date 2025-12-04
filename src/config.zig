@@ -76,8 +76,8 @@ pub fn readConfiguration() InjectorConfiguration {
     return configuration;
 }
 
-fn printErrorReturnEmptyConfig(err: std.fmt.AllocPrintError) InjectorConfiguration {
-    print.printError("Cannot allocate memory for the default injector configuration: {}", .{err});
+fn printErrorReturnEmptyConfig(err: std.mem.Allocator.Error) InjectorConfiguration {
+    print.printError("Cannot allocate memory for the default injector configuration: {t}", .{err});
     return InjectorConfiguration{
         .dotnet_auto_instrumentation_agent_path_prefix = "",
         .jvm_auto_instrumentation_agent_path = "",
@@ -156,7 +156,10 @@ fn applyKeyValueToGeneralOptions(key: []const u8, value: []u8, _cfg_file_path: [
 
 fn readConfigurationFile(cfg_file_path: []const u8, configuration: *InjectorConfiguration) void {
     const config_file = std.fs.cwd().openFile(cfg_file_path, .{}) catch |err| {
-        print.printDebug("The configuration file {s} does not exist or cannot be opened. Configuration will use default values and environment variables only. Error: {}", .{ cfg_file_path, err });
+        print.printDebug(
+            "The configuration file {s} does not exist or cannot be opened. Configuration will use default values and environment variables only. Error: {t}",
+            .{ cfg_file_path, err },
+        );
         return;
     };
     defer config_file.close();
@@ -190,58 +193,40 @@ fn parseConfiguration(
     cfg_file_path: []const u8,
     comptime applyKeyValueToConfig: ConfigApplier,
 ) void {
-    var line_buffer_array = std.ArrayList(u8).init(alloc.page_allocator);
-    defer line_buffer_array.deinit();
+    const max_buffer_len = max_line_length * 2;
+    var buf: [max_buffer_len]u8 = undefined;
+    var reader = config_file.reader(&buf);
 
-    while (true) {
-        config_file.reader().streamUntilDelimiter(
-            line_buffer_array.writer(),
-            '\n',
-            max_line_length,
-        ) catch |err| switch (err) {
-            error.EndOfStream => {
-                // streamUntilDelimiter writes you the very last line (which is not terminated by \n) to
-                // line_buffer_array while simultaneously returning error.EndOfStream. That means we still need to call
-                // parseLine call here once, otherwise we would accidentally ignore the very last line of the file.
-                const line = line_buffer_array.toOwnedSlice() catch |e| {
-                    print.printError("error in toOwnedSlice while reading configuration file {s}: {}", .{ cfg_file_path, e });
-                    break;
-                };
-                defer alloc.page_allocator.free(line);
-                if (parseLine(line, cfg_file_path)) |kv| {
-                    applyKeyValueToConfig(kv.key, kv.value, cfg_file_path, configuration);
-                }
-                break;
-            },
-            error.StreamTooLong => {
-                print.printError("ignoring overly long line in configuration file {s} with more than {d} characters", .{ cfg_file_path, max_line_length });
-                line_buffer_array.clearAndFree();
-
-                // If this happens, we have not consumed the overly long line completely until the end-of-line
-                // delimeter, because streamUntilDelimiter stops when max_line_length have been read. We need to make
-                // sure the rest of the line (until the next \n) is discarded as well.
-                config_file.reader().skipUntilDelimiterOrEof('\n') catch |e| {
-                    print.printError(
-                        "read error when skipping until the end of an overly long line while reading configuration file {s}: {}",
-                        .{ cfg_file_path, e },
-                    );
-                    break;
-                };
-                continue;
-            },
-            else => |e| {
-                print.printError("read error while reading configuration file {s}: {}", .{ cfg_file_path, e });
-                break;
-            },
-        };
-        const line = line_buffer_array.toOwnedSlice() catch |e| {
-            print.printError("error in toOwnedSlice while reading configuration file {s}: {}", .{ cfg_file_path, e });
-            break;
-        };
-        defer alloc.page_allocator.free(line);
+    while (reader.interface.takeSentinel('\n')) |line| {
+        if (line.len > max_line_length) {
+            print.printError(
+                "A line in configuration file {s} exceeds the maximum allowed length of {d} characters and will be ignored",
+                .{ cfg_file_path, max_line_length },
+            );
+            continue;
+        }
         if (parseLine(line, cfg_file_path)) |kv| {
             applyKeyValueToConfig(kv.key, kv.value, cfg_file_path, configuration);
         }
+    } else |err| switch (err) {
+        error.ReadFailed => {
+            print.printError("Failed to read configuration file {s}", .{cfg_file_path});
+            return;
+        },
+        error.StreamTooLong => {
+            print.printError(
+                "A line in configuration file {s} exceeds the maximum buffer length of {d}",
+                .{ cfg_file_path, max_buffer_len },
+            );
+        },
+        // if the file does not end with a newline, we still need to parse the last line
+        error.EndOfStream => {
+            var buffer: [max_line_length]u8 = undefined;
+            const chars = reader.interface.readSliceShort(&buffer) catch 0;
+            if (parseLine(buffer[0..chars], cfg_file_path)) |kv| {
+                applyKeyValueToConfig(kv.key, kv.value, cfg_file_path, configuration);
+            }
+        },
     }
 }
 
@@ -273,7 +258,7 @@ test "readConfigurationFile: file does not exist" {
 }
 
 test "readConfigurationFile: empty file" {
-    const allocator = std.heap.page_allocator;
+    const allocator = std.testing.allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
     const absolute_path_to_config_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/empty.conf" });

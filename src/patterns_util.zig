@@ -7,8 +7,8 @@ const testing = std.testing;
 
 /// Splits a comma-separated string into a slice of trimmed strings.
 pub fn splitByComma(allocator: std.mem.Allocator, input: []const u8) ![][]const u8 {
-    var list: std.ArrayList([]const u8) = .init(allocator);
-    errdefer list.deinit();
+    var list: std.ArrayList([]const u8) = try .initCapacity(allocator, input.len);
+    errdefer list.deinit(allocator);
 
     var iter = std.mem.splitScalar(u8, input, ',');
     while (iter.next()) |item| {
@@ -18,11 +18,11 @@ pub fn splitByComma(allocator: std.mem.Allocator, input: []const u8) ![][]const 
                 print.printError("error allocating memory for path pattern from: {}", .{err});
                 return err;
             };
-            try list.append(owned);
+            try list.append(allocator, owned);
         }
     }
 
-    return list.toOwnedSlice();
+    return list.toOwnedSlice(allocator);
 }
 
 test "splitByComma: empty string" {

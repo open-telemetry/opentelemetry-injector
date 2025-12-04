@@ -286,8 +286,8 @@ fn setCustomEnvVariables(custom_env_vars: std.StringHashMap([]u8)) bool {
     return true;
 }
 
-fn formatEnvVar(name: []const u8, value: []const u8) std.fmt.AllocPrintError![:0]u8 {
-    return std.fmt.allocPrintZ(alloc.page_allocator, "{s}={s}", .{ name, value });
+fn formatEnvVar(name: []const u8, value: []const u8) std.mem.Allocator.Error![:0]u8 {
+    return std.fmt.allocPrintSentinel(alloc.page_allocator, "{s}={s}", .{ name, value }, 0);
 }
 
 fn countEnvironmentVariables(environment: [*:null]?[*:0]u8) usize {

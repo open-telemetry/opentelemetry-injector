@@ -47,7 +47,7 @@ fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
         return null;
     };
 
-    const javaagent_flag_value = std.fmt.allocPrintZ(alloc.page_allocator, "-javaagent:{s}", .{jvm_auto_instrumentation_agent_path}) catch |err| {
+    const javaagent_flag_value = std.fmt.allocPrintSentinel(alloc.page_allocator, "-javaagent:{s}", .{jvm_auto_instrumentation_agent_path}, 0) catch |err| {
         print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ java_tool_options_env_var_name, err });
         if (original_value_optional) |original_value| {
             return original_value;
@@ -108,10 +108,11 @@ fn getModifiedJavaToolOptionsValue(
         // set, or it is the OTEL_RESOURCE_ATTRIBUTES with a trailing comma. If we need to merge this in, there always
         // other key-value pairs, so having a trailing comma here is safe.
         original_otel_resource_attributes_env_var_key_value_pairs_prefix =
-            std.fmt.allocPrintZ(
+            std.fmt.allocPrintSentinel(
                 alloc.page_allocator,
                 "{s},",
                 .{original_otel_resource_attributes_env_var_value},
+                0,
             ) catch |err| {
                 print.printError("Cannot allocate memory to prepare the original_otel_resource_attributes_env_var_key_value_pairs_prefix for the value of \"{s}\": {}", .{ java_tool_options_env_var_name, err });
                 return null;
@@ -169,22 +170,22 @@ fn getModifiedJavaToolOptionsValue(
                     remainingJavaToolOptions = "";
                 }
 
-                const mergedKvPairs = std.fmt.allocPrintZ(alloc.page_allocator, "{s},{s}", .{
+                const mergedKvPairs = std.fmt.allocPrintSentinel(alloc.page_allocator, "{s},{s}", .{
                     originalKvPairs,
                     new_resource_attributes,
-                }) catch |err| {
+                }, 0) catch |err| {
                     print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ java_tool_options_env_var_name, err });
                     return original_java_tool_options_env_var_value;
                 };
                 defer alloc.page_allocator.free(mergedKvPairs);
                 const return_buffer =
-                    std.fmt.allocPrintZ(alloc.page_allocator, "{s}-Dotel.resource.attributes={s}{s}{s} {s}", .{
+                    std.fmt.allocPrintSentinel(alloc.page_allocator, "{s}-Dotel.resource.attributes={s}{s}{s} {s}", .{
                         original_java_tool_options_env_var_value[0..startIdx],
                         (if (key_value_pairs_are_quoted) "\"" else ""),
                         mergedKvPairs,
                         remainingJavaToolOptions,
                         javaagent_flag_value,
-                    }) catch |err| {
+                    }, 0) catch |err| {
                         print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ java_tool_options_env_var_name, err });
                         return original_java_tool_options_env_var_value;
                     };
@@ -196,12 +197,12 @@ fn getModifiedJavaToolOptionsValue(
             // JAVA_TOOL_OPTIONS is set but does not contain -Dotel.resource.attributes yet. New resource attributes
             // have been provided. Add -javaagent and -Dotel.resource.attributes.
             const return_buffer =
-                std.fmt.allocPrintZ(alloc.page_allocator, "{s} {s} -Dotel.resource.attributes={s}{s}", .{
+                std.fmt.allocPrintSentinel(alloc.page_allocator, "{s} {s} -Dotel.resource.attributes={s}{s}", .{
                     original_java_tool_options_env_var_value,
                     javaagent_flag_value,
                     original_otel_resource_attributes_env_var_key_value_pairs_prefix,
                     new_resource_attributes,
-                }) catch |err| {
+                }, 0) catch |err| {
                     print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ java_tool_options_env_var_name, err });
                     return original_java_tool_options_env_var_value;
                 };
@@ -211,10 +212,10 @@ fn getModifiedJavaToolOptionsValue(
         } else {
             // JAVA_TOOL_OPTIONS is set, but no new resource attributes have been provided.
             const return_buffer =
-                std.fmt.allocPrintZ(alloc.page_allocator, "{s} {s}", .{
+                std.fmt.allocPrintSentinel(alloc.page_allocator, "{s} {s}", .{
                     original_java_tool_options_env_var_value,
                     javaagent_flag_value,
-                }) catch |err| {
+                }, 0) catch |err| {
                     print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ java_tool_options_env_var_name, err });
                     return original_java_tool_options_env_var_value;
                 };
@@ -225,11 +226,11 @@ fn getModifiedJavaToolOptionsValue(
         // JAVA_TOOL_OPTIONS is not set, but new resource attributes have been provided.
         if (new_resource_attributes_optional) |new_resource_attributes| {
             defer alloc.page_allocator.free(new_resource_attributes);
-            const return_buffer = std.fmt.allocPrintZ(alloc.page_allocator, "{s} -Dotel.resource.attributes={s}{s}", .{
+            const return_buffer = std.fmt.allocPrintSentinel(alloc.page_allocator, "{s} -Dotel.resource.attributes={s}{s}", .{
                 javaagent_flag_value,
                 original_otel_resource_attributes_env_var_key_value_pairs_prefix,
                 new_resource_attributes,
-            }) catch |err| {
+            }, 0) catch |err| {
                 print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ java_tool_options_env_var_name, err });
                 return null;
             };

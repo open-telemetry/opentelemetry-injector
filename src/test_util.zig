@@ -35,10 +35,11 @@ pub fn setStdCEnviron(env_vars: []const []const u8) anyerror![*:null]?[*:0]u8 {
     // allocator.allocSentinel(?[*:0]u8, n, null).
     const new_environ = try test_allocator.allocSentinel(?[*:0]u8, env_vars.len, null);
     for (env_vars, 0..) |env_var, i| {
-        new_environ[i] = try std.fmt.allocPrintZ(
+        new_environ[i] = try std.fmt.allocPrintSentinel(
             test_allocator,
             "{s}",
             .{env_var},
+            0,
         );
     }
     std.c.environ = new_environ;

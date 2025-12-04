@@ -6,6 +6,7 @@ const std = @import("std");
 const alloc = @import("allocator.zig");
 const print = @import("print.zig");
 const test_util = @import("test_util.zig");
+const patterns_util = @import("patterns_util.zig");
 
 const testing = std.testing;
 
@@ -20,10 +21,27 @@ const dotnet_path_env_var = "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
 const jvm_path_env_var = "JVM_AUTO_INSTRUMENTATION_AGENT_PATH";
 const nodejs_path_env_var = "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
 
+/// Configuration options for choosing what to instrument or exclude from instrumentation
+const include_paths_key = "include_paths";
+const exclude_paths_key = "exclude_paths";
+
+const include_paths_env_var = "OTEL_INJECT_INCLUDE_PATHS";
+const exclude_paths_env_var = "OTEL_INJECT_EXCLUDE_PATHS";
+
+const include_args_key = "include_with_arguments";
+const exclude_args_key = "exclude_with_arguments";
+
+const include_args_env_var = "OTEL_INJECT_INCLUDE_WITH_ARGUMENTS";
+const exclude_args_env_var = "OTEL_INJECT_EXCLUDE_WITH_ARGUMENTS";
+
 pub const InjectorConfiguration = struct {
     dotnet_auto_instrumentation_agent_path_prefix: []u8,
     jvm_auto_instrumentation_agent_path: []u8,
     nodejs_auto_instrumentation_agent_path: []u8,
+    include_paths: [][]const u8,
+    exclude_paths: [][]const u8,
+    include_args: [][]const u8,
+    exclude_args: [][]const u8,
 };
 
 const default_dotnet_auto_instrumentation_agent_path_prefix = "/__otel_auto_instrumentation/dotnet";
@@ -57,6 +75,10 @@ fn createDefaultConfiguration() InjectorConfiguration {
                 .dotnet_auto_instrumentation_agent_path_prefix = "",
                 .jvm_auto_instrumentation_agent_path = "",
                 .nodejs_auto_instrumentation_agent_path = "",
+                .include_paths = &.{},
+                .exclude_paths = &.{},
+                .include_args = &.{},
+                .exclude_args = &.{},
             };
         };
     const jvm_default =
@@ -66,6 +88,10 @@ fn createDefaultConfiguration() InjectorConfiguration {
                 .dotnet_auto_instrumentation_agent_path_prefix = "",
                 .jvm_auto_instrumentation_agent_path = "",
                 .nodejs_auto_instrumentation_agent_path = "",
+                .include_paths = &.{},
+                .exclude_paths = &.{},
+                .include_args = &.{},
+                .exclude_args = &.{},
             };
         };
     const nodejs_default =
@@ -75,6 +101,10 @@ fn createDefaultConfiguration() InjectorConfiguration {
                 .dotnet_auto_instrumentation_agent_path_prefix = "",
                 .jvm_auto_instrumentation_agent_path = "",
                 .nodejs_auto_instrumentation_agent_path = "",
+                .include_paths = &.{},
+                .exclude_paths = &.{},
+                .include_args = &.{},
+                .exclude_args = &.{},
             };
         };
 
@@ -82,6 +112,10 @@ fn createDefaultConfiguration() InjectorConfiguration {
         .dotnet_auto_instrumentation_agent_path_prefix = dotnet_default,
         .jvm_auto_instrumentation_agent_path = jvm_default,
         .nodejs_auto_instrumentation_agent_path = nodejs_default,
+        .include_paths = &.{},
+        .exclude_paths = &.{},
+        .include_args = &.{},
+        .exclude_args = &.{},
     };
 }
 
@@ -159,6 +193,10 @@ test "readConfigurationFile: file does not exist" {
         default_nodejs_auto_instrumentation_agent_path,
         configuration.nodejs_auto_instrumentation_agent_path,
     );
+    try testing.expectEqual(0, configuration.include_paths.len);
+    try testing.expectEqual(0, configuration.exclude_paths.len);
+    try testing.expectEqual(0, configuration.include_args.len);
+    try testing.expectEqual(0, configuration.exclude_args.len);
 }
 
 test "readConfigurationFile: empty file" {
@@ -184,6 +222,10 @@ test "readConfigurationFile: empty file" {
         default_nodejs_auto_instrumentation_agent_path,
         configuration.nodejs_auto_instrumentation_agent_path,
     );
+    try testing.expectEqual(0, configuration.include_paths.len);
+    try testing.expectEqual(0, configuration.exclude_paths.len);
+    try testing.expectEqual(0, configuration.include_args.len);
+    try testing.expectEqual(0, configuration.exclude_args.len);
 }
 
 test "readConfigurationFile: all configuration values" {
@@ -208,6 +250,23 @@ test "readConfigurationFile: all configuration values" {
         "/custom/path/to/node_js/node_modules/@opentelemetry-js/otel/instrument",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
+    try testing.expectEqual(3, configuration.include_paths.len);
+    try testing.expectEqualStrings("/app/*", configuration.include_paths[0]);
+    try testing.expectEqualStrings("/home/user/test/*", configuration.include_paths[1]);
+    try testing.expectEqualStrings("/another_dir/*", configuration.include_paths[2]);
+    try testing.expectEqual(3, configuration.exclude_paths.len);
+    try testing.expectEqualStrings("/usr/*", configuration.exclude_paths[0]);
+    try testing.expectEqualStrings("/opt/*", configuration.exclude_paths[1]);
+    try testing.expectEqualStrings("/another_excluded_dir/*", configuration.exclude_paths[2]);
+    try testing.expectEqual(4, configuration.include_args.len);
+    try testing.expectEqualStrings("-jar", configuration.include_args[0]);
+    try testing.expectEqualStrings("*my-app*", configuration.include_args[1]);
+    try testing.expectEqualStrings("*.js", configuration.include_args[2]);
+    try testing.expectEqualStrings("*.dll", configuration.include_args[3]);
+    try testing.expectEqual(3, configuration.exclude_args.len);
+    try testing.expectEqualStrings("-javaagent*", configuration.exclude_args[0]);
+    try testing.expectEqualStrings("*@opentelemetry-js*", configuration.exclude_args[1]);
+    try testing.expectEqualStrings("-debug", configuration.exclude_args[2]);
 }
 
 test "readConfigurationFile: all configuration values plus whitespace and comments" {
@@ -290,6 +349,46 @@ fn parseLine(line: []u8, cfg_file_path: []const u8, configuration: *InjectorConf
             return true;
         } else if (std.mem.eql(u8, key, nodejs_path_key)) {
             configuration.nodejs_auto_instrumentation_agent_path = value;
+            return true;
+        } else if (std.mem.eql(u8, key, include_paths_key)) {
+            const new_patterns = patterns_util.splitByComma(value) catch |err| {
+                print.printError("error parsing include_paths value from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
+            configuration.include_paths = std.mem.concat(alloc.page_allocator, []const u8, &.{ configuration.include_paths, new_patterns }) catch |err| {
+                print.printError("error concatenating include_paths from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
+            return true;
+        } else if (std.mem.eql(u8, key, exclude_paths_key)) {
+            const new_patterns = patterns_util.splitByComma(value) catch |err| {
+                print.printError("error parsing exclude_paths value from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
+            configuration.exclude_paths = std.mem.concat(alloc.page_allocator, []const u8, &.{ configuration.exclude_paths, new_patterns }) catch |err| {
+                print.printError("error concatenating exclude_paths from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
+            return true;
+        } else if (std.mem.eql(u8, key, include_args_key)) {
+            const new_patterns = patterns_util.splitByComma(value) catch |err| {
+                print.printError("error parsing include_arguments value from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
+            configuration.include_args = std.mem.concat(alloc.page_allocator, []const u8, &.{ configuration.include_args, new_patterns }) catch |err| {
+                print.printError("error concatenating include_arguments from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
+            return true;
+        } else if (std.mem.eql(u8, key, exclude_args_key)) {
+            const new_patterns = patterns_util.splitByComma(value) catch |err| {
+                print.printError("error parsing exclude_arguments value from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
+            configuration.exclude_args = std.mem.concat(alloc.page_allocator, []const u8, &.{ configuration.exclude_args, new_patterns }) catch |err| {
+                print.printError("error concatenating exclude_arguments from configuration file {s}: {}", .{ cfg_file_path, err });
+                return false;
+            };
             return true;
         } else {
             print.printError("ignoring unknown configuration key in {s}: {s}={s}", .{ cfg_file_path, key, value });
@@ -452,5 +551,49 @@ fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void 
             return;
         };
         configuration.nodejs_auto_instrumentation_agent_path = nodejs_value;
+    }
+    if (std.posix.getenv(include_paths_env_var)) |value| {
+        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
+        const include_paths_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
+            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
+            return;
+        };
+        configuration.include_paths = patterns_util.splitByComma(include_paths_value) catch |err| {
+            print.printError("error parsing include_paths value from the environment {s}: {}", .{ include_paths_value, err });
+            return;
+        };
+    }
+    if (std.posix.getenv(exclude_paths_env_var)) |value| {
+        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
+        const exclude_paths_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
+            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
+            return;
+        };
+        configuration.exclude_paths = patterns_util.splitByComma(exclude_paths_value) catch |err| {
+            print.printError("error parsing exclude_paths value from the environment {s}: {}", .{ exclude_paths_value, err });
+            return;
+        };
+    }
+    if (std.posix.getenv(include_args_env_var)) |value| {
+        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
+        const include_args_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
+            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
+            return;
+        };
+        configuration.include_args = patterns_util.splitByComma(include_args_value) catch |err| {
+            print.printError("error parsing include_arguments value from the environment {s}: {}", .{ include_args_value, err });
+            return;
+        };
+    }
+    if (std.posix.getenv(exclude_args_env_var)) |value| {
+        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
+        const exclude_args_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
+            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
+            return;
+        };
+        configuration.exclude_args = patterns_util.splitByComma(exclude_args_value) catch |err| {
+            print.printError("error parsing exclude_arguments value from the environment {s}: {}", .{ exclude_args_value, err });
+            return;
+        };
     }
 }

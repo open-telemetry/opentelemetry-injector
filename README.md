@@ -94,8 +94,8 @@ This method requires `root` privileges.
       nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
 
       include_paths=/app/*,/utilities/*,*.exe
-      exclude_with_arguments=-javaagent:*,*@opentelemetry-js*
-      exclude_with_arguments=*MyProject*.jar,*app.js,-Xmx?m
+      exclude_with_arguments=-javaagent:*,*@opentelemetry-js*,-Xmx?m
+      include_with_arguments=*MyProject*.jar,*app.js
      ```
      In the example above we'll instrument:
        - any programs that run from the `/app` and `/utilities` directories

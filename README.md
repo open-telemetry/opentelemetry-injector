@@ -51,17 +51,68 @@ This method requires `root` privileges.
    jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/javaagent.jar
    nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
    ```
-   There is usually no need to modify this file, unless you want to provide your own instrumentation files.
+   You may want to modify this file for a couple of reasons:
+   - You want to provide your own instrumentation files.
 
-   However, the configuration file `/etc/opentelemetry/otelinject.conf` can also be used to selectively disable
-   auto-instrumentation for a specific runtime, by setting the respective path to an empty string.
-   For example, the following file would leave JVM and Node.js auto-instrumentation active, while disabling .NET
-   auto-instrumentation:
-   ```
-   dotnet_auto_instrumentation_agent_path_prefix=
-   jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/javaagent.jar
-   nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
-   ```
+   - You want to selectively disable auto-instrumentation for a specific runtime, by setting the respective path 
+     to an empty string in the configuration file `/etc/opentelemetry/otelinject.conf`.
+     For example, the following file would leave JVM and Node.js auto-instrumentation active, while disabling .NET
+     auto-instrumentation:
+      ```
+      dotnet_auto_instrumentation_agent_path_prefix=
+      jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/javaagent.jar
+      nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
+      ```
+   - You want to selectively enable (or disable) auto-instrumentation for a subset of programs (services) on your system. 
+     For example, you may want to only enable instrumentation of services that match a specific executable path pattern, or
+     to programs that do not contain certain arguments on the command line. For this purpose, the configuration file 
+     provides a couple of settings which can be used alone or in combination to produce the desired outcome:
+       - `include_paths` - A comma-separated list of glob patterns to match executable paths. 
+         If you do not specify anything here, the injector defaults to instrumenting **all eligible executables**.
+       - `exclude_paths` - A comma-separated list of glob patterns to exclude executable paths.
+       - `include_with_arguments` - A comma-separated list of glob patterns to match process arguments.
+         If you do not specify anything here, the injector defaults to instrumenting **all eligible executables**. 
+       - `exclude_with_arguments` - A comma-separated list of glob patterns to exclude process arguments.
+     
+     If an executable matches both an inclusion and an exclusion criterion, the exclusion takes
+     precedence. For example, in the following configuration, all program executables in the 
+     `/app/system/` directory will not be instrumented, even though the `/app` directory is 
+     included for instrumentation:
+     ```
+      dotnet_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/dotnet
+      jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/javaagent.jar
+      nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
+
+      include_paths=/app/*,/utilities/*
+      exclude_paths=/app/system/*
+     ```
+     To give you an idea of what types of inclusion and exclusion criteria can be defined, let's
+     look at the following example:
+     ```
+      dotnet_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/dotnet
+      jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/javaagent.jar
+      nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
+
+      include_paths=/app/*,/utilities/*,*.exe
+      exclude_with_arguments=-javaagent:*,*@opentelemetry-js*
+      include_with_arguments=*MyProject*.jar,*app.js,-Xmx?m
+     ```
+     In the example above we'll instrument:
+       - any programs that run from the `/app` and `/utilities` directories
+       - any programs that have an `.exe` extension
+       - any programs that have a command line argument containing `MyProject` 
+       in the name and ending with the extension `.jar`
+       - any programs that have a program argument ending in `app.js`
+       - however, for all included programs, the injector **will avoid**: 
+         - all programs that have a command line argument starting with
+         `-javaagent:`
+         - all programs that have a command line argument that contains `@opentelemetry-js`
+         - all `java` programs that run with a single digit megabytes of maximum memory
+
+     The example above illustrates how we avoid telemetry from unwanted applications or
+     injecting auto-instrumentation to programs that are already instrumented. If you have a
+     standard way of deploying all of your applications, you can create a default `otelinject.conf`
+     file that will ensure you get only the telemetry you want.
 
    The paths set in `/etc/opentelemetry/otelinject.conf` can be overridden with environment variables.
    (This should usually not be necessary.)
@@ -69,6 +120,10 @@ This method requires `root` privileges.
      agent files
    - `JVM_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Java auto-instrumentation agent JAR file
    - `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Node.js auto-instrumentation agent registration file
+   - `OTEL_INJECT_INCLUDE_PATHS`: a comma-separated list of glob patterns to match executable paths 
+   - `OTEL_INJECT_EXCLUDE_PATHS`: a comma-separated list of glob patterns to exclude executable paths
+   - `OTEL_INJECT_INCLUDE_WITH_ARGUMENTS`: a comma-separated list of glob patterns to match process arguments
+   - `OTEL_INJECT_EXCLUDE_WITH_ARGUMENTS`: a comma-separated list of glob patterns to exclude process arguments
 
    These aforementioned environment variables can also be used to selectively disable auto-instrumentation for a
    specific runtime, by setting the respective variable to an empty string, that is, set:

@@ -65,3 +65,9 @@ run_test_case \
   "java -jar Main.jar verify-javaagent-has-been-injected" \
   "otel.injector.jvm.no_op_agent.has_been_loaded: -" \
   "JVM_AUTO_INSTRUMENTATION_AGENT_PATH="
+
+run_test_case \
+  "custom env var is returned with env file provided" \
+  "app" \
+  "java -jar Main.jar custom-env-var" \
+  "CUSTOM_ENV_VAR: custom-value-123"

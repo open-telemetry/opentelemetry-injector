@@ -127,8 +127,9 @@ fn doGetLibCFlavor(proc_self_exe_path: []const u8) !LibCFlavor {
         return LibCFlavor.UNKNOWN;
     };
     defer proc_self_exe_file.close();
-
-    const elf_header = std.elf.Header.read(proc_self_exe_file) catch |err| {
+    var headers_buf: [4096]u8 = undefined;
+    var reader = proc_self_exe_file.reader(&headers_buf);
+    const elf_header = std.elf.Header.read(&reader.interface) catch |err| {
         print.printError("Cannot read ELF header from  \"{s}\": {}", .{ proc_self_exe_path, err });
         return LibCFlavor.UNKNOWN;
     };
@@ -138,7 +139,9 @@ fn doGetLibCFlavor(proc_self_exe_path: []const u8) !LibCFlavor {
         return error.ElfNot64Bit;
     }
 
-    var sections_header_iterator = elf_header.section_header_iterator(proc_self_exe_file);
+    var sections_buf: [8192]u8 = undefined;
+    var section_reader = proc_self_exe_file.reader(&sections_buf);
+    var sections_header_iterator = elf_header.iterateSectionHeaders(&section_reader);
 
     var dynamic_symbols_table_offset: u64 = 0;
     var dynamic_symbols_table_size: u64 = 0;
@@ -338,23 +341,23 @@ fn determineDotnetValues(
             },
             else => return error.UnknownLibCFlavor,
         };
-    const coreclr_profiler_path = try std.fmt.allocPrintZ(alloc.page_allocator, "{s}/{s}/{s}/OpenTelemetry.AutoInstrumentation.Native.so", .{
+    const coreclr_profiler_path = try std.fmt.allocPrintSentinel(alloc.page_allocator, "{s}/{s}/{s}/OpenTelemetry.AutoInstrumentation.Native.so", .{
         dotnet_path_prefix, libc_flavor_prefix, platform,
-    });
+    }, 0);
 
-    const additional_deps = try std.fmt.allocPrintZ(alloc.page_allocator, "{s}/{s}/AdditionalDeps", .{
+    const additional_deps = try std.fmt.allocPrintSentinel(alloc.page_allocator, "{s}/{s}/AdditionalDeps", .{
         dotnet_path_prefix, libc_flavor_prefix,
-    });
+    }, 0);
 
-    const otel_auto_home = try std.fmt.allocPrintZ(alloc.page_allocator, "{s}/{s}", .{ dotnet_path_prefix, libc_flavor_prefix });
+    const otel_auto_home = try std.fmt.allocPrintSentinel(alloc.page_allocator, "{s}/{s}", .{ dotnet_path_prefix, libc_flavor_prefix }, 0);
 
-    const shared_store = try std.fmt.allocPrintZ(alloc.page_allocator, "{s}/{s}/store", .{
+    const shared_store = try std.fmt.allocPrintSentinel(alloc.page_allocator, "{s}/{s}/store", .{
         dotnet_path_prefix, libc_flavor_prefix,
-    });
+    }, 0);
 
-    const startup_hooks = try std.fmt.allocPrintZ(alloc.page_allocator, "{s}/{s}/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll", .{
+    const startup_hooks = try std.fmt.allocPrintSentinel(alloc.page_allocator, "{s}/{s}/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll", .{
         dotnet_path_prefix, libc_flavor_prefix,
-    });
+    }, 0);
 
     if (!injection_happened_msg_has_been_printed) {
         print.printMessage(injection_happened_msg, .{});

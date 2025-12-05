@@ -46,7 +46,7 @@ fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
         }
         return null;
     };
-    const require_nodejs_auto_instrumentation_agent = std.fmt.allocPrintZ(alloc.page_allocator, "--require {s}", .{nodejs_auto_instrumentation_agent_path}) catch |err| {
+    const require_nodejs_auto_instrumentation_agent = std.fmt.allocPrintSentinel(alloc.page_allocator, "--require {s}", .{nodejs_auto_instrumentation_agent_path}, 0) catch |err| {
         print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ node_options_env_var_name, err });
         if (original_value_optional) |original_value| {
             return original_value;
@@ -85,7 +85,12 @@ fn getModifiedNodeOptionsValue(original_value_optional: ?[:0]const u8, require_n
         // If NODE_OPTIONS is already set, prepend the "--require ..." flag to the original value.
         // Note: We must never free the return_buffer, or we may cause a USE_AFTER_FREE memory corruption in the
         // parent process.
-        const return_buffer = std.fmt.allocPrintZ(alloc.page_allocator, "{s} {s}", .{ require_nodejs_auto_instrumentation_agent, original_value }) catch |err| {
+        const return_buffer = std.fmt.allocPrintSentinel(
+            alloc.page_allocator,
+            "{s} {s}",
+            .{ require_nodejs_auto_instrumentation_agent, original_value },
+            0,
+        ) catch |err| {
             print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ node_options_env_var_name, err });
             return original_value;
         };

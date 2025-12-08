@@ -25,14 +25,14 @@ const nodejs_path_env_var = "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
 const include_paths_key = "include_paths";
 const exclude_paths_key = "exclude_paths";
 
-const include_paths_env_var = "OTEL_INJECT_INCLUDE_PATHS";
-const exclude_paths_env_var = "OTEL_INJECT_EXCLUDE_PATHS";
+const include_paths_env_var = "OTEL_INJECTOR_INCLUDE_PATHS";
+const exclude_paths_env_var = "OTEL_INJECTOR_EXCLUDE_PATHS";
 
 const include_args_key = "include_with_arguments";
 const exclude_args_key = "exclude_with_arguments";
 
-const include_args_env_var = "OTEL_INJECT_INCLUDE_WITH_ARGUMENTS";
-const exclude_args_env_var = "OTEL_INJECT_EXCLUDE_WITH_ARGUMENTS";
+const include_args_env_var = "OTEL_INJECTOR_INCLUDE_WITH_ARGUMENTS";
+const exclude_args_env_var = "OTEL_INJECTOR_EXCLUDE_WITH_ARGUMENTS";
 
 pub const InjectorConfiguration = struct {
     dotnet_auto_instrumentation_agent_path_prefix: []u8,

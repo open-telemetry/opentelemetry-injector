@@ -26,7 +26,7 @@ See the page [Zig Learn](https://ziglang.org/learn/) for more information about 
 ### Makefile commaneds
 
 * `make zig-build` to build the injector binary locally on your machine
-* `make watch-zig-build` to continuually rebuild the Zig sources on every change (requires [`fd`](https://github.com/sharkdp/fd) and [`entr`](https://github.com/eradman/entr) to be installed)
+* `make watch-zig-build` to continually rebuild the Zig sources on every change (requires [`fd`](https://github.com/sharkdp/fd) and [`entr`](https://github.com/eradman/entr) to be installed)
 * `make zig-unit-tests` to run the unit tests
 * `watch-zig-unit-tests` to continually run the Zig unit tests on every change (requires [`fd`](https://github.com/sharkdp/fd) and [`entr`](https://github.com/eradman/entr) to be installed)
 * `make tests` to run the unit tests and the injector integration tests

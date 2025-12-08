@@ -136,10 +136,10 @@ This method requires `root` privileges.
      agent files
    - `JVM_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Java auto-instrumentation agent JAR file
    - `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Node.js auto-instrumentation agent registration file
-   - `OTEL_INJECT_INCLUDE_PATHS`: a comma-separated list of glob patterns to match executable paths 
-   - `OTEL_INJECT_EXCLUDE_PATHS`: a comma-separated list of glob patterns to exclude executable paths
-   - `OTEL_INJECT_INCLUDE_WITH_ARGUMENTS`: a comma-separated list of glob patterns to match process arguments
-   - `OTEL_INJECT_EXCLUDE_WITH_ARGUMENTS`: a comma-separated list of glob patterns to exclude process arguments
+   - `OTEL_INJECTOR_INCLUDE_PATHS`: a comma-separated list of glob patterns to match executable paths 
+   - `OTEL_INJECTOR_EXCLUDE_PATHS`: a comma-separated list of glob patterns to exclude executable paths
+   - `OTEL_INJECTOR_INCLUDE_WITH_ARGUMENTS`: a comma-separated list of glob patterns to match process arguments
+   - `OTEL_INJECTOR_EXCLUDE_WITH_ARGUMENTS`: a comma-separated list of glob patterns to exclude process arguments
 
    These aforementioned environment variables can also be used to selectively disable auto-instrumentation for a
    specific runtime, by setting the respective variable to an empty string, that is, set:

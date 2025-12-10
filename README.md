@@ -189,7 +189,6 @@ include_paths=/utilities/*
 include_paths=*.exe
 ```
 
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).

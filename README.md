@@ -68,7 +68,7 @@ This method requires `root` privileges.
      to programs that do not contain certain arguments on the command line. 
      See [details on configuring the program inclusion and exclusion criteria](#details-on-configuring-the-program-inclusion-and-exclusion-criteria) for more information.
 
-   The paths set in `/etc/opentelemetry/otelinject.conf` can be overridden with environment variables.
+   The values set in `/etc/opentelemetry/otelinject.conf` can be overridden with environment variables.
    (This should usually not be necessary.)
    - `DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the .NET Auto Instrumentation
      agent files
@@ -128,10 +128,10 @@ If you want to selectively enable (or disable) auto-instrumentation for a subset
 the configuration file provides a couple of settings which can be used alone or in combination to produce 
 the desired outcome:
   - `include_paths` - A comma-separated list of glob patterns to match executable paths. 
-    If you do not specify anything here, the injector defaults to instrumenting **all eligible executables**.
+    If you do not specify anything here, the injector defaults to instrumenting **all executables**.
   - `exclude_paths` - A comma-separated list of glob patterns to exclude executable paths.
   - `include_with_arguments` - A comma-separated list of glob patterns to match process arguments.
-    If you do not specify anything here, the injector defaults to instrumenting **all eligible executables**. 
+    If you do not specify anything here, the injector defaults to instrumenting **all executables**. 
   - `exclude_with_arguments` - A comma-separated list of glob patterns to exclude process arguments.
 
 If an executable matches both an inclusion and an exclusion criterion, the exclusion takes

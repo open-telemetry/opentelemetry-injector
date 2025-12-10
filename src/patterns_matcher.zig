@@ -117,7 +117,7 @@ test "matchGlob: empty pattern and text" {
     try testing.expect(!matchGlob("pattern", ""));
 }
 
-test "matchGlob: star matches empty" {
+test "matchGlob: star matches empty as well as any text" {
     try testing.expect(matchGlob("*", ""));
     try testing.expect(matchGlob("*", "anything"));
     try testing.expect(matchGlob("a*b", "ab"));

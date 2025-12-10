@@ -351,7 +351,7 @@ fn parseLine(line: []u8, cfg_file_path: []const u8, configuration: *InjectorConf
             configuration.nodejs_auto_instrumentation_agent_path = value;
             return true;
         } else if (std.mem.eql(u8, key, include_paths_key)) {
-            const new_patterns = patterns_util.splitByComma(value) catch |err| {
+            const new_patterns = patterns_util.splitByComma(alloc.page_allocator, value) catch |err| {
                 print.printError("error parsing include_paths value from configuration file {s}: {}", .{ cfg_file_path, err });
                 return false;
             };
@@ -361,7 +361,7 @@ fn parseLine(line: []u8, cfg_file_path: []const u8, configuration: *InjectorConf
             };
             return true;
         } else if (std.mem.eql(u8, key, exclude_paths_key)) {
-            const new_patterns = patterns_util.splitByComma(value) catch |err| {
+            const new_patterns = patterns_util.splitByComma(alloc.page_allocator, value) catch |err| {
                 print.printError("error parsing exclude_paths value from configuration file {s}: {}", .{ cfg_file_path, err });
                 return false;
             };
@@ -371,7 +371,7 @@ fn parseLine(line: []u8, cfg_file_path: []const u8, configuration: *InjectorConf
             };
             return true;
         } else if (std.mem.eql(u8, key, include_args_key)) {
-            const new_patterns = patterns_util.splitByComma(value) catch |err| {
+            const new_patterns = patterns_util.splitByComma(alloc.page_allocator, value) catch |err| {
                 print.printError("error parsing include_arguments value from configuration file {s}: {}", .{ cfg_file_path, err });
                 return false;
             };
@@ -381,7 +381,7 @@ fn parseLine(line: []u8, cfg_file_path: []const u8, configuration: *InjectorConf
             };
             return true;
         } else if (std.mem.eql(u8, key, exclude_args_key)) {
-            const new_patterns = patterns_util.splitByComma(value) catch |err| {
+            const new_patterns = patterns_util.splitByComma(alloc.page_allocator, value) catch |err| {
                 print.printError("error parsing exclude_arguments value from configuration file {s}: {}", .{ cfg_file_path, err });
                 return false;
             };
@@ -558,7 +558,7 @@ fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void 
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
-        configuration.include_paths = patterns_util.splitByComma(include_paths_value) catch |err| {
+        configuration.include_paths = patterns_util.splitByComma(alloc.page_allocator, include_paths_value) catch |err| {
             print.printError("error parsing include_paths value from the environment {s}: {}", .{ include_paths_value, err });
             return;
         };
@@ -569,7 +569,7 @@ fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void 
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
-        configuration.exclude_paths = patterns_util.splitByComma(exclude_paths_value) catch |err| {
+        configuration.exclude_paths = patterns_util.splitByComma(alloc.page_allocator, exclude_paths_value) catch |err| {
             print.printError("error parsing exclude_paths value from the environment {s}: {}", .{ exclude_paths_value, err });
             return;
         };
@@ -580,7 +580,7 @@ fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void 
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
-        configuration.include_args = patterns_util.splitByComma(include_args_value) catch |err| {
+        configuration.include_args = patterns_util.splitByComma(alloc.page_allocator, include_args_value) catch |err| {
             print.printError("error parsing include_arguments value from the environment {s}: {}", .{ include_args_value, err });
             return;
         };
@@ -591,7 +591,7 @@ fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void 
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
-        configuration.exclude_args = patterns_util.splitByComma(exclude_args_value) catch |err| {
+        configuration.exclude_args = patterns_util.splitByComma(alloc.page_allocator, exclude_args_value) catch |err| {
             print.printError("error parsing exclude_arguments value from the environment {s}: {}", .{ exclude_args_value, err });
             return;
         };

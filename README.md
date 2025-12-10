@@ -65,70 +65,8 @@ This method requires `root` privileges.
       ```
    - You want to selectively enable (or disable) auto-instrumentation for a subset of programs (services) on your system. 
      For example, you may want to only enable instrumentation of services that match a specific executable path pattern, or
-     to programs that do not contain certain arguments on the command line. For this purpose, the configuration file 
-     provides a couple of settings which can be used alone or in combination to produce the desired outcome:
-       - `include_paths` - A comma-separated list of glob patterns to match executable paths. 
-         If you do not specify anything here, the injector defaults to instrumenting **all eligible executables**.
-       - `exclude_paths` - A comma-separated list of glob patterns to exclude executable paths.
-       - `include_with_arguments` - A comma-separated list of glob patterns to match process arguments.
-         If you do not specify anything here, the injector defaults to instrumenting **all eligible executables**. 
-       - `exclude_with_arguments` - A comma-separated list of glob patterns to exclude process arguments.
-     
-     If an executable matches both an inclusion and an exclusion criterion, the exclusion takes
-     precedence. For example, in the following configuration, all program executables in the 
-     `/app/system/` directory will not be instrumented, even though the `/app` directory is 
-     included for instrumentation:
-     ```
-      dotnet_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/dotnet
-      jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/javaagent.jar
-      nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
-
-      include_paths=/app/*,/utilities/*
-      exclude_paths=/app/system/*
-     ```
-     To give you an idea of what types of inclusion and exclusion criteria can be defined, let's
-     look at the following example:
-     ```
-      dotnet_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/dotnet
-      jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/javaagent.jar
-      nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
-
-      include_paths=/app/*,/utilities/*,*.exe
-      exclude_with_arguments=-javaagent:*,*@opentelemetry-js*,-Xmx?m
-      include_with_arguments=*MyProject*.jar,*app.js
-     ```
-     In the example above we'll instrument:
-       - any programs that run from the `/app` and `/utilities` directories
-       - any programs that have an `.exe` extension
-       - any programs that have a command line argument containing `MyProject` 
-       in the name and ending with the extension `.jar`
-       - any programs that have a program argument ending in `app.js`
-       - however, for all included programs, the injector **will avoid**: 
-         - all programs that have a command line argument starting with
-         `-javaagent:`
-         - all programs that have a command line argument that contains `@opentelemetry-js`
-         - all `java` programs that run with a single digit megabytes of maximum memory
-
-     The example above illustrates how we avoid telemetry from unwanted applications or
-     injecting auto-instrumentation to programs that are already instrumented. If you have a
-     standard way of deploying all of your applications, you can create a default `otelinject.conf`
-     file that will ensure you get only the telemetry you want.
-
-     The `include_paths`, `exclude_paths`, `include_with_arguments` and `exclude_with_arguments` settings in
-     the configuration file are additive. This means that if you define multiple lines of these settings, the resulting 
-     patterns list will be a union of all of the settings. This allows for easier manipulation of the configuration
-     file with automated tools. Essentially, you can list each include or exclude rule on a separate line.
-     For example, the following two configuration files have an identical outcome:
-     ```
-      include_paths=/app/*,/utilities/*,*.exe
-     ```
-     is the same as:
-     ```
-      include_paths=/app/*
-      include_paths=/utilities/*
-      include_paths=*.exe
-     ```
-
+     to programs that do not contain certain arguments on the command line. 
+     See [details on configuring the program inclusion and exclusion criteria](#details-on-configuring-the-program-inclusion-and-exclusion-criteria) for more information.
 
    The paths set in `/etc/opentelemetry/otelinject.conf` can be overridden with environment variables.
    (This should usually not be necessary.)
@@ -183,6 +121,74 @@ Check the following for details about the auto-instrumtation agents and further 
 - [Java](https://opentelemetry.io/docs/zero-code/java/agent/configuration/)
 - [Node.js](https://opentelemetry.io/docs/zero-code/js/configuration/)
 - [.NET](https://opentelemetry.io/docs/zero-code/dotnet/configuration/)
+
+### Details on configuring the program inclusion and exclusion criteria
+
+If you want to selectively enable (or disable) auto-instrumentation for a subset of programs (services) on your system, 
+the configuration file provides a couple of settings which can be used alone or in combination to produce 
+the desired outcome:
+  - `include_paths` - A comma-separated list of glob patterns to match executable paths. 
+    If you do not specify anything here, the injector defaults to instrumenting **all eligible executables**.
+  - `exclude_paths` - A comma-separated list of glob patterns to exclude executable paths.
+  - `include_with_arguments` - A comma-separated list of glob patterns to match process arguments.
+    If you do not specify anything here, the injector defaults to instrumenting **all eligible executables**. 
+  - `exclude_with_arguments` - A comma-separated list of glob patterns to exclude process arguments.
+
+If an executable matches both an inclusion and an exclusion criterion, the exclusion takes
+precedence. For example, in the following configuration, all program executables in the 
+`/app/system/` directory will not be instrumented, even though the `/app` directory is 
+included for instrumentation:
+```
+dotnet_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/dotnet
+jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/javaagent.jar
+nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
+
+include_paths=/app/*,/utilities/*
+exclude_paths=/app/system/*
+```
+To give you an idea of what types of inclusion and exclusion criteria can be defined, let's
+look at the following example:
+```
+dotnet_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/dotnet
+jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/javaagent.jar
+nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
+
+include_paths=/app/*,/utilities/*,*.exe
+exclude_with_arguments=-javaagent:*,*@opentelemetry-js*,-Xmx?m
+include_with_arguments=*MyProject*.jar,*app.js
+```
+In the example above we'll instrument:
+  - any programs that run from the `/app` and `/utilities` directories
+  - any programs that have an `.exe` extension
+  - any programs that have a command line argument containing `MyProject` 
+  in the name and ending with the extension `.jar`
+  - any programs that have a program argument ending in `app.js`
+  - however, for all included programs, the injector **will avoid**: 
+    - all programs that have a command line argument starting with
+    `-javaagent:`
+    - all programs that have a command line argument that contains `@opentelemetry-js`
+    - all `java` programs that run with a single digit megabytes of maximum memory
+
+The example above illustrates how we avoid telemetry from unwanted applications or
+injecting auto-instrumentation to programs that are already instrumented. If you have a
+standard way of deploying all of your applications, you can create a default `otelinject.conf`
+file that will ensure you get only the telemetry you want.
+
+The `include_paths`, `exclude_paths`, `include_with_arguments` and `exclude_with_arguments` settings in
+the configuration file are additive. This means that if you define multiple lines of these settings, the resulting 
+patterns list will be a union of all of the settings. This allows for easier manipulation of the configuration
+file with automated tools. Essentially, you can list each include or exclude rule on a separate line.
+For example, the following two configuration files have an identical outcome:
+```
+include_paths=/app/*,/utilities/*,*.exe
+```
+is the same as:
+```
+include_paths=/app/*
+include_paths=/utilities/*
+include_paths=*.exe
+```
+
 
 ## Contributing
 

@@ -4,7 +4,7 @@
 const std = @import("std");
 
 /// Parses /proc/<pid>/cmdline and extracts the executable and arguments.
-/// Returns the executable path and a slice of arguments (excluding the executable).
+/// Returns the slice of the arguments including the executable as the first argument.
 /// The cmdline file contains null-separated arguments.
 /// Caller owns the returned memory and must free it.
 pub fn cmdLineForPID(allocator: std.mem.Allocator) ![]const []const u8 {

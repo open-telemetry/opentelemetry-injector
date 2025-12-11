@@ -84,10 +84,10 @@ fn printErrorReturnEmptyConfig(err: std.fmt.AllocPrintError) InjectorConfigurati
         .nodejs_auto_instrumentation_agent_path = "",
         .all_auto_instrumentation_agents_env_path = "",
         .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(alloc.page_allocator),
-                .include_paths = &.{},
-                .exclude_paths = &.{},
-                .include_args = &.{},
-                .exclude_args = &.{},
+        .include_paths = &.{},
+        .exclude_paths = &.{},
+        .include_args = &.{},
+        .exclude_args = &.{},
     };
 }
 
@@ -113,10 +113,21 @@ fn createDefaultConfiguration() InjectorConfiguration {
         .nodejs_auto_instrumentation_agent_path = nodejs_default,
         .all_auto_instrumentation_agents_env_path = all_env_default,
         .all_auto_instrumentation_agents_env_vars = all_agent_env_vars,
-                .include_paths = &.{},
-                .exclude_paths = &.{},
-                .include_args = &.{},
-                .exclude_args = &.{},
+        .include_paths = &.{},
+        .exclude_paths = &.{},
+        .include_args = &.{},
+        .exclude_args = &.{},
+    };
+}
+
+fn applyCommaSeparatedPatternsOption(setting: *[][]const u8, value: []u8, pattern_name: []const u8, cfg_file_path: []const u8) void {
+    const new_patterns = patterns_util.splitByComma(alloc.page_allocator, value) catch |err| {
+        print.printError("error parsing {s} value from configuration file {s}: {}", .{ pattern_name, cfg_file_path, err });
+        return;
+    };
+    setting.* = std.mem.concat(alloc.page_allocator, []const u8, &.{ setting.*, new_patterns }) catch |err| {
+        print.printError("error concatenating {s} from configuration file {s}: {}", .{ pattern_name, cfg_file_path, err });
+        return;
     };
 }
 
@@ -129,6 +140,14 @@ fn applyKeyValueToGeneralOptions(key: []const u8, value: []u8, _cfg_file_path: [
         _configuration.jvm_auto_instrumentation_agent_path = value;
     } else if (std.mem.eql(u8, key, nodejs_path_key)) {
         _configuration.nodejs_auto_instrumentation_agent_path = value;
+    } else if (std.mem.eql(u8, key, include_paths_key)) {
+        applyCommaSeparatedPatternsOption(&_configuration.include_paths, value, "include_paths", _cfg_file_path);
+    } else if (std.mem.eql(u8, key, exclude_paths_key)) {
+        applyCommaSeparatedPatternsOption(&_configuration.exclude_paths, value, "exclude_paths", _cfg_file_path);
+    } else if (std.mem.eql(u8, key, include_args_key)) {
+        applyCommaSeparatedPatternsOption(&_configuration.include_args, value, "include_arguments", _cfg_file_path);
+    } else if (std.mem.eql(u8, key, exclude_args_key)) {
+        applyCommaSeparatedPatternsOption(&_configuration.exclude_args, value, "exclude_arguments", _cfg_file_path);
     } else {
         print.printError("ignoring unknown configuration key in {s}: {s}={s}", .{ _cfg_file_path, key, value });
         alloc.page_allocator.free(value);
@@ -414,48 +433,6 @@ fn parseLine(line: []u8, cfg_file_path: []const u8) ?struct {
             alloc.page_allocator.free(key);
             return null;
         };
-        if (std.mem.eql(u8, key, include_paths_key)) {
-                    const new_patterns = patterns_util.splitByComma(alloc.page_allocator, value) catch |err| {
-                        print.printError("error parsing include_paths value from configuration file {s}: {}", .{ cfg_file_path, err });
-                        return false;
-                    };
-                    configuration.include_paths = std.mem.concat(alloc.page_allocator, []const u8, &.{ configuration.include_paths, new_patterns }) catch |err| {
-                        print.printError("error concatenating include_paths from configuration file {s}: {}", .{ cfg_file_path, err });
-                        return false;
-                    };
-                    return true;
-                } else if (std.mem.eql(u8, key, exclude_paths_key)) {
-                    const new_patterns = patterns_util.splitByComma(alloc.page_allocator, value) catch |err| {
-                        print.printError("error parsing exclude_paths value from configuration file {s}: {}", .{ cfg_file_path, err });
-                        return false;
-                    };
-                    configuration.exclude_paths = std.mem.concat(alloc.page_allocator, []const u8, &.{ configuration.exclude_paths, new_patterns }) catch |err| {
-                        print.printError("error concatenating exclude_paths from configuration file {s}: {}", .{ cfg_file_path, err });
-                        return false;
-                    };
-                    return true;
-                } else if (std.mem.eql(u8, key, include_args_key)) {
-                    const new_patterns = patterns_util.splitByComma(alloc.page_allocator, value) catch |err| {
-                        print.printError("error parsing include_arguments value from configuration file {s}: {}", .{ cfg_file_path, err });
-                        return false;
-                    };
-                    configuration.include_args = std.mem.concat(alloc.page_allocator, []const u8, &.{ configuration.include_args, new_patterns }) catch |err| {
-                        print.printError("error concatenating include_arguments from configuration file {s}: {}", .{ cfg_file_path, err });
-                        return false;
-                    };
-                    return true;
-                } else if (std.mem.eql(u8, key, exclude_args_key)) {
-                    const new_patterns = patterns_util.splitByComma(alloc.page_allocator, value) catch |err| {
-                        print.printError("error parsing exclude_arguments value from configuration file {s}: {}", .{ cfg_file_path, err });
-                        return false;
-                    };
-                    configuration.exclude_args = std.mem.concat(alloc.page_allocator, []const u8, &.{ configuration.exclude_args, new_patterns }) catch |err| {
-                        print.printError("error concatenating exclude_arguments from configuration file {s}: {}", .{ cfg_file_path, err });
-                        return false;
-                    };
-                    return true;
-                }
-
         return .{
             .key = key,
             .value = value,

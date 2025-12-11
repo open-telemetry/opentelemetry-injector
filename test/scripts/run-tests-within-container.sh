@@ -109,11 +109,11 @@ run_test_case() {
   match=$(expr "$test_case_label" : ".*env file.*")
   set -e
   if [ "$match" -gt 0 ]; then
-    echo "providing env file at /etc/opentelemetry/env.conf for test case \"$test_case_label\""
-    cp env.conf /etc/opentelemetry/env.conf
+    echo "providing env file at /etc/opentelemetry/default_auto_instrumentation_env.conf for test case \"$test_case_label\""
+    cp default_auto_instrumentation_env.conf /etc/opentelemetry/default_auto_instrumentation_env.conf
   else
-    echo "providing empty env file at /etc/opentelemetry/env.conf for test case \"$test_case_label\""
-    touch /etc/opentelemetry/env.conf
+    echo "providing empty env file at /etc/opentelemetry/default_auto_instrumentation_env.conf for test case \"$test_case_label\""
+    touch /etc/opentelemetry/default_auto_instrumentation_env.conf
   fi
 
   cd "$working_dir"

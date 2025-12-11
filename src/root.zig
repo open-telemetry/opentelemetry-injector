@@ -35,6 +35,8 @@ var modified_node_options_value: ?types.NullTerminatedString = null;
 var modified_otel_resource_attributes_value_calculated = false;
 var modified_otel_resource_attributes_value: ?types.NullTerminatedString = null;
 
+var custom_env_vars_are_injected = false;
+
 export fn getenv(name_z: types.NullTerminatedString) ?types.NullTerminatedString {
     const name = std.mem.sliceTo(name_z, 0);
 
@@ -50,7 +52,7 @@ export fn getenv(name_z: types.NullTerminatedString) ?types.NullTerminatedString
     // https://git.musl-libc.org/cgit/musl/tree/src/env/setenv.c) if the backing memory location is outgrown by apps
     // modifying the environment via setenv or putenv.
     const environment_optional: [*:null]?[*:0]u8 = @ptrCast(@alignCast(__environ));
-    const environment_count = countEnivironmentVariables(environment_optional);
+    const environment_count = countEnvironmentVariables(environment_optional);
     std.os.environ = @as([*][*:0]u8, @ptrCast(environment_optional))[0..environment_count];
 
     print.initDebugFlag();
@@ -70,8 +72,12 @@ export fn getenv(name_z: types.NullTerminatedString) ?types.NullTerminatedString
 }
 
 fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) ?types.NullTerminatedString {
-    if (!setCustomEnvVariables(configuration.all_auto_instrumentation_agent_env_vars)) {
-        print.printError("failed to set environment variables from configuration", .{});
+    if (!custom_env_vars_are_injected) {
+        if (setCustomEnvVariables(configuration.all_auto_instrumentation_agents_env_vars)) {
+            custom_env_vars_are_injected = true;
+        } else {
+            print.printError("failed to set environment variables from configuration", .{});
+        }
     }
 
     const original_value = std.posix.getenv(name);
@@ -155,7 +161,7 @@ fn setCustomEnvVariables(custom_env_vars: std.StringHashMap([]u8)) bool {
     }
 
     const environment_optional: [*:null]?[*:0]u8 = @ptrCast(@alignCast(__environ));
-    const environment_count = countEnivironmentVariables(environment_optional);
+    const environment_count = countEnvironmentVariables(environment_optional);
 
     var vars_to_update_count: usize = 0;
     for (0..environment_count) |i| {
@@ -234,7 +240,7 @@ fn formatEnvVar(name: []const u8, value: []const u8) std.fmt.AllocPrintError![:0
     return std.fmt.allocPrintZ(alloc.page_allocator, "{s}={s}", .{ name, value });
 }
 
-fn countEnivironmentVariables(environment: [*:null]?[*:0]u8) usize {
+fn countEnvironmentVariables(environment: [*:null]?[*:0]u8) usize {
     var count: usize = 0;
     if (@intFromPtr(__environ) != 0) { // __environ can be a null pointer, e.g. directly after clearenv()
         while (environment[count]) |_| : (count += 1) {}

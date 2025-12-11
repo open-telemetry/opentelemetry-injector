@@ -71,6 +71,7 @@ pub fn build(b: *std.Build) !void {
     b.default_step = copy_injector_to_bin;
 
     // TESTING
+    const test_filters = b.option([][]const u8, "test-filter", "Match tests to execute");
     const testTarget = b.standardTargetOptions(.{});
     const test_mod = b.createModule(.{
         .root_source_file = b.path("src/test.zig"),
@@ -92,6 +93,7 @@ pub fn build(b: *std.Build) !void {
     });
     const unit_tests = b.addTest(.{
         .root_module = test_mod,
+        .filters = test_filters orelse &.{},
     });
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run unit tests");

@@ -1,6 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+const builtin = @import("builtin");
 const std = @import("std");
 
 const alloc = @import("allocator.zig");
@@ -36,6 +37,8 @@ var modified_node_options_value: ?types.NullTerminatedString = null;
 var modified_otel_resource_attributes_value_calculated = false;
 var modified_otel_resource_attributes_value: ?types.NullTerminatedString = null;
 
+var custom_env_vars_are_injected = false;
+
 // Cache for executable path and command line arguments (processed once)
 var cached_executable_path_calculated = false;
 var cached_executable_path: []u8 = &[_]u8{};
@@ -57,10 +60,7 @@ export fn getenv(name_z: types.NullTerminatedString) ?types.NullTerminatedString
     // https://git.musl-libc.org/cgit/musl/tree/src/env/setenv.c) if the backing memory location is outgrown by apps
     // modifying the environment via setenv or putenv.
     const environment_optional: [*:null]?[*:0]u8 = @ptrCast(@alignCast(__environ));
-    var environment_count: usize = 0;
-    if (@intFromPtr(__environ) != 0) { // __environ can be a null pointer, e.g. directly after clearenv()
-        while (environment_optional[environment_count]) |_| : (environment_count += 1) {}
-    }
+    const environment_count = countEnvironmentVariables(environment_optional);
     std.os.environ = @as([*][*:0]u8, @ptrCast(environment_optional))[0..environment_count];
 
     print.initDebugFlag();
@@ -80,6 +80,14 @@ export fn getenv(name_z: types.NullTerminatedString) ?types.NullTerminatedString
 }
 
 fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) ?types.NullTerminatedString {
+    if (!custom_env_vars_are_injected) {
+        if (setCustomEnvVariables(configuration.all_auto_instrumentation_agents_env_vars)) {
+            custom_env_vars_are_injected = true;
+        } else {
+            print.printError("failed to set environment variables from configuration", .{});
+        }
+    }
+
     const original_value = std.posix.getenv(name);
 
     const exe_path = getExecutablePath();
@@ -195,6 +203,99 @@ fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) 
 
     // The requested environment variable is not one that we want to modify, and it does not exist. Return null.
     return null;
+}
+
+fn setCustomEnvVariables(custom_env_vars: std.StringHashMap([]u8)) bool {
+    if (custom_env_vars.count() == 0) {
+        return true;
+    }
+
+    const environment_optional: [*:null]?[*:0]u8 = @ptrCast(@alignCast(__environ));
+    const environment_count = countEnvironmentVariables(environment_optional);
+
+    var vars_to_update_count: usize = 0;
+    for (0..environment_count) |i| {
+        if (environment_optional[i]) |env_entry| {
+            const slice = std.mem.sliceTo(env_entry, 0);
+            if (std.mem.indexOfScalar(u8, slice, '=')) |equals_idx| {
+                const entry_name = slice[0..equals_idx];
+                if (custom_env_vars.contains(entry_name)) {
+                    vars_to_update_count += 1;
+                }
+            }
+        }
+    }
+
+    const new_size = environment_count + vars_to_update_count + 1;
+    const new_environment = alloc.page_allocator.allocSentinel(?[*:0]u8, new_size, null) catch {
+        print.printError("failed to allocate memory for environment array", .{});
+        return false;
+    };
+
+    for (0..environment_count) |i| {
+        new_environment[i] = environment_optional[i];
+    }
+
+    var updated_vars = std.StringHashMap(bool).init(alloc.page_allocator);
+    defer updated_vars.deinit();
+
+    // Update existing variables
+    for (0..environment_count) |i| {
+        const raw_env_var = std.mem.sliceTo(new_environment[i].?, 0);
+        if (std.mem.indexOfScalar(u8, raw_env_var, '=')) |equalsIdx| {
+            const name = raw_env_var[0..equalsIdx];
+            if (custom_env_vars.get(name)) |value| {
+                new_environment[i] = formatEnvVar(name, value) catch {
+                    print.printError("failed to format environment variable {s}", .{name});
+                    return false;
+                };
+                updated_vars.put(name, true) catch {
+                    print.printError("failed to track updated variable {s}", .{name});
+                    return false;
+                };
+                print.printDebug("updated environment variable {s}={s}", .{ name, value });
+            }
+        }
+    }
+
+    // Append new variables
+    var new_var_index = environment_count;
+    var env_var_iterator = custom_env_vars.iterator();
+    while (env_var_iterator.next()) |env_var| {
+        const name = env_var.key_ptr.*;
+
+        if (!updated_vars.contains(name)) {
+            const value = std.mem.sliceTo(env_var.value_ptr.*, 0);
+            const env_string = formatEnvVar(name, value) catch {
+                print.printError("failed to format environment variable {s}", .{name});
+                return false;
+            };
+            new_environment[new_var_index] = env_string;
+            new_var_index += 1;
+            print.printDebug("added environment variable {s}={s}", .{ name, value });
+        }
+    }
+
+    // Add null terminator in the end
+    new_environment[new_var_index] = null;
+
+    const new_environ_ptr: [*]u8 = @ptrCast(new_environment.ptr);
+    __environ = new_environ_ptr;
+    std.os.environ = @as([*][*:0]u8, @ptrCast(new_environment))[0..new_var_index];
+
+    return true;
+}
+
+fn formatEnvVar(name: []const u8, value: []const u8) std.fmt.AllocPrintError![:0]u8 {
+    return std.fmt.allocPrintZ(alloc.page_allocator, "{s}={s}", .{ name, value });
+}
+
+fn countEnvironmentVariables(environment: [*:null]?[*:0]u8) usize {
+    var count: usize = 0;
+    if (@intFromPtr(__environ) != 0) { // __environ can be a null pointer, e.g. directly after clearenv()
+        while (environment[count]) |_| : (count += 1) {}
+    }
+    return count;
 }
 
 fn getCommandLineArgs() []const []const u8 {

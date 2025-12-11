@@ -105,6 +105,17 @@ run_test_case() {
     cp otelinject.conf /etc/opentelemetry/otelinject.conf
   fi
 
+  set +e
+  match=$(expr "$test_case_label" : ".*env file.*")
+  set -e
+  if [ "$match" -gt 0 ]; then
+    echo "providing env file at /etc/opentelemetry/default_auto_instrumentation_env.conf for test case \"$test_case_label\""
+    cp default_auto_instrumentation_env.conf /etc/opentelemetry/default_auto_instrumentation_env.conf
+  else
+    echo "providing empty env file at /etc/opentelemetry/default_auto_instrumentation_env.conf for test case \"$test_case_label\""
+    touch /etc/opentelemetry/default_auto_instrumentation_env.conf
+  fi
+
   cd "$working_dir"
   full_command="LD_PRELOAD=""$injector_binary"" OTEL_INJECTOR_K8S_NAMESPACE_NAME=my-namespace OTEL_INJECTOR_K8S_POD_NAME=my-pod OTEL_INJECTOR_K8S_POD_UID=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff OTEL_INJECTOR_K8S_CONTAINER_NAME=test-app"
   if [ "${VERBOSE:-}" = "true" ]; then

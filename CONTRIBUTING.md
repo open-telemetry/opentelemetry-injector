@@ -26,11 +26,10 @@ See the page [Zig Learn](https://ziglang.org/learn/) for more information about 
 ### Makefile commaneds
 
 * `make zig-build` to build the injector binary locally on your machine
-* `make watch-zig-build` to continuually rebuild the Zig sources on every change (requires [`fd`](https://github.com/sharkdp/fd) and [`entr`](https://github.com/eradman/entr) to be installed)
+* `make watch-zig-build` to continually rebuild the Zig sources on every change (requires [`fd`](https://github.com/sharkdp/fd) and [`entr`](https://github.com/eradman/entr) to be installed)
 * `make zig-unit-tests` to run the unit tests
 * `watch-zig-unit-tests` to continually run the Zig unit tests on every change (requires [`fd`](https://github.com/sharkdp/fd) and [`entr`](https://github.com/eradman/entr) to be installed)
 * `make tests` to run the unit tests and the injector integration tests
-* `make tests` to run unit tests and the injector integration tests
 * `make rpm-package deb-package` to build the RPM and Debian package
 * `make packaging-integration-test-deb packaging-integration-test-rpm` to rebuild the RPM and Debian packages and run integration tests against the newly built packages.
 

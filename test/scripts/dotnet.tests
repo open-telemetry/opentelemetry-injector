@@ -27,3 +27,9 @@ run_test_case \
   "./dotnetapp verify-startup-hook-has-been-injected" \
   "otel_injector_dotnet_no_op_startup_hook_has_been_loaded: -" \
   "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX="
+
+run_test_case \
+  "custom env var is returned with env file provided" \
+  "app" \
+  "./dotnetapp custom-env-var" \
+  "CUSTOM_ENV_VAR: custom-value-123"

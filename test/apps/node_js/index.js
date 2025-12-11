@@ -43,6 +43,9 @@ function main() {
     case 'dotnet-startup-hooks':
       echoEnvVar('DOTNET_STARTUP_HOOKS');
       break;
+    case 'custom-env-var':
+      echoEnvVar('CUSTOM_ENV_VAR');
+      break;
     default:
       console.error(`unknown test app command: ${command}`);
       process.exit(1);

@@ -76,7 +76,7 @@ This method requires `root` privileges.
     - `JVM_AUTO_INSTRUMENTATION_AGENT_PATH=""` to disable JVM auto-instrumentation
     - `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=""` to disable Node.js auto-instrumentation
 
-3. (Optional) The default env agent configuration file `/etc/opentelemetry/default_auto_instrumentation_env.conf` is empty (use 
+3. (Optional) The default env agent configuration file `/etc/opentelemetry/default_auto_instrumentation_env.conf` is empty (use
    `all_auto_instrumentation_agents_env_path` option to specify other path). You can add environment variables
    in this file - these variables will be passed to all agents' envs.
 

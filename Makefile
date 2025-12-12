@@ -36,8 +36,13 @@ ifneq ($(SKIP_COMPILE), true)
 	$(MAKE) dist
 endif
 	@mkdir -p dist
+	mkdir -p instrumentation/dist
 	docker build -t instrumentation-fpm packaging/fpm
-	docker run --rm -v $(CURDIR):/repo -e PACKAGE=$* -e VERSION=$(VERSION) -e ARCH=$(ARCH) instrumentation-fpm
+	docker rm -f libotelinject-packager 2>/dev/null || true
+	docker run -d --name libotelinject-packager --rm -v $(CURDIR):/repo -e PACKAGE=$* -e VERSION=$(VERSION) -e ARCH=$(ARCH) instrumentation-fpm sleep inf
+	docker exec libotelinject-packager ./packaging/fpm/$*/build.sh "$(VERSION)" "$(ARCH)" "/repo/instrumentation/dist"
+	docker cp libotelinject-packager:/repo/instrumentation/dist/. instrumentation/dist
+	docker rm -f libotelinject-packager
 
 # Run this to install and enable the auto-instrumentation files. Mostly intended for development.
 .PHONY: install

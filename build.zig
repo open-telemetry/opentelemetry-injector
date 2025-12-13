@@ -3,32 +3,17 @@
 
 const std = @import("std");
 
-pub const InjectorBuildError = error{UnsupportedArchitecturError};
-
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
 // runner.
 pub fn build(b: *std.Build) !void {
     const optimize = std.builtin.OptimizeMode.ReleaseSafe;
-
-    var target_cpu_arch = std.Target.Cpu.Arch.aarch64;
-    var target_cpu_model = std.Target.Cpu.Model.generic(std.Target.Cpu.Arch.aarch64);
-
-    if (b.option([]const u8, "cpu-arch", "The system architecture to compile the injector for; valid options are 'amd64' and 'arm64' (default)")) |val| {
-        if (std.mem.eql(u8, "arm64", val)) {
-            // Already the default
-        } else if (std.mem.eql(u8, "amd64", val)) {
-            target_cpu_arch = std.Target.Cpu.Arch.x86_64;
-            target_cpu_model = std.Target.Cpu.Model.generic(std.Target.Cpu.Arch.x86_64);
-        } else {
-            return error.UnsupportedArchitecturError;
-        }
-    }
+    const target_cpu = b.option(SupportedCpuArch, "cpu-arch", "The system architecture to compile the injector for; valid options are 'amd64' and 'arm64' (default)") orelse .arm64;
 
     const target = b.resolveTargetQuery(.{
-        .cpu_arch = target_cpu_arch,
+        .cpu_arch = target_cpu.arch(),
         // Skip cpu model detection because the automatic detection for transpiling fails in build
-        .cpu_model = .{ .explicit = target_cpu_model },
+        .cpu_model = .{ .explicit = target_cpu.model() },
         .os_tag = .linux,
     });
 
@@ -105,3 +90,23 @@ fn copyInjectorFile(step: *std.Build.Step, _: std.Build.Step.MakeOptions) anyerr
     const dest_path = step.owner.pathFromRoot("so/libotelinject.so");
     try std.fs.copyFileAbsolute(source_path, dest_path, .{});
 }
+
+const SupportedCpuArch = enum {
+    amd64,
+    arm64,
+
+    const Self = @This();
+
+    fn arch(self: Self) std.Target.Cpu.Arch {
+        return switch (self) {
+            .amd64 => std.Target.Cpu.Arch.x86_64,
+            .arm64 => std.Target.Cpu.Arch.aarch64,
+        };
+    }
+    fn model(self: Self) *const std.Target.Cpu.Model {
+        return switch (self) {
+            .amd64 => std.Target.Cpu.Model.generic(std.Target.Cpu.Arch.x86_64),
+            .arm64 => std.Target.Cpu.Model.generic(std.Target.Cpu.Arch.aarch64),
+        };
+    }
+};

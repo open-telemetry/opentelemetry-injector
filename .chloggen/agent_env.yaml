@@ -23,7 +23,7 @@ subtext: |
   Injector will pass these variables to agents.
 
 # If your change doesn't affect end users or the exported elements of any package,
-# you should instead start your pull request title with [chore] or use the "Skip Changelog" label.
+# you should instead start your pull request title with "chore" or use the "Skip Changelog" label.
 # Optional: The change log or logs in which this entry should be included.
 # e.g. '[user]' or '[user, api]'
 # Include 'user' if the change is relevant to end users.

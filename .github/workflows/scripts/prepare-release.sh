@@ -23,7 +23,7 @@ git commit -m "changelog update ${CANDIDATE}"
 
 git push --set-upstream origin "${BRANCH}"
 
-gh pr create --head "$(git branch --show-current)" --title "[chore] Prepare release ${CANDIDATE}" --body "
+gh pr create --head "$(git branch --show-current)" --title "chore: prepare release ${CANDIDATE}" --body "
 The following commands were run to prepare this release:
 - make chlog-update VERSION=v${CANDIDATE}
 "

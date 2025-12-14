@@ -1,3 +1,14 @@
+## ‼️ Code Freeze
+
+We are currently in the process of porting over a large [downstream code change](https://github.com/dash0hq/dash0-operator/pull/490)
+into this repository.
+
+**Please do not start new PRs while this effort is ongoing.**
+
+This should be probably be resolved until December 31 2025.
+
+----
+
 ## OpenTelemetry Injector
 
 The OpenTelemetry injector is a shared library (written in [Zig](https://ziglang.org/)) that is intended to be

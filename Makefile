@@ -22,8 +22,14 @@ so/libotelinject.so: so
 
 .PHONY: dist
 dist:
+	@set -e
 	@mkdir -p dist
-	docker buildx build --platform linux/$(ARCH) --build-arg DOCKER_REPO=$(DOCKER_REPO) -o type=image,name=libotelinject-builder:$(ARCH),push=false .
+	if [[ "$(ARCH)" = arm64 ]]; then \
+	  ZIG_ARCHITECTURE=aarch64; \
+	elif [[ "$(ARCH)" = amd64 ]]; then \
+	  ZIG_ARCHITECTURE=x86_64; \
+	fi; \
+	docker buildx build --platform linux/$(ARCH) --build-arg DOCKER_REPO=$(DOCKER_REPO) --build-arg ZIG_ARCHITECTURE=$$ZIG_ARCHITECTURE -o type=image,name=libotelinject-builder:$(ARCH),push=false .
 	docker rm -f libotelinject-builder 2>/dev/null || true
 	docker run -d --platform linux/$(ARCH) --name libotelinject-builder libotelinject-builder:$(ARCH) sleep inf
 	docker exec libotelinject-builder make ARCH=$(ARCH) SHELL=/bin/sh all

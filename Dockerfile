@@ -3,9 +3,15 @@ FROM ${DOCKER_REPO}/alpine:3.22.2@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b
 
 RUN apk add --no-cache make
 
-COPY zig-version /otel-injector-test-build/zig-version
-RUN source /otel-injector-test-build/zig-version && \
-  apk add zig="$ZIG_VERSION" --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community
+ARG ZIG_ARCHITECTURE
+
+RUN mkdir -p /opt/zig
+WORKDIR /opt/zig
+COPY zig-version .
+RUN . /opt/zig/zig-version && \
+  wget -q -O /tmp/zig.tar.gz https://ziglang.org/download/${ZIG_VERSION%-*}/zig-${ZIG_ARCHITECTURE}-linux-${ZIG_VERSION}.tar.xz && \
+  tar --strip-components=1 -xf /tmp/zig.tar.gz
+ENV PATH="$PATH:/opt/zig"
 
 WORKDIR /libotelinject
 

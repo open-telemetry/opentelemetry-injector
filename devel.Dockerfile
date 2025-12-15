@@ -38,7 +38,7 @@ RUN mkdir -p /opt/zig
 WORKDIR /opt/zig
 COPY zig-version .
 RUN . /opt/zig/zig-version && \
-  wget -q -O /tmp/zig.tar.gz https://ziglang.org/download/${ZIG_VERSION%-*}/zig-${zig_architecture}-linux-${ZIG_VERSION%-*}.tar.xz && \
+  wget -q -O /tmp/zig.tar.gz https://ziglang.org/download/${ZIG_VERSION%-*}/zig-${zig_architecture}-linux-${ZIG_VERSION}.tar.xz && \
   tar --strip-components=1 -xf /tmp/zig.tar.gz
 ENV PATH="$PATH:/opt/zig"
 

@@ -5,6 +5,8 @@
 
 const std = @import("std");
 
+const _print = @import("print.zig");
+
 const testing = std.testing;
 
 pub const test_allocator: std.mem.Allocator = std.heap.page_allocator;
@@ -48,7 +50,7 @@ pub fn setStdCEnviron(env_vars: []const []const u8) anyerror![*:null]?[*:0]u8 {
 }
 
 /// Resets std.c.environ to the given value. This function is meant to be used after doing clearStdCEnviron or
-/// setStdCEnviron earler, to restore the original environment after the test is done.
+/// setStdCEnviron earlier, to restore the original environment after the test is done.
 pub fn resetStdCEnviron(original_environ: [*:null]?[*:0]u8) void {
     std.c.environ = original_environ;
 }
@@ -65,6 +67,31 @@ pub fn expectWithMessage(
         print("\n==================================\n", .{});
         return error.TestUnexpectedResult;
     }
+}
+
+pub fn expectStringStartAndEnd(actual: []const u8, prefix: []const u8, suffix: []const u8) !void {
+    try testing.expectStringStartsWith(actual, prefix);
+    try testing.expectStringEndsWith(actual, suffix);
+}
+
+pub fn expectStringContains(actual: []const u8, expected_needle: []const u8) !void {
+    if (std.mem.indexOf(u8, actual, expected_needle) != null) {
+        return;
+    }
+    print("\n====== expected to contain: =========\n", .{});
+    printWithVisibleNewlines(expected_needle);
+    print("\n========= full output: ==============\n", .{});
+    printWithVisibleNewlines(actual);
+    print("\n======================================\n", .{});
+
+    return error.TestExpectedContains;
+}
+
+pub inline fn expectMemoryRangeLimit(expected: comptime_int, actual: anytype) !void {
+    testing.expectEqual(expected, @intFromPtr(actual)) catch |err| {
+        std.debug.print("expected memory range limit {x:0>8}, found {x:0>8}\n", .{ expected, @intFromPtr(actual) });
+        return err;
+    };
 }
 
 // Copied from Zig's std.testing module.

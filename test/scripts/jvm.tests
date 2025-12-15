@@ -12,38 +12,6 @@ run_test_case \
   "java -jar Main.jar verify-javaagent-has-been-injected-and-existing-property-is-still-in-place" \
   "otel.injector.jvm.no_op_agent.has_been_loaded: true; some-property: some-value" \
   "JAVA_TOOL_OPTIONS=-Dsome-property=some-value"
-run_test_case \
-  "injects -Dotel.resource.attributes in JAVA_TOOL_OPTIONS" \
-  "app" \
-  "java -jar Main.jar otel-resource-attributes" \
-  "otel.resource.attributes: k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app"
-run_test_case \
-  "merges existing -Dotel.resource.attributes in JAVA_TOOL_OPTIONS" \
-  "app" \
-  "java -jar Main.jar otel-resource-attributes" \
-  "otel.resource.attributes: my.attr1=value1,my.attr2=value2,k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app" \
-  "JAVA_TOOL_OPTIONS=-Dotel.resource.attributes=my.attr1=value1,my.attr2=value2"
-run_test_case \
-  "merges existing OTEL_RESOURCE_ATTRIBUTES if JAVA_TOOL_OPTIONS is not set" \
-  "app" \
-  "java -jar Main.jar otel-resource-attributes" \
-  "otel.resource.attributes: my.attr1=value1,my.attr2=value2,k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app" \
-  "OTEL_RESOURCE_ATTRIBUTES=my.attr1=value1,my.attr2=value2"
-run_test_case \
-  "merges existing OTEL_RESOURCE_ATTRIBUTES if JAVA_TOOL_OPTIONS is set but does not have -Dotel.resource.attributes" \
-  "app" \
-  "java -jar Main.jar otel-resource-attributes" \
-  "otel.resource.attributes: my.attr1=value1,my.attr2=value2,k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app" \
-  "OTEL_RESOURCE_ATTRIBUTES=my.attr1=value1,my.attr2=value2 JAVA_TOOL_OPTIONS=-Dsome-property=some-value"
-
-# The Java OTel SDK will ignore OTEL_RESOURCE_ATTRIBUTES if JAVA_TOOL_OPTIONS is set and has -Dotel.resource.attributes
-# is set, so we replicate this behavior.
-run_test_case \
-  "do not merge existing OTEL_RESOURCE_ATTRIBUTES if JAVA_TOOL_OPTIONS is set and has -Dotel.resource.attributes" \
-  "app" \
-  "java -jar Main.jar otel-resource-attributes" \
-  "otel.resource.attributes: my.attr3=value3,my.attr4=value4,k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app" \
-  "OTEL_RESOURCE_ATTRIBUTES=my.attr1=value1,my.attr2=value2 JAVA_TOOL_OPTIONS=-Dotel.resource.attributes=my.attr3=value3,my.attr4=value4"
 
 # For test cases with the "configuration file" substring in their label, test/scripts/run-tests-within-container.sh
 # will provide a configuration file in the expected location (/etc/opentelemetry/otelinject.conf).

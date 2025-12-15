@@ -1,3 +1,6 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
 import java.util.Map;
 
 public class Main {
@@ -18,9 +21,6 @@ public class Main {
                 break;
             case "verify-javaagent-has-been-injected-and-existing-property-is-still-in-place":
                 echoProperties(new String[]{"otel.injector.jvm.no_op_agent.has_been_loaded", "some-property"});
-                break;
-            case "otel-resource-attributes":
-                echoProperty("otel.resource.attributes");
                 break;
             case "custom-env-var":
                 echoEnvVar("CUSTOM_ENV_VAR");

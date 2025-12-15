@@ -7,6 +7,7 @@ const std = @import("std");
 const alloc = @import("allocator.zig");
 const config = @import("config.zig");
 const dotnet = @import("dotnet.zig");
+const libc = @import("libc.zig");
 const jvm = @import("jvm.zig");
 const node_js = @import("node_js.zig");
 const print = @import("print.zig");
@@ -15,83 +16,128 @@ const types = @import("types.zig");
 const pattern_matcher = @import("patterns_matcher.zig");
 const args_parser = @import("args_parser.zig");
 
-const assert = std.debug.assert;
-const testing = std.testing;
-const expect = testing.expect;
+const empty_z_string = "\x00";
 
-// We need to use a rather "innocent" type here, the actual type involves
-// optionals that cannot be used in global declarations.
-extern var __environ: [*]u8;
+const init_section_name = switch (builtin.target.os.tag) {
+    .linux => ".init_array",
+    .macos => "__DATA,__mod_init_func", // needed to run tests locally on macOS
+    else => {
+        error.OsNotSupported;
+    },
+};
 
-// Ensure we process requests synchronously. LibC is *not* threadsafe
-// with respect to the environment, but chances are some apps will try
-// to look up env vars in parallel
-const _env_mutex = std.Thread.Mutex{};
+export const init_array: [1]*const fn () callconv(.c) void linksection(init_section_name) = .{&initEnviron};
 
-// Keep global pointers to already-calculated values to avoid multiple allocations
-// on repeated lookups.
-var modified_java_tool_options_value_calculated = false;
-var modified_java_tool_options_value: ?types.NullTerminatedString = null;
-var modified_node_options_value_calculated = false;
-var modified_node_options_value: ?types.NullTerminatedString = null;
-var modified_otel_resource_attributes_value_calculated = false;
-var modified_otel_resource_attributes_value: ?types.NullTerminatedString = null;
+var environ_ptr: ?types.EnvironPtr = null;
 
-var custom_env_vars_are_injected = false;
+const InjectorError = error{
+    CannotFindEnvironSymbol,
+};
 
-// Cache for executable path and command line arguments (processed once)
-var cached_executable_path_calculated = false;
-var cached_executable_path: []u8 = &[_]u8{};
-var cached_cmdline_args_calculated = false;
-var cached_cmdline_args: []const []const u8 = &[_][]const u8{};
+fn initEnviron() callconv(.c) void {
+    print.initLogLevelFromProcSelfEnviron() catch |err| {
+        // If we fail to read the log level, we continue processing, using the default log level.
+        print.printError("failed to read log level from environment: {}", .{err});
+        print.printError("using default log level {}", .{print.getLogLevel()});
+    };
 
-export fn getenv(name_z: types.NullTerminatedString) ?types.NullTerminatedString {
-    const name = std.mem.sliceTo(name_z, 0);
+    const libc_info = libc.getLibCInfo(alloc.page_allocator) catch |err| {
+        if (err == error.UnknownLibCFlavor) {
+            print.printError("no libc found: {}", .{err});
+        } else {
+            print.printError("failed to identify libc: {}", .{err});
+        }
+        return;
+    };
+    defer alloc.page_allocator.free(libc_info.name);
+    print.printDebug("identified {s} libc loaded from {s}", .{ switch (libc_info.flavor) {
+        types.LibCFlavor.GNU => "GNU",
+        types.LibCFlavor.MUSL => "musl",
+        else => "unknown",
+    }, libc_info.name });
+    dotnet.setLibcFlavor(libc_info.flavor);
 
-    // Need to change type from `const` to be able to lock
-    var env_mutex = _env_mutex;
-    env_mutex.lock();
-    defer env_mutex.unlock();
-
-    // Dynamic libs do not get the std.os.environ initialized, see https://github.com/ziglang/zig/issues/4524, so we
-    // back fill it. This logic is based on parsing of envp on zig's start. We re-bind the environment every time, as we
-    // cannot ensure it did not change since the previous invocation. Libc implementations can re-allocate the
-    // environment (http://github.com/lattera/glibc/blob/master/stdlib/setenv.c;
-    // https://git.musl-libc.org/cgit/musl/tree/src/env/setenv.c) if the backing memory location is outgrown by apps
-    // modifying the environment via setenv or putenv.
-    const environment_optional: [*:null]?[*:0]u8 = @ptrCast(@alignCast(__environ));
-    const environment_count = countEnvironmentVariables(environment_optional);
-    std.os.environ = @as([*][*:0]u8, @ptrCast(environment_optional))[0..environment_count];
-
-    print.initDebugFlag();
-    print.printDebug("getenv({s}) called", .{name});
+    environ_ptr = libc_info.environ_ptr;
+    updateStdOsEnviron() catch |err| {
+        print.printError("initEnviron(): cannot update std.os.environ: {}; ", .{err});
+        return;
+    };
 
     const configuration = config.readConfiguration();
 
-    const res = getEnvValue(name, configuration);
-
-    if (res) |value| {
-        print.printDebug("getenv({s}) -> \"{s}\"", .{ name, value });
-    } else {
-        print.printDebug("getenv({s}) -> null", .{name});
+    if (!evaluateAllowDeny(configuration)) {
+        return;
     }
 
-    return res;
-}
+    const maybe_modified_resource_attributes = res_attrs.getModifiedOtelResourceAttributesValue(std.posix.getenv(res_attrs.otel_resource_attributes_env_var_name)) catch |err| {
+        print.printError("cannot calculate modified OTEL_RESOURCE_ATTRIBUTES: {}", .{err});
+        return;
+    };
 
-fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) ?types.NullTerminatedString {
-    if (!custom_env_vars_are_injected) {
-        if (setCustomEnvVariables(configuration.all_auto_instrumentation_agents_env_vars)) {
-            custom_env_vars_are_injected = true;
+    if (maybe_modified_resource_attributes) |modified_resource_attributes| {
+        const setenv_res =
+            libc_info.setenv_fn_ptr(
+                res_attrs.otel_resource_attributes_env_var_name,
+                modified_resource_attributes,
+                true,
+            );
+        if (setenv_res == 0) {
+            print.printDebug(
+                "setting \"{s}\"=\"{s}\"",
+                .{ res_attrs.otel_resource_attributes_env_var_name, modified_resource_attributes },
+            );
         } else {
-            print.printError("failed to set environment variables from configuration", .{});
+            print.printError(
+                "failed to set \"{s}\"=\"{s}\", setenv returned: {d}",
+                .{ res_attrs.otel_resource_attributes_env_var_name, modified_resource_attributes, setenv_res },
+            );
         }
     }
 
-    const original_value = std.posix.getenv(name);
+    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, node_js.node_options_env_var_name, configuration);
+    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, jvm.java_tool_options_env_var_name, configuration);
+    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, dotnet.coreclr_enable_profiling_env_var_name, configuration);
+    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, dotnet.coreclr_profiler_env_var_name, configuration);
+    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, dotnet.coreclr_profiler_path_env_var_name, configuration);
+    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, dotnet.dotnet_additional_deps_env_var_name, configuration);
+    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, dotnet.dotnet_shared_store_env_var_name, configuration);
+    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, dotnet.dotnet_startup_hooks_env_var_name, configuration);
+    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, dotnet.otel_dotnet_auto_home_env_var_name, configuration);
+    setCustomEnvironmentVariables(libc_info.setenv_fn_ptr, configuration.all_auto_instrumentation_agents_env_vars);
+    print.printInfo("environment injection finished", .{});
+}
 
-    const exe_path = getExecutablePath();
-    const args = getCommandLineArgs();
+fn updateStdOsEnviron() !void {
+    // Dynamic libs do not get the std.os.environ initialized, see https://github.com/ziglang/zig/issues/4524, so we
+    // back fill it. This logic is based on parsing of envp on zig's start.
+    if (environ_ptr) |environment_ptr| {
+        const env_array = environment_ptr.*;
+        var env_var_count: usize = 0;
+        // Note: env_array will be empty in some cases, for example if the application calls clearenv. Accessing
+        // env_array[0] as we do in the while loop below would segfault. Instead we initialize an empty environ slice.
+        if (env_array == 0) {
+            std.os.environ = &.{};
+            return;
+        }
+        while (env_array[env_var_count] != null) : (env_var_count += 1) {}
+
+        std.os.environ = @ptrCast(@constCast(env_array[0..env_var_count]));
+    } else {
+        return error.CannotFindEnvironSymbol;
+    }
+}
+
+fn evaluateAllowDeny(configuration: config.InjectorConfiguration) bool {
+    const exe_path = getExecutablePath() catch {
+        // Skip allow-deny evaluation if getting the executable path has failed. The error has already been logged in
+        // getExecutablePath.
+        return true;
+    };
+    const args = getCommandLineArgs() catch {
+        // Skip allow-deny evaluation if getting the arguments has failed. The error has already been logged in
+        // getCommandLineArgs.
+        return true;
+    };
 
     var allow = (configuration.include_paths.len == 0) or pattern_matcher.matchesAnyPattern(exe_path, configuration.include_paths);
     allow = allow or (configuration.include_args.len == 0) or pattern_matcher.matchesManyAnyPattern(args, configuration.include_args);
@@ -126,214 +172,134 @@ fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) 
                 }
             }
         }
-        if (original_value) |val| {
-            return val.ptr;
+        return false;
+    }
+    return true;
+}
+
+fn getCommandLineArgs() ![]const []const u8 {
+    // Get command line arguments.
+    // Dynamically injected libraries don't get std.process.argsAlloc populated and
+    // neither does std.os.argv. We read using the /proc/{pid}/cmdline.
+    const cmdline_args = args_parser.cmdLineForPID(alloc.page_allocator) catch |err| {
+        print.printDebug("failed to get executable arguments: {any}", .{err});
+        return err;
+    };
+
+    if (print.isDebug()) {
+        for (cmdline_args, 0..) |arg, i| {
+            print.printDebug("arg[{d}]: {s}", .{ i, arg });
         }
-        return null;
     }
 
-    if (std.mem.eql(
-        u8,
-        name,
-        res_attrs.otel_resource_attributes_env_var_name,
-    )) {
-        if (!modified_otel_resource_attributes_value_calculated) {
-            modified_otel_resource_attributes_value = res_attrs.getModifiedOtelResourceAttributesValue(original_value);
-            modified_otel_resource_attributes_value_calculated = true;
+    return cmdline_args;
+}
+
+fn getExecutablePath() ![]u8 {
+    // Get the program full executable path
+    const executable_path = std.fs.selfExePathAlloc(alloc.page_allocator) catch |err| {
+        print.printDebug("failed to get executable path: {any}", .{err});
+        return err;
+    };
+
+    print.printDebug("executable: {s}", .{executable_path});
+
+    return executable_path;
+}
+
+fn modifyEnvironmentVariable(setenv_fn_ptr: types.SetenvFnPtr, name: [:0]const u8, configuration: config.InjectorConfiguration) void {
+    if (getEnvValue(name, configuration)) |value| {
+        const setenv_res = setenv_fn_ptr(name, value, true);
+        if (setenv_res == 0) {
+            print.printDebug(
+                "setting \"{s}\"=\"{s}\"",
+                .{ name, value },
+            );
+        } else {
+            print.printError(
+                "failed to set \"{s}\"=\"{s}\", setenv returned: {d}",
+                .{ name, value, setenv_res },
+            );
         }
-        if (modified_otel_resource_attributes_value) |updated_value| {
-            return updated_value;
-        }
-    } else if (std.mem.eql(u8, name, jvm.java_tool_options_env_var_name)) {
-        if (!modified_java_tool_options_value_calculated) {
-            modified_java_tool_options_value =
-                jvm.checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(original_value, configuration);
-            modified_java_tool_options_value_calculated = true;
-        }
-        if (modified_java_tool_options_value) |updated_value| {
-            return updated_value;
-        }
+    }
+}
+
+fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) ?types.NullTerminatedString {
+    const original_value = std.posix.getenv(name);
+
+    if (std.mem.eql(u8, name, jvm.java_tool_options_env_var_name)) {
+        return jvm.checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(original_value, configuration);
     } else if (std.mem.eql(u8, name, node_js.node_options_env_var_name)) {
-        if (!modified_node_options_value_calculated) {
-            modified_node_options_value =
-                node_js.checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
-                    original_value,
-                    configuration,
-                );
-            modified_node_options_value_calculated = true;
-        }
-        if (modified_node_options_value) |updated_value| {
-            return updated_value;
-        }
-    } else if (std.mem.eql(u8, name, "CORECLR_ENABLE_PROFILING")) {
+        return node_js.checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(original_value, configuration);
+    } else if (std.mem.eql(u8, name, dotnet.coreclr_enable_profiling_env_var_name)) {
         if (dotnet.getDotnetValues(configuration)) |v| {
             return v.coreclr_enable_profiling;
         }
-    } else if (std.mem.eql(u8, name, "CORECLR_PROFILER")) {
+    } else if (std.mem.eql(u8, name, dotnet.coreclr_profiler_env_var_name)) {
         if (dotnet.getDotnetValues(configuration)) |v| {
             return v.coreclr_profiler;
         }
-    } else if (std.mem.eql(u8, name, "CORECLR_PROFILER_PATH")) {
+    } else if (std.mem.eql(u8, name, dotnet.coreclr_profiler_path_env_var_name)) {
         if (dotnet.getDotnetValues(configuration)) |v| {
             return v.coreclr_profiler_path;
         }
-    } else if (std.mem.eql(u8, name, "DOTNET_ADDITIONAL_DEPS")) {
+    } else if (std.mem.eql(u8, name, dotnet.dotnet_additional_deps_env_var_name)) {
         if (dotnet.getDotnetValues(configuration)) |v| {
             return v.additional_deps;
         }
-    } else if (std.mem.eql(u8, name, "DOTNET_SHARED_STORE")) {
+    } else if (std.mem.eql(u8, name, dotnet.dotnet_shared_store_env_var_name)) {
         if (dotnet.getDotnetValues(configuration)) |v| {
             return v.shared_store;
         }
-    } else if (std.mem.eql(u8, name, "DOTNET_STARTUP_HOOKS")) {
+    } else if (std.mem.eql(u8, name, dotnet.dotnet_startup_hooks_env_var_name)) {
         if (dotnet.getDotnetValues(configuration)) |v| {
             return v.startup_hooks;
         }
-    } else if (std.mem.eql(u8, name, "OTEL_DOTNET_AUTO_HOME")) {
+    } else if (std.mem.eql(u8, name, dotnet.otel_dotnet_auto_home_env_var_name)) {
         if (dotnet.getDotnetValues(configuration)) |v| {
             return v.otel_auto_home;
         }
     }
 
-    // The requested environment variable is not one that we want to modify, hence we just return the original value by
-    // returning a pointer to it.
-    if (original_value) |val| {
-        return val.ptr;
-    }
-
-    // The requested environment variable is not one that we want to modify, and it does not exist. Return null.
     return null;
 }
 
-fn setCustomEnvVariables(custom_env_vars: std.StringHashMap([]u8)) bool {
+fn setCustomEnvironmentVariables(setenv_fn_ptr: types.SetenvFnPtr, custom_env_vars: std.StringHashMap([]u8)) void {
     if (custom_env_vars.count() == 0) {
-        return true;
+        return;
     }
-
-    const environment_optional: [*:null]?[*:0]u8 = @ptrCast(@alignCast(__environ));
-    const environment_count = countEnvironmentVariables(environment_optional);
-
-    var vars_to_update_count: usize = 0;
-    for (0..environment_count) |i| {
-        if (environment_optional[i]) |env_entry| {
-            const slice = std.mem.sliceTo(env_entry, 0);
-            if (std.mem.indexOfScalar(u8, slice, '=')) |equals_idx| {
-                const entry_name = slice[0..equals_idx];
-                if (custom_env_vars.contains(entry_name)) {
-                    vars_to_update_count += 1;
-                }
-            }
-        }
-    }
-
-    const new_size = environment_count + (custom_env_vars.count() - vars_to_update_count) + 1;
-    const new_environment = alloc.page_allocator.allocSentinel(?[*:0]u8, new_size, null) catch {
-        print.printError("failed to allocate memory for environment array", .{});
-        return false;
-    };
-
-    for (0..environment_count) |i| {
-        new_environment[i] = environment_optional[i];
-    }
-
-    var updated_vars = std.StringHashMap(bool).init(alloc.page_allocator);
-    defer updated_vars.deinit();
-
-    // Update existing variables
-    for (0..environment_count) |i| {
-        const raw_env_var = std.mem.sliceTo(new_environment[i].?, 0);
-        if (std.mem.indexOfScalar(u8, raw_env_var, '=')) |equalsIdx| {
-            const name = raw_env_var[0..equalsIdx];
-            if (custom_env_vars.get(name)) |value| {
-                new_environment[i] = formatEnvVar(name, value) catch {
-                    print.printError("failed to format environment variable {s}", .{name});
-                    return false;
-                };
-                updated_vars.put(name, true) catch {
-                    print.printError("failed to track updated variable {s}", .{name});
-                    return false;
-                };
-                print.printDebug("updated environment variable {s}={s}", .{ name, value });
-            }
-        }
-    }
-
-    // Append new variables
-    var new_var_index = environment_count;
     var env_var_iterator = custom_env_vars.iterator();
     while (env_var_iterator.next()) |env_var| {
-        const name = env_var.key_ptr.*;
-
-        if (!updated_vars.contains(name)) {
-            const value = std.mem.sliceTo(env_var.value_ptr.*, 0);
-            const env_string = formatEnvVar(name, value) catch {
-                print.printError("failed to format environment variable {s}", .{name});
-                return false;
-            };
-            new_environment[new_var_index] = env_string;
-            new_var_index += 1;
-            print.printDebug("added environment variable {s}={s}", .{ name, value });
+        const name = alloc.page_allocator.dupeZ(u8, env_var.key_ptr.*) catch |err| {
+            print.printError(
+                "error allocating memory for name when setting custom environment variable \"{}\"=\"{}\" (remaining custom environment variables will be skipped) : {}",
+                .{
+                    env_var.key_ptr,
+                    env_var.value_ptr,
+                    err,
+                },
+            );
+            return;
+        };
+        const value = alloc.page_allocator.dupeZ(u8, env_var.value_ptr.*) catch |err| {
+            print.printError(
+                "error allocating memory for value when setting custom environment variable \"{}\"=\"{}\" (remaining custom environment variables will be skipped): {}",
+                .{
+                    env_var.key_ptr,
+                    env_var.value_ptr,
+                    err,
+                },
+            );
+            return;
+        };
+        const setenv_res = setenv_fn_ptr(name, value, true);
+        if (setenv_res == 0) {
+            print.printDebug("setting \"{s}\"=\"{s}\"", .{ name, value });
+        } else {
+            print.printError(
+                "failed to set \"{s}\"=\"{s}\", setenv returned: {d}",
+                .{ name, value, setenv_res },
+            );
         }
     }
-
-    // Add null terminator in the end
-    new_environment[new_var_index] = null;
-
-    const new_environ_ptr: [*]u8 = @ptrCast(new_environment.ptr);
-    __environ = new_environ_ptr;
-    std.os.environ = @as([*][*:0]u8, @ptrCast(new_environment))[0..new_var_index];
-
-    return true;
-}
-
-fn formatEnvVar(name: []const u8, value: []const u8) std.mem.Allocator.Error![:0]u8 {
-    return std.fmt.allocPrintSentinel(alloc.page_allocator, "{s}={s}", .{ name, value }, 0);
-}
-
-fn countEnvironmentVariables(environment: [*:null]?[*:0]u8) usize {
-    var count: usize = 0;
-    if (@intFromPtr(__environ) != 0) { // __environ can be a null pointer, e.g. directly after clearenv()
-        while (environment[count]) |_| : (count += 1) {}
-    }
-    return count;
-}
-
-fn getCommandLineArgs() []const []const u8 {
-    // Get command line arguments (cached after first read)
-    // Dynamically injected libraries don't get std.process.argsAlloc populated and
-    // neither does std.os.argv. We read using the /proc/{pid}/cmdline.
-    if (!cached_cmdline_args_calculated) {
-        cached_cmdline_args = args_parser.cmdLineForPID(alloc.page_allocator) catch |err| {
-            print.printDebug("failed to get executable arguments: {any}", .{err});
-            cached_cmdline_args = &[_][]const u8{};
-            cached_cmdline_args_calculated = true;
-            return cached_cmdline_args;
-        };
-        cached_cmdline_args_calculated = true;
-
-        if (print.isDebug()) {
-            for (cached_cmdline_args, 0..) |arg, i| {
-                print.printDebug("arg[{d}]: {s}", .{ i, arg });
-            }
-        }
-    }
-
-    return cached_cmdline_args;
-}
-
-fn getExecutablePath() []u8 {
-    if (!cached_executable_path_calculated) {
-        // Get the program full executable path
-        cached_executable_path = std.fs.selfExePathAlloc(alloc.page_allocator) catch |err| {
-            print.printDebug("failed to get executable path: {any}", .{err});
-            cached_executable_path_calculated = true;
-            cached_executable_path = &[_]u8{};
-            return cached_executable_path;
-        };
-
-        cached_executable_path_calculated = true;
-        print.printDebug("executable: {s}", .{cached_executable_path});
-    }
-
-    return cached_executable_path;
 }

@@ -1,0 +1,88 @@
+00400000-06984000 r-xp 00000000 00:c4 758666                             /usr/local/bin/node
+0699c000-069a0000 r--p 0658c000 00:c4 758666                             /usr/local/bin/node
+069a0000-069e2000 rw-p 06590000 00:c4 758666                             /usr/local/bin/node
+069e2000-06a15000 rw-p 00000000 00:00 0 
+0a01b000-0a213000 rw-p 00000000 00:00 0                                  [heap]
+10f80000-10fc0000 rw-p 00000000 00:00 0 
+4b6c0000-4b6fd000 rw-p 00000000 00:00 0 
+2f8480000-2f84c1000 rw-p 00000000 00:00 0 
+32ffc0000-330000000 rw-p 00000000 00:00 0 
+3679c0000-367a00000 rw-p 00000000 00:00 0 
+39f200000-39f240000 rw-p 00000000 00:00 0 
+4797c0000-479800000 rw-p 00000000 00:00 0 
+667440000-667480000 rw-p 00000000 00:00 0 
+fc6880000-fc68c0000 rw-p 00000000 00:00 0 
+110bb00000-110bb13000 rw-p 00000000 00:00 0 
+1243180000-12431c0000 rw-p 00000000 00:00 0 
+1325200000-1325240000 rw-p 00000000 00:00 0 
+134a000000-134a040000 r--p 00000000 00:00 0 
+13f4bc0000-13f4c00000 rw-p 00000000 00:00 0 
+1833800000-1833840000 rw-p 00000000 00:00 0 
+1ca4b80000-1ca4bc0000 rw-p 00000000 00:00 0 
+1da0440000-1da045b000 r--p 00000000 00:00 0 
+2963d00000-2963d40000 rw-p 00000000 00:00 0 
+3071680000-30716c0000 rw-p 00000000 00:00 0 
+361c400000-361c440000 rw-p 00000000 00:00 0 
+3d6c480000-3d6c4c0000 rw-p 00000000 00:00 0 
+3dbc3c0000-3dbc400000 rw-p 00000000 00:00 0 
+ffff68000000-ffff68021000 rw-p 00000000 00:00 0 
+ffff68021000-ffff6c000000 ---p 00000000 00:00 0 
+ffff70000000-ffff70021000 rw-p 00000000 00:00 0 
+ffff70021000-ffff74000000 ---p 00000000 00:00 0 
+ffff77200000-ffff87200000 rwxp 00000000 00:00 0 
+ffff87200000-ffff8f200000 ---p 00000000 00:00 0 
+ffff8f400000-ffff8f410000 r--p 00000000 00:00 0 
+ffff8f410000-ffff8f430000 rw-p 00000000 00:00 0 
+ffff8f430000-ffff9f400000 ---p 00000000 00:00 0 
+ffff9f600000-ffff9f601000 ---p 00000000 00:00 0 
+ffff9f601000-ffff9fe01000 rw-p 00000000 00:00 0 
+ffffa0000000-ffffa0021000 rw-p 00000000 00:00 0 
+ffffa0021000-ffffa4000000 ---p 00000000 00:00 0 
+ffffa4a00000-ffffa4a01000 ---p 00000000 00:00 0 
+ffffa4a01000-ffffa5201000 rw-p 00000000 00:00 0 
+ffffa5400000-ffffa5401000 ---p 00000000 00:00 0 
+ffffa5401000-ffffa5c01000 rw-p 00000000 00:00 0 
+ffffa5e00000-ffffa5e01000 ---p 00000000 00:00 0 
+ffffa5e01000-ffffa6601000 rw-p 00000000 00:00 0 
+ffffa6800000-ffffa6801000 ---p 00000000 00:00 0 
+ffffa6801000-ffffa7001000 rw-p 00000000 00:00 0 
+ffffa709f000-ffffa70a0000 ---p 00000000 00:00 0 
+ffffa70a0000-ffffa70c0000 rw-p 00000000 00:00 0 
+ffffa70c0000-ffffa7103000 rw-p 00000000 00:00 0 
+ffffa7103000-ffffa7107000 rw-p 00000000 00:00 0 
+ffffa7107000-ffffa7183000 ---p 00000000 00:00 0 
+ffffa7183000-ffffa72b3000 rw-p 00000000 00:00 0 
+ffffa72b3000-ffffa740f000 r-xp 00000000 00:c4 503632                     /lib/aarch64-linux-gnu/libc-2.31.so
+ffffa740f000-ffffa741e000 ---p 0015c000 00:c4 503632                     /lib/aarch64-linux-gnu/libc-2.31.so
+ffffa741e000-ffffa7422000 r--p 0015b000 00:c4 503632                     /lib/aarch64-linux-gnu/libc-2.31.so
+ffffa7422000-ffffa7424000 rw-p 0015f000 00:c4 503632                     /lib/aarch64-linux-gnu/libc-2.31.so
+ffffa7424000-ffffa7427000 rw-p 00000000 00:00 0 
+ffffa7427000-ffffa7443000 r-xp 00000000 00:c4 503675                     /lib/aarch64-linux-gnu/libpthread-2.31.so
+ffffa7443000-ffffa7452000 ---p 0001c000 00:c4 503675                     /lib/aarch64-linux-gnu/libpthread-2.31.so
+ffffa7452000-ffffa7453000 r--p 0001b000 00:c4 503675                     /lib/aarch64-linux-gnu/libpthread-2.31.so
+ffffa7453000-ffffa7454000 rw-p 0001c000 00:c4 503675                     /lib/aarch64-linux-gnu/libpthread-2.31.so
+ffffa7454000-ffffa7458000 rw-p 00000000 00:00 0 
+ffffa7458000-ffffa746b000 r-xp 00000000 00:c4 503646                     /lib/aarch64-linux-gnu/libgcc_s.so.1
+ffffa746b000-ffffa747a000 ---p 00013000 00:c4 503646                     /lib/aarch64-linux-gnu/libgcc_s.so.1
+ffffa747a000-ffffa747b000 r--p 00012000 00:c4 503646                     /lib/aarch64-linux-gnu/libgcc_s.so.1
+ffffa747b000-ffffa747c000 rw-p 00013000 00:c4 503646                     /lib/aarch64-linux-gnu/libgcc_s.so.1
+ffffa747c000-ffffa7515000 r-xp 00000000 00:c4 503653                     /lib/aarch64-linux-gnu/libm-2.31.so
+ffffa7515000-ffffa7525000 ---p 00099000 00:c4 503653                     /lib/aarch64-linux-gnu/libm-2.31.so
+ffffa7525000-ffffa7526000 r--p 00099000 00:c4 503653                     /lib/aarch64-linux-gnu/libm-2.31.so
+ffffa7526000-ffffa7527000 rw-p 0009a000 00:c4 503653                     /lib/aarch64-linux-gnu/libm-2.31.so
+ffffa7527000-ffffa76de000 r-xp 00000000 00:c4 504434                     /usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.28
+ffffa76de000-ffffa76ee000 ---p 001b7000 00:c4 504434                     /usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.28
+ffffa76ee000-ffffa76f9000 r--p 001b7000 00:c4 504434                     /usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.28
+ffffa76f9000-ffffa76fc000 rw-p 001c2000 00:c4 504434                     /usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.28
+ffffa76fc000-ffffa76ff000 rw-p 00000000 00:00 0 
+ffffa76ff000-ffffa7702000 r-xp 00000000 00:c4 503640                     /lib/aarch64-linux-gnu/libdl-2.31.so
+ffffa7702000-ffffa7711000 ---p 00003000 00:c4 503640                     /lib/aarch64-linux-gnu/libdl-2.31.so
+ffffa7711000-ffffa7712000 r--p 00002000 00:c4 503640                     /lib/aarch64-linux-gnu/libdl-2.31.so
+ffffa7712000-ffffa7713000 rw-p 00003000 00:c4 503640                     /lib/aarch64-linux-gnu/libdl-2.31.so
+ffffa7713000-ffffa7734000 r-xp 00000000 00:c4 503620                     /lib/aarch64-linux-gnu/ld-2.31.so
+ffffa7737000-ffffa773f000 rw-p 00000000 00:00 0 
+ffffa7741000-ffffa7743000 r--p 00000000 00:00 0                          [vvar]
+ffffa7743000-ffffa7744000 r-xp 00000000 00:00 0                          [vdso]
+ffffa7744000-ffffa7745000 r--p 00021000 00:c4 503620                     /lib/aarch64-linux-gnu/ld-2.31.so
+ffffa7745000-ffffa7747000 rw-p 00022000 00:c4 503620                     /lib/aarch64-linux-gnu/ld-2.31.so
+ffffe0ee2000-ffffe0f03000 rw-p 00000000 00:00 0                          [stack]

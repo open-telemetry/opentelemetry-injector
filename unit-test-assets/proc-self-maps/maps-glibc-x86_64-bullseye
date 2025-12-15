@@ -1,0 +1,143 @@
+00400000-00f3e000 r--p 00000000 00:c4 755179                             /usr/local/bin/node
+00f3e000-00f41000 r-xp 00b3e000 00:c4 755179                             /usr/local/bin/node
+00f41000-00f42000 ---p 00000000 00:00 0 
+00f42000-03730000 r-xp 00b42000 00:c4 755179                             /usr/local/bin/node
+03730000-03800000 ---p 00000000 00:00 0 
+03800000-03801000 r-xp 03400000 00:c4 755179                             /usr/local/bin/node
+03801000-06e47000 r--p 03401000 00:c4 755179                             /usr/local/bin/node
+06e47000-06e4b000 r--p 06a46000 00:c4 755179                             /usr/local/bin/node
+06e4b000-06e76000 rw-p 06a4a000 00:c4 755179                             /usr/local/bin/node
+06e76000-070d5000 rw-p 00000000 00:00 0 
+8fb7180000-8fb71c0000 rw-p 00000000 00:00 0 
+521ea180000-521ea1c0000 rw-p 00000000 00:00 0 
+7da70340000-7da70380000 rw-p 00000000 00:00 0 
+941d8dc0000-941d8e00000 rw-p 00000000 00:00 0 
+c7d66e00000-c7d66e40000 rw-p 00000000 00:00 0 
+dde63580000-dde635c0000 rw-p 00000000 00:00 0 
+111673240000-111673280000 rw-p 00000000 00:00 0 
+1130e2780000-1130e27c0000 rw-p 00000000 00:00 0 
+119560100000-119560140000 rw-p 00000000 00:00 0 
+16dacd880000-16dacd89e000 r--p 00000000 00:00 0 
+17499d9c0000-17499da00000 rw-p 00000000 00:00 0 
+19227d5c0000-19227d600000 rw-p 00000000 00:00 0 
+19b0566c0000-19b056700000 rw-p 00000000 00:00 0 
+1a906ec80000-1a906ecc0000 rw-p 00000000 00:00 0 
+1c7d03d40000-1c7d03d47000 rw-p 00000000 00:00 0 
+1fc068700000-1fc068740000 rw-p 00000000 00:00 0 
+2907b3b80000-2907b3bc0000 rw-p 00000000 00:00 0 
+2a5c118c0000-2a5c11900000 rw-p 00000000 00:00 0 
+2abeba9c0000-2abebaa00000 rw-p 00000000 00:00 0 
+2bd1f2540000-2bd1f2580000 rw-p 00000000 00:00 0 
+2e9fd5180000-2e9fd51c1000 rw-p 00000000 00:00 0 
+35fbc4340000-35fbc4347000 rw-p 00000000 00:00 0 
+368308580000-3683085c0000 rw-p 00000000 00:00 0 
+3e887b500000-3e887b540000 rw-p 00000000 00:00 0 
+7fffd0000000-7fffd0021000 rw-p 00000000 00:00 0 
+7fffd0021000-7fffd4000000 ---p 00000000 00:00 0 
+7fffd8000000-7fffd8021000 rw-p 00000000 00:00 0 
+7fffd8021000-7fffdc000000 ---p 00000000 00:00 0 
+7fffe0000000-7fffe8000000 ---p 00000000 00:00 0 
+7fffe8000000-7fffe8010000 r--p 00000000 00:00 0 
+7fffe8010000-7fffe8030000 rw-p 00000000 00:00 0 
+7fffe8030000-7ffff8000000 ---p 00000000 00:00 0 
+7ffff8000000-7ffff8021000 rw-p 00000000 00:00 0 
+7ffff8021000-7ffffc000000 ---p 00000000 00:00 0 
+7ffffc8c3000-7ffffc8c4000 ---p 00000000 00:00 0 
+7ffffc8c4000-7ffffc8cc000 rw-p 00000000 00:00 0 
+7ffffc8cc000-7ffffc8ed000 rw-p 00000000 00:00 0 
+7ffffc8ed000-7ffffc8f1000 rw-p 00000000 00:00 0 
+7ffffc8f1000-7ffffc96d000 ---p 00000000 00:00 0 
+7ffffc96d000-7ffffc96e000 ---p 00000000 00:00 0 
+7ffffc96e000-7ffffd16e000 rw-p 00000000 00:00 0 
+7ffffd16e000-7ffffd16f000 ---p 00000000 00:00 0 
+7ffffd16f000-7ffffd96f000 rw-p 00000000 00:00 0 
+7ffffd96f000-7ffffd970000 ---p 00000000 00:00 0 
+7ffffd970000-7ffffe170000 rw-p 00000000 00:00 0 
+7ffffe170000-7ffffe171000 ---p 00000000 00:00 0 
+7ffffe171000-7ffffe971000 rw-p 00000000 00:00 0 
+7ffffe971000-7ffffe972000 ---p 00000000 00:00 0 
+7ffffe972000-7fffff172000 rw-p 00000000 00:00 0 
+7fffff172000-7fffff2a7000 rw-p 00000000 00:00 0 
+7fffff2a7000-7fffff2c9000 r--p 00000000 00:c4 750649                     /lib/x86_64-linux-gnu/libc-2.31.so
+7fffff2c9000-7fffff422000 r-xp 00022000 00:c4 750649                     /lib/x86_64-linux-gnu/libc-2.31.so
+7fffff422000-7fffff471000 r--p 0017b000 00:c4 750649                     /lib/x86_64-linux-gnu/libc-2.31.so
+7fffff471000-7fffff475000 r--p 001c9000 00:c4 750649                     /lib/x86_64-linux-gnu/libc-2.31.so
+7fffff475000-7fffff477000 rw-p 001cd000 00:c4 750649                     /lib/x86_64-linux-gnu/libc-2.31.so
+7fffff477000-7fffff47b000 rw-p 00000000 00:00 0 
+7fffff47b000-7fffff481000 r--p 00000000 00:c4 750694                     /lib/x86_64-linux-gnu/libpthread-2.31.so
+7fffff481000-7fffff491000 r-xp 00006000 00:c4 750694                     /lib/x86_64-linux-gnu/libpthread-2.31.so
+7fffff491000-7fffff497000 r--p 00016000 00:c4 750694                     /lib/x86_64-linux-gnu/libpthread-2.31.so
+7fffff497000-7fffff498000 r--p 0001b000 00:c4 750694                     /lib/x86_64-linux-gnu/libpthread-2.31.so
+7fffff498000-7fffff499000 rw-p 0001c000 00:c4 750694                     /lib/x86_64-linux-gnu/libpthread-2.31.so
+7fffff499000-7fffff49d000 rw-p 00000000 00:00 0 
+7fffff49d000-7fffff4a0000 r--p 00000000 00:c4 750663                     /lib/x86_64-linux-gnu/libgcc_s.so.1
+7fffff4a0000-7fffff4b1000 r-xp 00003000 00:c4 750663                     /lib/x86_64-linux-gnu/libgcc_s.so.1
+7fffff4b1000-7fffff4b5000 r--p 00014000 00:c4 750663                     /lib/x86_64-linux-gnu/libgcc_s.so.1
+7fffff4b5000-7fffff4b6000 r--p 00017000 00:c4 750663                     /lib/x86_64-linux-gnu/libgcc_s.so.1
+7fffff4b6000-7fffff4b7000 rw-p 00018000 00:c4 750663                     /lib/x86_64-linux-gnu/libgcc_s.so.1
+7fffff4b7000-7fffff4c4000 r--p 00000000 00:c4 750670                     /lib/x86_64-linux-gnu/libm-2.31.so
+7fffff4c4000-7fffff55e000 r-xp 0000d000 00:c4 750670                     /lib/x86_64-linux-gnu/libm-2.31.so
+7fffff55e000-7fffff5f9000 r--p 000a7000 00:c4 750670                     /lib/x86_64-linux-gnu/libm-2.31.so
+7fffff5f9000-7fffff5fa000 r--p 00141000 00:c4 750670                     /lib/x86_64-linux-gnu/libm-2.31.so
+7fffff5fa000-7fffff5fb000 rw-p 00142000 00:c4 750670                     /lib/x86_64-linux-gnu/libm-2.31.so
+7fffff5fb000-7fffff691000 r--p 00000000 00:c4 751425                     /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.28
+7fffff691000-7fffff76d000 r-xp 00096000 00:c4 751425                     /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.28
+7fffff76d000-7fffff7b7000 r--p 00172000 00:c4 751425                     /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.28
+7fffff7b7000-7fffff7c2000 r--p 001bb000 00:c4 751425                     /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.28
+7fffff7c2000-7fffff7c5000 rw-p 001c6000 00:c4 751425                     /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.28
+7fffff7c5000-7fffff7ca000 rw-p 00000000 00:00 0 
+7fffff7ca000-7fffff7cb000 r--p 00000000 00:c4 750657                     /lib/x86_64-linux-gnu/libdl-2.31.so
+7fffff7cb000-7fffff7cd000 r-xp 00001000 00:c4 750657                     /lib/x86_64-linux-gnu/libdl-2.31.so
+7fffff7cd000-7fffff7ce000 r--p 00003000 00:c4 750657                     /lib/x86_64-linux-gnu/libdl-2.31.so
+7fffff7ce000-7fffff7cf000 r--p 00003000 00:c4 750657                     /lib/x86_64-linux-gnu/libdl-2.31.so
+7fffff7cf000-7fffff7d0000 rw-p 00004000 00:c4 750657                     /lib/x86_64-linux-gnu/libdl-2.31.so
+7fffff7d2000-7fffff7d3000 ---p 00000000 00:00 0 
+7fffff7d3000-7ffffffd3000 rw-p 00000000 00:00 0 
+7ffffffd3000-7ffffffd4000 r--p 00000000 00:c4 750637                     /lib/x86_64-linux-gnu/ld-2.31.so
+7ffffffd4000-7fffffff4000 r-xp 00001000 00:c4 750637                     /lib/x86_64-linux-gnu/ld-2.31.so
+7fffffff4000-7fffffffc000 r--p 00021000 00:c4 750637                     /lib/x86_64-linux-gnu/ld-2.31.so
+7fffffffc000-7fffffffd000 ---p 00000000 00:00 0 
+7fffffffd000-7fffffffe000 r--p 00029000 00:c4 750637                     /lib/x86_64-linux-gnu/ld-2.31.so
+7fffffffe000-7ffffffff000 rw-p 0002a000 00:c4 750637                     /lib/x86_64-linux-gnu/ld-2.31.so
+7ffffffff000-800000000000 rw-p 00000000 00:00 0 
+800000000000-800000026000 r--p 00000000 00:2a 2                          /run/rosetta/rosetta
+800000026000-800000097000 r-xp 00026000 00:2a 2                          /run/rosetta/rosetta
+8000000a0000-8000001a6000 rw-p 000a0000 00:2a 2                          /run/rosetta/rosetta
+effff785b000-effff7993000 rw-p 00000000 00:00 0 
+effff7993000-effff7994000 ---p 00000000 00:00 0 
+effff7994000-effff7998000 rw-p 00000000 00:00 0 
+effff7998000-effff7999000 ---p 00000000 00:00 0 
+effff7999000-effff7c9a000 rw-p 00000000 00:00 0 
+effff7c9a000-effff7c9b000 ---p 00000000 00:00 0 
+effff7c9b000-effff7c9f000 rw-p 00000000 00:00 0 
+effff7c9f000-effff7ca0000 ---p 00000000 00:00 0 
+effff7ca0000-effff7ca8000 rw-p 00000000 00:00 0 
+effff7ca8000-effff7ca9000 ---p 00000000 00:00 0 
+effff7ca9000-effff7cad000 rw-p 00000000 00:00 0 
+effff7cad000-effff7cae000 ---p 00000000 00:00 0 
+effff7cae000-effff7cb6000 rw-p 00000000 00:00 0 
+effff7cb6000-effff7cb7000 ---p 00000000 00:00 0 
+effff7cb7000-effff7cbf000 rw-p 00000000 00:00 0 
+effff7cbf000-effff7cc0000 ---p 00000000 00:00 0 
+effff7cc0000-effff7cc4000 rw-p 00000000 00:00 0 
+effff7cc4000-effff7cc5000 ---p 00000000 00:00 0 
+effff7cc5000-effff7d8f000 rw-p 00000000 00:00 0 
+effff7d8f000-effff7d91000 rw-p 00000000 00:00 0 
+effff7d91000-effff7d92000 ---p 00000000 00:00 0 
+effff7d92000-effff7d96000 rw-p 00000000 00:00 0 
+effff7d96000-effff7d97000 ---p 00000000 00:00 0 
+effff7d97000-effff7de7000 rw-p 00000000 00:00 0 
+effff7de7000-effff7de8000 ---p 00000000 00:00 0 
+effff7de8000-effff7dec000 rw-p 00000000 00:00 0 
+effff7dec000-effff7ded000 ---p 00000000 00:00 0 
+effff7ded000-effff7ff8000 rw-p 00000000 00:00 0 
+effff7ff8000-efffffff8000 rwxp 00000000 00:00 0 
+efffffff8000-efffffff9000 ---p 00000000 00:00 0 
+efffffff9000-f0001685e000 rw-p 00000000 00:00 0 
+ffff87e00000-ffff87e03000 r-xp 00000000 00:00 0 
+ffff87e03000-ffffa7bc0000 rwxp 00000000 00:00 0 
+ffffa7bc0000-ffffa7dc4000 r-xp 01d51000 00:c4 755179                     /usr/local/bin/node
+ffffa7dc4000-ffffa7e00000 rwxp 00000000 00:00 0 
+ffffa7ef2000-ffffa7ef4000 r--p 00000000 00:00 0                          [vvar]
+ffffa7ef4000-ffffa7ef5000 r-xp 00000000 00:00 0                          [vdso]
+ffffd6ed1000-ffffd6ef2000 rw-p 00000000 00:00 0                          [stack]

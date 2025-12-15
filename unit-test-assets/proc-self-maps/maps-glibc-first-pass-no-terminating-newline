@@ -1,0 +1,4 @@
+7fffff189000-7fffff2c0000 rw-p 00000000 00:00 0
+7fffff189000-7fffff2c0000 rw-p 00000000 00:00 0
+7fffff2c0000-7fffff2e6000 r--p 00000000 00:c4 739980                     /usr/lib/x86_64-linux-gnu/libc.so.6
+7fffff2e6000-7fffff43c000 r-xp 00026000 00:c4 739980                     /usr/lib/x86_64-linux-gnu/libc.so.6

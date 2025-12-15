@@ -27,7 +27,7 @@ run_test_case \
   "sets k8s.pod.uid and k8s.container.name via OTEL_RESOURCE_ATTRIBUTES with pre-existing value" \
   "app" \
   "node index.js otel-resource-attributes" \
-  "OTEL_RESOURCE_ATTRIBUTES: k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app,foo=bar" \
+  "OTEL_RESOURCE_ATTRIBUTES: foo=bar,k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app" \
   "OTEL_RESOURCE_ATTRIBUTES=foo=bar"
 run_test_case \
   "use mapped app.kubernetes.io labels for service.name and friends" \
@@ -39,11 +39,11 @@ run_test_case \
   "use mapped resource.opentelemetry.io labels as additional resource attributes" \
   "app" \
   "node index.js otel-resource-attributes" \
-  "OTEL_RESOURCE_ATTRIBUTES: k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app,aaa=bbb,ccc=ddd" \
+  "OTEL_RESOURCE_ATTRIBUTES: aaa=bbb,ccc=ddd,k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app" \
   "OTEL_INJECTOR_RESOURCE_ATTRIBUTES=aaa=bbb,ccc=ddd"
 run_test_case \
   "combine mapped app.kubernetes.io and resource.opentelemetry.io labels" \
   "app" \
   "node index.js otel-resource-attributes" \
-  "OTEL_RESOURCE_ATTRIBUTES: k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app,service.name=service-name,service.version=service-version,service.namespace=service-namespace,aaa=bbb,ccc=ddd" \
+  "OTEL_RESOURCE_ATTRIBUTES: aaa=bbb,ccc=ddd,k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app,service.name=service-name,service.version=service-version,service.namespace=service-namespace" \
   "OTEL_INJECTOR_SERVICE_NAME=service-name OTEL_INJECTOR_SERVICE_VERSION=service-version OTEL_INJECTOR_SERVICE_NAMESPACE=service-namespace OTEL_INJECTOR_RESOURCE_ATTRIBUTES=aaa=bbb,ccc=ddd"

@@ -31,6 +31,8 @@ pub fn build(b: *std.Build) !void {
         .link_libc = false,
         .pic = true,
         .strip = false,
+        // Avoid a dependency from `__tls_get_addr` when compiling for x86
+        .single_threaded = true,
     });
 
     // Create a dynamically linked library based on the module created above.
@@ -88,6 +90,10 @@ pub fn build(b: *std.Build) !void {
 fn copyInjectorFile(step: *std.Build.Step, _: std.Build.Step.MakeOptions) anyerror!void {
     const source_path = step.owner.pathFromRoot("./zig-out/libinjector.so");
     const dest_path = step.owner.pathFromRoot("so/libotelinject.so");
+    const dest_dir = step.owner.pathFromRoot("so");
+    std.fs.cwd().makePath(dest_dir) catch |err| {
+        if (err != error.PathAlreadyExists) return err;
+    };
     try std.fs.copyFileAbsolute(source_path, dest_path, .{});
 }
 

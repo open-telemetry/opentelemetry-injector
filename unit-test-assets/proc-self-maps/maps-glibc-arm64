@@ -1,0 +1,90 @@
+00400000-06984000 r-xp 00000000 00:c4 746837                             /usr/local/bin/node
+0699c000-069a0000 r--p 0658c000 00:c4 746837                             /usr/local/bin/node
+069a0000-069e2000 rw-p 06590000 00:c4 746837                             /usr/local/bin/node
+069e2000-06a15000 rw-p 00000000 00:00 0 
+11229000-11421000 rw-p 00000000 00:00 0                                  [heap]
+30e00000-30e3d000 rw-p 00000000 00:00 0 
+1c7340000-1c7380000 rw-p 00000000 00:00 0 
+34f640000-34f680000 rw-p 00000000 00:00 0 
+359080000-3590c0000 rw-p 00000000 00:00 0 
+410340000-410380000 r--p 00000000 00:00 0 
+7bd840000-7bd880000 rw-p 00000000 00:00 0 
+85c900000-85c940000 rw-p 00000000 00:00 0 
+8d8380000-8d83c0000 rw-p 00000000 00:00 0 
+aa9240000-aa9280000 rw-p 00000000 00:00 0 
+bae2c0000-bae300000 rw-p 00000000 00:00 0 
+12c4500000-12c4540000 rw-p 00000000 00:00 0 
+163c600000-163c640000 rw-p 00000000 00:00 0 
+1a39700000-1a39740000 rw-p 00000000 00:00 0 
+1a4f0c0000-1a4f100000 rw-p 00000000 00:00 0 
+1e4cb40000-1e4cb80000 rw-p 00000000 00:00 0 
+216d900000-216d91b000 r--p 00000000 00:00 0 
+2c097c0000-2c09801000 rw-p 00000000 00:00 0 
+3589180000-3589193000 rw-p 00000000 00:00 0 
+3b98940000-3b98980000 rw-p 00000000 00:00 0 
+3c04f80000-3c04fc0000 rw-p 00000000 00:00 0 
+3d70680000-3d706c0000 rw-p 00000000 00:00 0 
+3e00040000-3e00080000 rw-p 00000000 00:00 0 
+ffff4c000000-ffff4c021000 rw-p 00000000 00:00 0 
+ffff4c021000-ffff50000000 ---p 00000000 00:00 0 
+ffff54000000-ffff54021000 rw-p 00000000 00:00 0 
+ffff54021000-ffff58000000 ---p 00000000 00:00 0 
+ffff59400000-ffff69400000 rwxp 00000000 00:00 0 
+ffff69400000-ffff71400000 ---p 00000000 00:00 0 
+ffff71600000-ffff71610000 r--p 00000000 00:00 0 
+ffff71610000-ffff71630000 rw-p 00000000 00:00 0 
+ffff71630000-ffff81600000 ---p 00000000 00:00 0 
+ffff81800000-ffff81810000 ---p 00000000 00:00 0 
+ffff81810000-ffff82010000 rw-p 00000000 00:00 0 
+ffff82200000-ffff82210000 ---p 00000000 00:00 0 
+ffff82210000-ffff82a10000 rw-p 00000000 00:00 0 
+ffff82c00000-ffff82c10000 ---p 00000000 00:00 0 
+ffff82c10000-ffff83410000 rw-p 00000000 00:00 0 
+ffff83600000-ffff83610000 ---p 00000000 00:00 0 
+ffff83610000-ffff83e10000 rw-p 00000000 00:00 0 
+ffff84000000-ffff84021000 rw-p 00000000 00:00 0 
+ffff84021000-ffff88000000 ---p 00000000 00:00 0 
+ffff88200000-ffff88210000 ---p 00000000 00:00 0 
+ffff88210000-ffff88a10000 rw-p 00000000 00:00 0 
+ffff88a6f000-ffff88a7f000 ---p 00000000 00:00 0 
+ffff88a7f000-ffff88a9f000 rw-p 00000000 00:00 0 
+ffff88a9f000-ffff88ac0000 rw-p 00000000 00:00 0 
+ffff88ac0000-ffff88ac4000 rw-p 00000000 00:00 0 
+ffff88ac4000-ffff88b40000 ---p 00000000 00:00 0 
+ffff88b40000-ffff88c50000 rw-p 00000000 00:00 0 
+ffff88c50000-ffff88ddb000 r-xp 00000000 00:c4 380551                     /usr/lib/aarch64-linux-gnu/libc.so.6
+ffff88ddb000-ffff88dec000 ---p 0018b000 00:c4 380551                     /usr/lib/aarch64-linux-gnu/libc.so.6
+ffff88dec000-ffff88df0000 r--p 0018c000 00:c4 380551                     /usr/lib/aarch64-linux-gnu/libc.so.6
+ffff88df0000-ffff88df2000 rw-p 00190000 00:c4 380551                     /usr/lib/aarch64-linux-gnu/libc.so.6
+ffff88df2000-ffff88dff000 rw-p 00000000 00:00 0 
+ffff88e00000-ffff88ffb000 r-xp 00000000 00:c4 380629                     /usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.30
+ffff88ffb000-ffff89005000 ---p 001fb000 00:c4 380629                     /usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.30
+ffff89005000-ffff89010000 r--p 00205000 00:c4 380629                     /usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.30
+ffff89010000-ffff89013000 rw-p 00210000 00:c4 380629                     /usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.30
+ffff89013000-ffff89016000 rw-p 00000000 00:00 0 
+ffff8901e000-ffff89050000 rw-p 00000000 00:00 0 
+ffff89050000-ffff89051000 r-xp 00000000 00:c4 380616                     /usr/lib/aarch64-linux-gnu/libpthread.so.0
+ffff89051000-ffff8906f000 ---p 00001000 00:c4 380616                     /usr/lib/aarch64-linux-gnu/libpthread.so.0
+ffff8906f000-ffff89070000 r--p 0000f000 00:c4 380616                     /usr/lib/aarch64-linux-gnu/libpthread.so.0
+ffff89070000-ffff89071000 rw-p 00010000 00:c4 380616                     /usr/lib/aarch64-linux-gnu/libpthread.so.0
+ffff89080000-ffff89094000 r-xp 00000000 00:c4 380573                     /usr/lib/aarch64-linux-gnu/libgcc_s.so.1
+ffff89094000-ffff890af000 ---p 00014000 00:c4 380573                     /usr/lib/aarch64-linux-gnu/libgcc_s.so.1
+ffff890af000-ffff890b0000 r--p 0001f000 00:c4 380573                     /usr/lib/aarch64-linux-gnu/libgcc_s.so.1
+ffff890b0000-ffff890b1000 rw-p 00020000 00:c4 380573                     /usr/lib/aarch64-linux-gnu/libgcc_s.so.1
+ffff890c0000-ffff89142000 r-xp 00000000 00:c4 380590                     /usr/lib/aarch64-linux-gnu/libm.so.6
+ffff89142000-ffff8915f000 ---p 00082000 00:c4 380590                     /usr/lib/aarch64-linux-gnu/libm.so.6
+ffff8915f000-ffff89160000 r--p 0008f000 00:c4 380590                     /usr/lib/aarch64-linux-gnu/libm.so.6
+ffff89160000-ffff89161000 rw-p 00090000 00:c4 380590                     /usr/lib/aarch64-linux-gnu/libm.so.6
+ffff89170000-ffff89171000 r-xp 00000000 00:c4 380564                     /usr/lib/aarch64-linux-gnu/libdl.so.2
+ffff89171000-ffff8918f000 ---p 00001000 00:c4 380564                     /usr/lib/aarch64-linux-gnu/libdl.so.2
+ffff8918f000-ffff89190000 r--p 0000f000 00:c4 380564                     /usr/lib/aarch64-linux-gnu/libdl.so.2
+ffff89190000-ffff89191000 rw-p 00010000 00:c4 380564                     /usr/lib/aarch64-linux-gnu/libdl.so.2
+ffff89191000-ffff891a1000 rw-p 00000000 00:00 0 
+ffff891a1000-ffff891c8000 r-xp 00000000 00:c4 380533                     /usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
+ffff891d3000-ffff891d8000 rw-p 00000000 00:00 0 
+ffff891da000-ffff891dc000 rw-p 00000000 00:00 0 
+ffff891dc000-ffff891de000 r--p 00000000 00:00 0                          [vvar]
+ffff891de000-ffff891df000 r-xp 00000000 00:00 0                          [vdso]
+ffff891df000-ffff891e1000 r--p 0002e000 00:c4 380533                     /usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
+ffff891e1000-ffff891e3000 rw-p 00030000 00:c4 380533                     /usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
+ffffeda70000-ffffeda91000 rw-p 00000000 00:00 0                          [stack]

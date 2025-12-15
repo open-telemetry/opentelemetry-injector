@@ -101,7 +101,7 @@ injector-integration-tests-for-all-architectures:
 	test/scripts/test-all.sh
 
 .PHONY: lint
-lint: zig-fmt-check shellcheck-lint
+lint: zig-fmt-check zig-validate-test-imports shellcheck-lint
 
 .PHONY: zig-fmt-check
 zig-fmt-check: check-zig-installed
@@ -111,6 +111,26 @@ zig-fmt-check: check-zig-installed
 .PHONY: zig-fmt
 zig-fmt: check-zig-installed
 	zig fmt src
+
+.PHONY: zig-validate-test-imports
+zig-validate-test-imports:
+	@set -e; \
+	files=$$(cd src && grep -l 'test "' ./*.zig 2>/dev/null || true); \
+	[ -n "$$files" ] || { echo "None of the .zig files contain any tests, this is likely an error in the zig-validate-test-imports make recipe."; exit 1; }; \
+	echo $$names; \
+	names=$$(printf '%s\n' $$files | sed -e 's|.*/||'); \
+	missing=0; \
+	for n in $$names; do \
+	  if ! grep -q "@import(\"$$n\")" src/test.zig; then \
+	    echo "- The file \"src/test.zig\" is missing an import for \"$$n\", tests in \"$$n\" will ignored."; \
+	    missing=1; \
+	  fi; \
+	done; \
+	if [ $$missing -gt 0 ]; then \
+	  echo ;\
+	  echo "The file \"src/test.zig\" is missing imports to files with Zig unit tests, see above. Please add all files with test cases to \"src/test.zig\"."; \
+	  exit 1; \
+	fi
 
 .PHONY: check-shellcheck-installed
 check-shellcheck-installed:

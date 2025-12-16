@@ -4,7 +4,7 @@
 
 <!-- next version -->
 
-## v0.2.0-20251216
+## v0.0.2-20251216
 
 ### 🛑 Breaking changes 🛑
 

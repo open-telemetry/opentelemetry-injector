@@ -4,7 +4,7 @@
 
 An approver or maintainer can run the GitHub action to [prepare the release from the GitHub Actions page of the repository](https://github.com/open-telemetry/opentelemetry-injector/actions/workflows/prepare-release.yml).
 
-Please enter a valid version string in the dialog (here _without_ the `v` prefix).
+Enter a valid version string in the dialog (here _without_ the `v` prefix).
 The pattern for the version should be X.Y.Z for a regular release, or X.Y.Z-<additional-qualfier> for a release candidate.
 
 The action will trigger the creation of a pull request for review by project approvers ([example](https://github.com/open-telemetry/opentelemetry-injector/pull/112)).
@@ -21,7 +21,7 @@ They can do so either through GitHub or by pushing it via `git tag vX.Y.Z && git
 
 They create a release on this tag and copy the section of the CHANGELOG.md for the release, adding more information as needed ([example](https://github.com/open-telemetry/opentelemetry-injector/releases/tag/v0.0.1-20251030)).
 
-If the release is not meant for production use, please check the box to mark the release as pre-release.
+If the release is not meant for production use, check the box to mark the release as pre-release.
 
 Publish the release with the "Publish release" button.
 

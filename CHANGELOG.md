@@ -4,6 +4,38 @@
 
 <!-- next version -->
 
+## v0.2.0-20251216
+
+### 🛑 Breaking changes 🛑
+
+- `systemd`: Remove systemd instructions (#68)
+  We can remove systemD instructions as the LD_PRELOAD solution works just as well and applies to any software.
+  
+
+### 💡 Enhancements 💡
+
+- `injector`: Adds support for selectively applying instrumentation to subset of programs running on a system (#84)
+  The change allows users to implement filters on what to instrument based on the executable name and the command line arguments
+- `environment`: Add option to pass custom environment variables to agents (#82)
+  Now it is possible to pass custom environment variables to agents.
+  
+  New `all_auto_instrumentation_agents_env_path` configuration option is used to specify path to
+  the `auto_instrumentation_env.conf` - where custom environment variables could be specified.
+  Injector will pass these variables to agents.
+  
+
+### 🧰 Bug fixes 🧰
+
+- `nodejs`: test nodeJS support (#127)
+  Testing identified issues with the RPM and Debian packages.
+  The Debian and RPM packages now contain the nodeJS dependencies organized in a folder structure rather than an archive.
+  The configuration points correctly to the file to load to launch autoinstrumentation.
+  
+  NodeJS tests now run as part of CI.
+  
+
+<!-- previous-version -->
+
 ## v0.0.1-20251030
 
 ### 🛑 Breaking changes 🛑

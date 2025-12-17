@@ -12,6 +12,7 @@ const testing = std.testing;
 
 const config_file_path = "/etc/opentelemetry/otelinject.conf";
 const max_line_length = 8192;
+const empty_string = @constCast("");
 
 const dotnet_path_key = "dotnet_auto_instrumentation_agent_path_prefix";
 const jvm_path_key = "jvm_auto_instrumentation_agent_path";
@@ -193,18 +194,9 @@ fn parseConfiguration(
     cfg_file_path: []const u8,
     comptime applyKeyValueToConfig: ConfigApplier,
 ) void {
-    const max_buffer_len = max_line_length * 2;
-    var buf: [max_buffer_len]u8 = undefined;
+    var buf: [max_line_length]u8 = undefined;
     var reader = config_file.reader(&buf);
-
-    while (reader.interface.takeSentinel('\n')) |line| {
-        if (line.len > max_line_length) {
-            print.printError(
-                "A line in configuration file {s} exceeds the maximum allowed length of {d} characters and will be ignored",
-                .{ cfg_file_path, max_line_length },
-            );
-            continue;
-        }
+    while (takeSentinelOrDiscardOverlyLongLine(&reader, cfg_file_path)) |line| {
         if (parseLine(line, cfg_file_path)) |kv| {
             applyKeyValueToConfig(kv.key, kv.value, cfg_file_path, configuration);
         }
@@ -212,12 +204,6 @@ fn parseConfiguration(
         error.ReadFailed => {
             print.printError("Failed to read configuration file {s}", .{cfg_file_path});
             return;
-        },
-        error.StreamTooLong => {
-            print.printError(
-                "A line in configuration file {s} exceeds the maximum buffer length of {d}",
-                .{ cfg_file_path, max_buffer_len },
-            );
         },
         // if the file does not end with a newline, we still need to parse the last line
         error.EndOfStream => {
@@ -227,6 +213,24 @@ fn parseConfiguration(
                 applyKeyValueToConfig(kv.key, kv.value, cfg_file_path, configuration);
             }
         },
+    }
+}
+
+fn takeSentinelOrDiscardOverlyLongLine(reader: *std.fs.File.Reader, cfg_file_path: []const u8) ![]u8 {
+    if (reader.interface.takeSentinel('\n')) |slice| {
+        return slice;
+    } else |err| switch (err) {
+        error.StreamTooLong => {
+            print.printError(
+                "A line in configuration file {s} exceeds the maximum allowed length of {d} characters and will be ignored.",
+                .{ cfg_file_path, max_line_length },
+            );
+            // Ignore lines that are too long for the buffer; advance the the read positon to the next delimiter to
+            // avoid stream corruption.
+            _ = try reader.interface.discardDelimiterInclusive('\n');
+            return empty_string;
+        },
+        else => |leftover_err| return leftover_err,
     }
 }
 

@@ -1,0 +1,7 @@
+change_type: bug_fix
+component: config
+note: Fix handling of overly long lines in config file
+issues: [174]
+subtext: Continue to read the rest of the config file after discarding an overly long line
+change_logs: []
+

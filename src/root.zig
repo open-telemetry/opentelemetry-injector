@@ -226,7 +226,7 @@ fn setCustomEnvVariables(custom_env_vars: std.StringHashMap([]u8)) bool {
         }
     }
 
-    const new_size = environment_count + vars_to_update_count + 1;
+    const new_size = environment_count + (custom_env_vars.count() - vars_to_update_count) + 1;
     const new_environment = alloc.page_allocator.allocSentinel(?[*:0]u8, new_size, null) catch {
         print.printError("failed to allocate memory for environment array", .{});
         return false;

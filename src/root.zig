@@ -67,6 +67,7 @@ export fn getenv(name_z: types.NullTerminatedString) ?types.NullTerminatedString
     print.printDebug("getenv({s}) called", .{name});
 
     const configuration = config.readConfiguration();
+    defer configuration.deinit();
 
     const res = getEnvValue(name, configuration);
 

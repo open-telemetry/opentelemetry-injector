@@ -46,6 +46,28 @@ pub const InjectorConfiguration = struct {
     exclude_paths: [][]const u8,
     include_args: [][]const u8,
     exclude_args: [][]const u8,
+    allocator: std.mem.Allocator,
+
+    const Self = @This();
+
+    pub fn init(allocator: std.mem.Allocator) InjectorConfiguration {
+        return InjectorConfiguration{
+            .dotnet_auto_instrumentation_agent_path_prefix = "",
+            .jvm_auto_instrumentation_agent_path = "",
+            .nodejs_auto_instrumentation_agent_path = "",
+            .all_auto_instrumentation_agents_env_path = "",
+            .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(allocator),
+            .include_paths = &.{},
+            .exclude_paths = &.{},
+            .include_args = &.{},
+            .exclude_args = &.{},
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.all_auto_instrumentation_agents_env_vars.deinit();
+    }
 };
 
 const ConfigApplier = fn (key: []const u8, value: []u8, file_path: []const u8, configuration: *InjectorConfiguration) void;
@@ -78,22 +100,10 @@ pub fn readConfiguration() InjectorConfiguration {
 
 fn printErrorReturnEmptyConfig(err: std.mem.Allocator.Error) InjectorConfiguration {
     print.printError("Cannot allocate memory for the default injector configuration: {t}", .{err});
-    return InjectorConfiguration{
-        .dotnet_auto_instrumentation_agent_path_prefix = "",
-        .jvm_auto_instrumentation_agent_path = "",
-        .nodejs_auto_instrumentation_agent_path = "",
-        .all_auto_instrumentation_agents_env_path = "",
-        .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(alloc.page_allocator),
-        .include_paths = &.{},
-        .exclude_paths = &.{},
-        .include_args = &.{},
-        .exclude_args = &.{},
-    };
+    return InjectorConfiguration.init(alloc.page_allocator);
 }
 
 fn createDefaultConfiguration() InjectorConfiguration {
-    const all_agent_env_vars = std.StringHashMap([]u8).init(alloc.page_allocator);
-
     const all_env_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_all_auto_instrumentation_agents_env_path}) catch |err| {
         return printErrorReturnEmptyConfig(err);
     };
@@ -107,17 +117,13 @@ fn createDefaultConfiguration() InjectorConfiguration {
         return printErrorReturnEmptyConfig(err);
     };
 
-    return InjectorConfiguration{
-        .dotnet_auto_instrumentation_agent_path_prefix = dotnet_default,
-        .jvm_auto_instrumentation_agent_path = jvm_default,
-        .nodejs_auto_instrumentation_agent_path = nodejs_default,
-        .all_auto_instrumentation_agents_env_path = all_env_default,
-        .all_auto_instrumentation_agents_env_vars = all_agent_env_vars,
-        .include_paths = &.{},
-        .exclude_paths = &.{},
-        .include_args = &.{},
-        .exclude_args = &.{},
-    };
+    var configuration = InjectorConfiguration.init(alloc.page_allocator);
+    configuration.dotnet_auto_instrumentation_agent_path_prefix = dotnet_default;
+    configuration.jvm_auto_instrumentation_agent_path = jvm_default;
+    configuration.nodejs_auto_instrumentation_agent_path = nodejs_default;
+    configuration.all_auto_instrumentation_agents_env_path = all_env_default;
+
+    return configuration;
 }
 
 fn applyCommaSeparatedPatternsOption(setting: *[][]const u8, value: []u8, pattern_name: []const u8, cfg_file_path: []const u8) void {
@@ -232,6 +238,7 @@ fn parseConfiguration(
 
 test "readConfigurationFile: file does not exist" {
     var configuration = createDefaultConfiguration();
+    defer configuration.deinit();
 
     readConfigurationFile("/does/not/exist", &configuration);
 
@@ -265,6 +272,7 @@ test "readConfigurationFile: empty file" {
     defer allocator.free(absolute_path_to_config_file);
 
     var configuration = createDefaultConfiguration();
+    defer configuration.deinit();
 
     readConfigurationFile(absolute_path_to_config_file, &configuration);
 
@@ -297,6 +305,7 @@ test "readConfigurationFile: all configuration values" {
     const absolute_path_to_config_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/all_values.conf" });
     defer allocator.free(absolute_path_to_config_file);
     var configuration = createDefaultConfiguration();
+    defer configuration.deinit();
 
     readConfigurationFile(absolute_path_to_config_file, &configuration);
 
@@ -342,6 +351,7 @@ test "readConfigurationFile: all configuration values plus whitespace and commen
     const absolute_path_to_config_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/with_comments_and_whitespace.conf" });
     defer allocator.free(absolute_path_to_config_file);
     var configuration = createDefaultConfiguration();
+    defer configuration.deinit();
 
     readConfigurationFile(absolute_path_to_config_file, &configuration);
 
@@ -370,6 +380,7 @@ test "readConfigurationFile: does not parse overly long lines" {
     const absolute_path_to_config_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/very_long_lines.conf" });
     defer allocator.free(absolute_path_to_config_file);
     var configuration = createDefaultConfiguration();
+    defer configuration.deinit();
 
     readConfigurationFile(absolute_path_to_config_file, &configuration);
 

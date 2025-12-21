@@ -219,7 +219,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ### Maintainers
 
 - [Antoine Toulme](https://github.com/atoulme), Splunk
-- [Jacob Aronoff](https://github.com/jaronoff97), Omlet
+- [Jacob Aronoff](https://github.com/jaronoff97), [Tero](https://www.usetero.com/)
 - [Michele Mancioppi](https://github.com/mmanciop), Dash0
 - [Bastian Krol](https://github.com/basti1302), Dash0
 

@@ -4,7 +4,6 @@
 const builtin = @import("builtin");
 const std = @import("std");
 
-const alloc = @import("allocator.zig");
 const config = @import("config.zig");
 const dotnet = @import("dotnet.zig");
 const libc = @import("libc.zig");
@@ -35,13 +34,15 @@ const InjectorError = error{
 };
 
 fn initEnviron() callconv(.c) void {
+    const allocator = std.heap.page_allocator;
+
     print.initLogLevelFromProcSelfEnviron() catch |err| {
         // If we fail to read the log level, we continue processing, using the default log level.
         print.printError("failed to read log level from environment: {}", .{err});
         print.printError("using default log level {}", .{print.getLogLevel()});
     };
 
-    const libc_info = libc.getLibCInfo(alloc.page_allocator) catch |err| {
+    const libc_info = libc.getLibCInfo(allocator) catch |err| {
         if (err == error.UnknownLibCFlavor) {
             print.printError("no libc found: {}", .{err});
         } else {
@@ -49,7 +50,7 @@ fn initEnviron() callconv(.c) void {
         }
         return;
     };
-    defer alloc.page_allocator.free(libc_info.name);
+    defer allocator.free(libc_info.name);
     print.printDebug("identified {s} libc loaded from {s}", .{ switch (libc_info.flavor) {
         types.LibCFlavor.GNU => "GNU",
         types.LibCFlavor.MUSL => "musl",
@@ -63,13 +64,16 @@ fn initEnviron() callconv(.c) void {
         return;
     };
 
-    const configuration = config.readConfiguration();
+    const configuration = config.readConfiguration(allocator);
 
-    if (!evaluateAllowDeny(configuration)) {
+    if (!evaluateAllowDeny(allocator, configuration)) {
         return;
     }
 
-    const maybe_modified_resource_attributes = res_attrs.getModifiedOtelResourceAttributesValue(std.posix.getenv(res_attrs.otel_resource_attributes_env_var_name)) catch |err| {
+    const maybe_modified_resource_attributes = res_attrs.getModifiedOtelResourceAttributesValue(
+        allocator,
+        std.posix.getenv(res_attrs.otel_resource_attributes_env_var_name),
+    ) catch |err| {
         print.printError("cannot calculate modified OTEL_RESOURCE_ATTRIBUTES: {}", .{err});
         return;
     };
@@ -94,16 +98,67 @@ fn initEnviron() callconv(.c) void {
         }
     }
 
-    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, node_js.node_options_env_var_name, configuration);
-    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, jvm.java_tool_options_env_var_name, configuration);
-    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, dotnet.coreclr_enable_profiling_env_var_name, configuration);
-    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, dotnet.coreclr_profiler_env_var_name, configuration);
-    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, dotnet.coreclr_profiler_path_env_var_name, configuration);
-    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, dotnet.dotnet_additional_deps_env_var_name, configuration);
-    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, dotnet.dotnet_shared_store_env_var_name, configuration);
-    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, dotnet.dotnet_startup_hooks_env_var_name, configuration);
-    modifyEnvironmentVariable(libc_info.setenv_fn_ptr, dotnet.otel_dotnet_auto_home_env_var_name, configuration);
-    setCustomEnvironmentVariables(libc_info.setenv_fn_ptr, configuration.all_auto_instrumentation_agents_env_vars);
+    modifyEnvironmentVariable(
+        allocator,
+        libc_info.setenv_fn_ptr,
+        node_js.node_options_env_var_name,
+        configuration,
+    );
+    modifyEnvironmentVariable(
+        allocator,
+        libc_info.setenv_fn_ptr,
+        jvm.java_tool_options_env_var_name,
+        configuration,
+    );
+    modifyEnvironmentVariable(
+        allocator,
+        libc_info.setenv_fn_ptr,
+        dotnet.coreclr_enable_profiling_env_var_name,
+        configuration,
+    );
+    modifyEnvironmentVariable(
+        allocator,
+        libc_info.setenv_fn_ptr,
+        dotnet.coreclr_profiler_env_var_name,
+        configuration,
+    );
+    modifyEnvironmentVariable(
+        allocator,
+        libc_info.setenv_fn_ptr,
+        dotnet.coreclr_profiler_path_env_var_name,
+        configuration,
+    );
+    modifyEnvironmentVariable(
+        allocator,
+        libc_info.setenv_fn_ptr,
+        dotnet.dotnet_additional_deps_env_var_name,
+        configuration,
+    );
+    modifyEnvironmentVariable(
+        allocator,
+        libc_info.setenv_fn_ptr,
+        dotnet.dotnet_shared_store_env_var_name,
+        configuration,
+    );
+    modifyEnvironmentVariable(
+        allocator,
+        libc_info.setenv_fn_ptr,
+        dotnet.dotnet_startup_hooks_env_var_name,
+        configuration,
+    );
+    modifyEnvironmentVariable(
+        allocator,
+        libc_info.setenv_fn_ptr,
+        dotnet.otel_dotnet_auto_home_env_var_name,
+        configuration,
+    );
+
+    setCustomEnvironmentVariables(
+        allocator,
+        libc_info.setenv_fn_ptr,
+        configuration.all_auto_instrumentation_agents_env_vars,
+    );
+
     print.printInfo("environment injection finished", .{});
 }
 
@@ -127,13 +182,13 @@ fn updateStdOsEnviron() !void {
     }
 }
 
-fn evaluateAllowDeny(configuration: config.InjectorConfiguration) bool {
-    const exe_path = getExecutablePath() catch {
+fn evaluateAllowDeny(allocator: std.mem.Allocator, configuration: config.InjectorConfiguration) bool {
+    const exe_path = getExecutablePath(allocator) catch {
         // Skip allow-deny evaluation if getting the executable path has failed. The error has already been logged in
         // getExecutablePath.
         return true;
     };
-    const args = getCommandLineArgs() catch {
+    const args = getCommandLineArgs(allocator) catch {
         // Skip allow-deny evaluation if getting the arguments has failed. The error has already been logged in
         // getCommandLineArgs.
         return true;
@@ -177,11 +232,11 @@ fn evaluateAllowDeny(configuration: config.InjectorConfiguration) bool {
     return true;
 }
 
-fn getCommandLineArgs() ![]const []const u8 {
+fn getCommandLineArgs(allocator: std.mem.Allocator) ![]const []const u8 {
     // Get command line arguments.
     // Dynamically injected libraries don't get std.process.argsAlloc populated and
     // neither does std.os.argv. We read using the /proc/{pid}/cmdline.
-    const cmdline_args = args_parser.cmdLineForPID(alloc.page_allocator) catch |err| {
+    const cmdline_args = args_parser.cmdLineForPID(allocator) catch |err| {
         print.printDebug("failed to get executable arguments: {any}", .{err});
         return err;
     };
@@ -195,9 +250,9 @@ fn getCommandLineArgs() ![]const []const u8 {
     return cmdline_args;
 }
 
-fn getExecutablePath() ![]u8 {
+fn getExecutablePath(allocator: std.mem.Allocator) ![]u8 {
     // Get the program full executable path
-    const executable_path = std.fs.selfExePathAlloc(alloc.page_allocator) catch |err| {
+    const executable_path = std.fs.selfExePathAlloc(allocator) catch |err| {
         print.printDebug("failed to get executable path: {any}", .{err});
         return err;
     };
@@ -207,8 +262,13 @@ fn getExecutablePath() ![]u8 {
     return executable_path;
 }
 
-fn modifyEnvironmentVariable(setenv_fn_ptr: types.SetenvFnPtr, name: [:0]const u8, configuration: config.InjectorConfiguration) void {
-    if (getEnvValue(name, configuration)) |value| {
+fn modifyEnvironmentVariable(
+    allocator: std.mem.Allocator,
+    setenv_fn_ptr: types.SetenvFnPtr,
+    name: [:0]const u8,
+    configuration: config.InjectorConfiguration,
+) void {
+    if (getEnvValue(allocator, name, configuration)) |value| {
         const setenv_res = setenv_fn_ptr(name, value, true);
         if (setenv_res == 0) {
             print.printDebug(
@@ -224,39 +284,50 @@ fn modifyEnvironmentVariable(setenv_fn_ptr: types.SetenvFnPtr, name: [:0]const u
     }
 }
 
-fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) ?types.NullTerminatedString {
+fn getEnvValue(
+    allocator: std.mem.Allocator,
+    name: [:0]const u8,
+    configuration: config.InjectorConfiguration,
+) ?types.NullTerminatedString {
     const original_value = std.posix.getenv(name);
-
     if (std.mem.eql(u8, name, jvm.java_tool_options_env_var_name)) {
-        return jvm.checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(original_value, configuration);
+        return jvm.checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+            allocator,
+            original_value,
+            configuration,
+        );
     } else if (std.mem.eql(u8, name, node_js.node_options_env_var_name)) {
-        return node_js.checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(original_value, configuration);
+        return node_js.checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+            allocator,
+            original_value,
+            configuration,
+        );
     } else if (std.mem.eql(u8, name, dotnet.coreclr_enable_profiling_env_var_name)) {
-        if (dotnet.getDotnetValues(configuration)) |v| {
+        if (dotnet.getDotnetValues(allocator, configuration)) |v| {
             return v.coreclr_enable_profiling;
         }
     } else if (std.mem.eql(u8, name, dotnet.coreclr_profiler_env_var_name)) {
-        if (dotnet.getDotnetValues(configuration)) |v| {
+        if (dotnet.getDotnetValues(allocator, configuration)) |v| {
             return v.coreclr_profiler;
         }
     } else if (std.mem.eql(u8, name, dotnet.coreclr_profiler_path_env_var_name)) {
-        if (dotnet.getDotnetValues(configuration)) |v| {
+        if (dotnet.getDotnetValues(allocator, configuration)) |v| {
             return v.coreclr_profiler_path;
         }
     } else if (std.mem.eql(u8, name, dotnet.dotnet_additional_deps_env_var_name)) {
-        if (dotnet.getDotnetValues(configuration)) |v| {
+        if (dotnet.getDotnetValues(allocator, configuration)) |v| {
             return v.additional_deps;
         }
     } else if (std.mem.eql(u8, name, dotnet.dotnet_shared_store_env_var_name)) {
-        if (dotnet.getDotnetValues(configuration)) |v| {
+        if (dotnet.getDotnetValues(allocator, configuration)) |v| {
             return v.shared_store;
         }
     } else if (std.mem.eql(u8, name, dotnet.dotnet_startup_hooks_env_var_name)) {
-        if (dotnet.getDotnetValues(configuration)) |v| {
+        if (dotnet.getDotnetValues(allocator, configuration)) |v| {
             return v.startup_hooks;
         }
     } else if (std.mem.eql(u8, name, dotnet.otel_dotnet_auto_home_env_var_name)) {
-        if (dotnet.getDotnetValues(configuration)) |v| {
+        if (dotnet.getDotnetValues(allocator, configuration)) |v| {
             return v.otel_auto_home;
         }
     }
@@ -264,13 +335,17 @@ fn getEnvValue(name: [:0]const u8, configuration: config.InjectorConfiguration) 
     return null;
 }
 
-fn setCustomEnvironmentVariables(setenv_fn_ptr: types.SetenvFnPtr, custom_env_vars: std.StringHashMap([]u8)) void {
+fn setCustomEnvironmentVariables(
+    allocator: std.mem.Allocator,
+    setenv_fn_ptr: types.SetenvFnPtr,
+    custom_env_vars: std.StringHashMap([]u8),
+) void {
     if (custom_env_vars.count() == 0) {
         return;
     }
     var env_var_iterator = custom_env_vars.iterator();
     while (env_var_iterator.next()) |env_var| {
-        const name = alloc.page_allocator.dupeZ(u8, env_var.key_ptr.*) catch |err| {
+        const name = allocator.dupeZ(u8, env_var.key_ptr.*) catch |err| {
             print.printError(
                 "error allocating memory for name when setting custom environment variable \"{}\"=\"{}\" (remaining custom environment variables will be skipped) : {}",
                 .{
@@ -281,7 +356,7 @@ fn setCustomEnvironmentVariables(setenv_fn_ptr: types.SetenvFnPtr, custom_env_va
             );
             return;
         };
-        const value = alloc.page_allocator.dupeZ(u8, env_var.value_ptr.*) catch |err| {
+        const value = allocator.dupeZ(u8, env_var.value_ptr.*) catch |err| {
             print.printError(
                 "error allocating memory for value when setting custom environment variable \"{}\"=\"{}\" (remaining custom environment variables will be skipped): {}",
                 .{

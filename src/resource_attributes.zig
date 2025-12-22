@@ -3,7 +3,6 @@
 
 const std = @import("std");
 
-const alloc = @import("allocator.zig");
 const print = @import("print.zig");
 const types = @import("types.zig");
 
@@ -62,9 +61,9 @@ const mappings: [7]EnvToResourceAttributeMapping =
 
 /// Derive the modified value for OTEL_RESOURCE_ATTRIBUTES based on the original value, and on other resource attributes
 /// provided via the OTEL_INJECTOR_* environment variables.
-pub fn getModifiedOtelResourceAttributesValue(original_value_optional: ?[:0]const u8) !?types.NullTerminatedString {
-    var result_list = try std.ArrayList(u8).initCapacity(alloc.page_allocator, std.heap.pageSize());
-    const result_writer = result_list.writer(alloc.page_allocator);
+pub fn getModifiedOtelResourceAttributesValue(gpa: std.mem.Allocator, original_value_optional: ?[:0]const u8) !?types.NullTerminatedString {
+    var result_list = try std.ArrayList(u8).initCapacity(gpa, std.heap.pageSize());
+    const result_writer = result_list.writer(gpa);
 
     // Key-value pairs from the original environment variable value have the highest priority. We write them first, and
     // then later, when processing OTEL_INJECTOR_RESOURCE_ATTRIBUTES or any of the mappings, we check for each key if
@@ -180,13 +179,13 @@ pub fn getModifiedOtelResourceAttributesValue(original_value_optional: ?[:0]cons
     }
 
     if (!has_modified_value) {
-        result_list.deinit(alloc.page_allocator);
+        result_list.deinit(gpa);
         return null;
     }
 
     try result_writer.writeAll("\x00");
 
-    const result_owned = try result_list.toOwnedSlice(alloc.page_allocator);
+    const result_owned = try result_list.toOwnedSlice(gpa);
     const result_as_null_terminated_string: types.NullTerminatedString = @ptrCast(result_owned.ptr);
 
     return result_as_null_terminated_string;

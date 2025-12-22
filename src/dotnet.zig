@@ -4,7 +4,6 @@
 const builtin = @import("builtin");
 const std = @import("std");
 
-const alloc = @import("allocator.zig");
 const config = @import("config.zig");
 const libc = @import("libc.zig");
 const print = @import("print.zig");
@@ -58,11 +57,14 @@ pub fn setLibcFlavor(lf: types.LibCFlavor) void {
     libc_flavor = lf;
 }
 
-pub fn getDotnetValues(configuration: config.InjectorConfiguration) ?DotnetValues {
-    return doGetDotnetValues(configuration.dotnet_auto_instrumentation_agent_path_prefix);
+pub fn getDotnetValues(
+    gpa: std.mem.Allocator,
+    configuration: config.InjectorConfiguration,
+) ?DotnetValues {
+    return doGetDotnetValues(gpa, configuration.dotnet_auto_instrumentation_agent_path_prefix);
 }
 
-fn doGetDotnetValues(dotnet_path_prefix: []u8) ?DotnetValues {
+fn doGetDotnetValues(gpa: std.mem.Allocator, dotnet_path_prefix: []u8) ?DotnetValues {
     if (dotnet_path_prefix.len == 0) {
         print.printInfo("Skipping the injection of the .NET OpenTelemetry instrumentation because it has been explicitly disabled.", .{});
         return null;
@@ -83,6 +85,7 @@ fn doGetDotnetValues(dotnet_path_prefix: []u8) ?DotnetValues {
 
     if (libc_flavor) |libc_f| {
         const dotnet_values = determineDotnetValues(
+            gpa,
             dotnet_path_prefix,
             libc_f,
             builtin.cpu.arch,
@@ -129,8 +132,11 @@ test "doGetDotnetValues: should return null value if the libc flavor has not bee
     _resetState();
     defer _resetState();
 
+    const path = try std.fmt.allocPrint(testing.allocator, "", .{});
+    defer testing.allocator.free(path);
+
     libc_flavor = null;
-    const dotnet_values = doGetDotnetValues(try std.fmt.allocPrint(test_util.test_allocator, "", .{}));
+    const dotnet_values = doGetDotnetValues(std.heap.page_allocator, path);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
 
@@ -138,12 +144,16 @@ test "doGetDotnetValues: should return null value if the profiler path cannot be
     _resetState();
     defer _resetState();
 
+    const path = try std.fmt.allocPrintSentinel(testing.allocator, "/invalid/path", .{}, 0);
+    defer testing.allocator.free(path);
+
     libc_flavor = .GNU;
-    const dotnet_values = doGetDotnetValues(try std.fmt.allocPrintSentinel(alloc.page_allocator, "/invalid/path", .{}, 0));
+    const dotnet_values = doGetDotnetValues(std.heap.page_allocator, path);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
 
 fn determineDotnetValues(
+    gpa: std.mem.Allocator,
     dotnet_path_prefix: []u8,
     libc_f: types.LibCFlavor,
     architecture: std.Target.Cpu.Arch,
@@ -168,21 +178,21 @@ fn determineDotnetValues(
             },
             else => return error.UnknownLibCFlavor,
         };
-    const coreclr_profiler_path = try std.fmt.allocPrintSentinel(alloc.page_allocator, "{s}/{s}/{s}/OpenTelemetry.AutoInstrumentation.Native.so", .{
+    const coreclr_profiler_path = try std.fmt.allocPrintSentinel(gpa, "{s}/{s}/{s}/OpenTelemetry.AutoInstrumentation.Native.so", .{
         dotnet_path_prefix, libc_flavor_prefix, platform,
     }, 0);
 
-    const additional_deps = try std.fmt.allocPrintSentinel(alloc.page_allocator, "{s}/{s}/AdditionalDeps", .{
+    const additional_deps = try std.fmt.allocPrintSentinel(gpa, "{s}/{s}/AdditionalDeps", .{
         dotnet_path_prefix, libc_flavor_prefix,
     }, 0);
 
-    const otel_auto_home = try std.fmt.allocPrintSentinel(alloc.page_allocator, "{s}/{s}", .{ dotnet_path_prefix, libc_flavor_prefix }, 0);
+    const otel_auto_home = try std.fmt.allocPrintSentinel(gpa, "{s}/{s}", .{ dotnet_path_prefix, libc_flavor_prefix }, 0);
 
-    const shared_store = try std.fmt.allocPrintSentinel(alloc.page_allocator, "{s}/{s}/store", .{
+    const shared_store = try std.fmt.allocPrintSentinel(gpa, "{s}/{s}/store", .{
         dotnet_path_prefix, libc_flavor_prefix,
     }, 0);
 
-    const startup_hooks = try std.fmt.allocPrintSentinel(alloc.page_allocator, "{s}/{s}/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll", .{
+    const startup_hooks = try std.fmt.allocPrintSentinel(gpa, "{s}/{s}/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll", .{
         dotnet_path_prefix, libc_flavor_prefix,
     }, 0);
 
@@ -199,7 +209,8 @@ fn determineDotnetValues(
 
 test "determineDotnetValues: should return error for unsupported CPU architecture" {
     try testing.expectError(error.UnsupportedCpuArchitecture, determineDotnetValues(
-        try std.fmt.allocPrint(test_util.test_allocator, "", .{}),
+        std.heap.page_allocator,
+        "",
         .GNU,
         .powerpc64le,
     ));
@@ -207,16 +218,21 @@ test "determineDotnetValues: should return error for unsupported CPU architectur
 
 test "determineDotnetValues: should return error for unknown libc flavor" {
     try testing.expectError(error.UnknownLibCFlavor, determineDotnetValues(
-        try std.fmt.allocPrint(test_util.test_allocator, "", .{}),
+        std.heap.page_allocator,
+        "",
         .UNKNOWN,
         .x86_64,
     ));
 }
 
 test "determineDotnetValues: should return values for glibc/x86_64" {
+    const path = try std.fmt.allocPrint(testing.allocator, "/__otel_auto_instrumentation/dotnet", .{});
+    defer testing.allocator.free(path);
+
     const dotnet_values =
         try determineDotnetValues(
-            try std.fmt.allocPrint(test_util.test_allocator, "/__otel_auto_instrumentation/dotnet", .{}),
+            std.heap.page_allocator,
+            path,
             .GNU,
             .x86_64,
         );
@@ -251,9 +267,14 @@ test "determineDotnetValues: should return values for glibc/x86_64" {
 }
 
 test "determineDotnetValues: should return values for glibc/arm64" {
+    const path =
+        try std.fmt.allocPrint(testing.allocator, "/__otel_auto_instrumentation/dotnet", .{});
+    defer testing.allocator.free(path);
+
     const dotnet_values =
         try determineDotnetValues(
-            try std.fmt.allocPrint(test_util.test_allocator, "/__otel_auto_instrumentation/dotnet", .{}),
+            std.heap.page_allocator,
+            path,
             .GNU,
             .aarch64,
         );
@@ -288,9 +309,14 @@ test "determineDotnetValues: should return values for glibc/arm64" {
 }
 
 test "determineDotnetValues: should return values for musl/x86_64" {
+    const path =
+        try std.fmt.allocPrint(testing.allocator, "/__otel_auto_instrumentation/dotnet", .{});
+    defer testing.allocator.free(path);
+
     const dotnet_values =
         try determineDotnetValues(
-            try std.fmt.allocPrint(test_util.test_allocator, "/__otel_auto_instrumentation/dotnet", .{}),
+            std.heap.page_allocator,
+            path,
             .MUSL,
             .x86_64,
         );
@@ -325,9 +351,14 @@ test "determineDotnetValues: should return values for musl/x86_64" {
 }
 
 test "determineDotnetValues: should return values for musl/arm64" {
+    const path =
+        try std.fmt.allocPrint(testing.allocator, "/__otel_auto_instrumentation/dotnet", .{});
+    defer testing.allocator.free(path);
+
     const dotnet_values =
         try determineDotnetValues(
-            try std.fmt.allocPrint(test_util.test_allocator, "/__otel_auto_instrumentation/dotnet", .{}),
+            std.heap.page_allocator,
+            path,
             .MUSL,
             .aarch64,
         );

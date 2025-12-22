@@ -3,7 +3,6 @@
 
 const std = @import("std");
 
-const alloc = @import("allocator.zig");
 const config = @import("config.zig");
 const print = @import("print.zig");
 const res_attrs = @import("resource_attributes.zig");
@@ -15,16 +14,19 @@ const testing = std.testing;
 pub const java_tool_options_env_var_name = "JAVA_TOOL_OPTIONS";
 
 pub fn checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+    gpa: std.mem.Allocator,
     original_value_optional: ?[:0]const u8,
     configuration: config.InjectorConfiguration,
 ) ?types.NullTerminatedString {
     return doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+        gpa,
         original_value_optional,
         configuration.jvm_auto_instrumentation_agent_path,
     );
 }
 
 fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+    gpa: std.mem.Allocator,
     original_value_optional: ?[:0]const u8,
     jvm_auto_instrumentation_agent_path: []u8,
 ) ?types.NullTerminatedString {
@@ -40,28 +42,38 @@ fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
         return null;
     };
 
-    const javaagent_flag_value = std.fmt.allocPrintSentinel(alloc.page_allocator, "-javaagent:{s}", .{jvm_auto_instrumentation_agent_path}, 0) catch |err| {
+    const javaagent_flag_value = std.fmt.allocPrintSentinel(gpa, "-javaagent:{s}", .{jvm_auto_instrumentation_agent_path}, 0) catch |err| {
         print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ java_tool_options_env_var_name, err });
         return null;
     };
 
-    return getModifiedJavaToolOptionsValue(original_value_optional, javaagent_flag_value);
+    return getModifiedJavaToolOptionsValue(
+        gpa,
+        original_value_optional,
+        javaagent_flag_value,
+    );
 }
 
 test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return null if the Java agent cannot be accessed (original value not set)" {
+    const path = try std.fmt.allocPrint(testing.allocator, "/invalid/path", .{});
+    defer testing.allocator.free(path);
     const modifiedJavaToolOptions =
         doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+            std.heap.page_allocator,
             null,
-            try std.fmt.allocPrint(test_util.test_allocator, "/invalid/path", .{}),
+            path,
         );
     try test_util.expectWithMessage(modifiedJavaToolOptions == null, "modifiedJavaToolOptions == null");
 }
 
 test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return null if the Java agent cannot be accessed (original value present)" {
+    const path = try std.fmt.allocPrint(testing.allocator, "/invalid/path", .{});
+    defer testing.allocator.free(path);
     const modifiedJavaToolOptions =
         doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+            std.heap.page_allocator,
             "original value",
-            try std.fmt.allocPrint(test_util.test_allocator, "/invalid/path", .{}),
+            path,
         );
     try test_util.expectWithMessage(modifiedJavaToolOptions == null, "modifiedJavaToolOptions == null");
 }
@@ -70,7 +82,11 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return n
 /// JAVA_TOOL_OPTIONS.
 ///
 /// Do no deallocate the return value, or we may cause a USE_AFTER_FREE memory corruption in the parent process.
-fn getModifiedJavaToolOptionsValue(original_java_tool_options_env_var_value_optional: ?[:0]const u8, javaagent_flag_value: types.NullTerminatedString) ?types.NullTerminatedString {
+fn getModifiedJavaToolOptionsValue(
+    gpa: std.mem.Allocator,
+    original_java_tool_options_env_var_value_optional: ?[:0]const u8,
+    javaagent_flag_value: types.NullTerminatedString,
+) ?types.NullTerminatedString {
     // For auto-instrumentation, we inject the -javaagent flag into the JAVA_TOOL_OPTIONS environment variable.
     if (original_java_tool_options_env_var_value_optional) |original_java_tool_options_env_var_value| {
         if (std.mem.indexOf(u8, original_java_tool_options_env_var_value, std.mem.span(javaagent_flag_value))) |_| {
@@ -85,7 +101,7 @@ fn getModifiedJavaToolOptionsValue(original_java_tool_options_env_var_value_opti
         // Note: We must never free the return_buffer, or we may cause a USE_AFTER_FREE memory corruption in the
         // parent process.
         const return_buffer =
-            std.fmt.allocPrintSentinel(alloc.page_allocator, "{s} {s}", .{
+            std.fmt.allocPrintSentinel(gpa, "{s} {s}", .{
                 original_java_tool_options_env_var_value,
                 javaagent_flag_value,
             }, 0) catch |err| {
@@ -100,7 +116,11 @@ fn getModifiedJavaToolOptionsValue(original_java_tool_options_env_var_value_opti
 }
 
 test "getModifiedJavaToolOptionsValue: should return -javaagent if original value is unset" {
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(null, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
+        std.heap.page_allocator,
+        null,
+        "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
+    );
     try testing.expectEqualStrings(
         "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
         std.mem.span(modifiedJavaToolOptions orelse "-"),
@@ -109,7 +129,11 @@ test "getModifiedJavaToolOptionsValue: should return -javaagent if original valu
 
 test "getModifiedJavaToolOptionsValue: should append -javaagent if original value exists" {
     const original_value: [:0]const u8 = "-Dsome.property=value"[0.. :0];
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(original_value, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
+        std.heap.page_allocator,
+        original_value,
+        "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
+    );
     try testing.expectEqualStrings(
         "-Dsome.property=value -javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
         std.mem.span(modifiedJavaToolOptions orelse "-"),
@@ -118,6 +142,10 @@ test "getModifiedJavaToolOptionsValue: should append -javaagent if original valu
 
 test "getModifiedJavaToolOptionsValue: should do nothing if our -javaagent is already present" {
     const original_value: [:0]const u8 = "-Dsome.property=value -javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar -Dsome.other.property=value"[0.. :0];
-    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(original_value, "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar");
+    const modifiedJavaToolOptions = getModifiedJavaToolOptionsValue(
+        std.heap.page_allocator,
+        original_value,
+        "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
+    );
     try test_util.expectWithMessage(modifiedJavaToolOptions == null, "modifiedJavaToolOptions == null");
 }

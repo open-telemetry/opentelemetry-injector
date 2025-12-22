@@ -3,7 +3,6 @@
 
 const std = @import("std");
 
-const alloc = @import("allocator.zig");
 const print = @import("print.zig");
 const test_util = @import("test_util.zig");
 const patterns_util = @import("patterns_util.zig");
@@ -47,9 +46,17 @@ pub const InjectorConfiguration = struct {
     exclude_paths: [][]const u8,
     include_args: [][]const u8,
     exclude_args: [][]const u8,
+
+    pub fn freeAll(self: *InjectorConfiguration, allocator: std.mem.Allocator) void {
+        allocator.free(self.all_auto_instrumentation_agents_env_path);
+        self.all_auto_instrumentation_agents_env_vars.deinit();
+        allocator.free(self.dotnet_auto_instrumentation_agent_path_prefix);
+        allocator.free(self.jvm_auto_instrumentation_agent_path);
+        allocator.free(self.nodejs_auto_instrumentation_agent_path);
+    }
 };
 
-const ConfigApplier = fn (key: []const u8, value: []u8, file_path: []const u8, configuration: *InjectorConfiguration) void;
+const ConfigApplier = fn (gpa: std.mem.Allocator, key: []const u8, value: []u8, file_path: []const u8, configuration: *InjectorConfiguration) void;
 
 const default_dotnet_auto_instrumentation_agent_path_prefix = "/__otel_auto_instrumentation/dotnet";
 const default_jvm_auto_instrumentation_agent_path = "/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar";
@@ -64,27 +71,27 @@ var cached_configuration_optional: ?InjectorConfiguration = null;
 ///
 /// The configuration will be read from the file /etc/opentelemetry/otelinject.conf (if it exists) and from environment
 /// variables. Environment variables have higher precedence and can override settings from the configuration file.
-pub fn readConfiguration() InjectorConfiguration {
+pub fn readConfiguration(gpa: std.mem.Allocator) InjectorConfiguration {
     if (cached_configuration_optional) |cached_configuration| {
         return cached_configuration;
     }
 
-    var configuration = createDefaultConfiguration();
-    readConfigurationFile(config_file_path, &configuration);
-    readConfigurationFromEnvironment(&configuration);
-    readAllAgentsEnvFile(configuration.all_auto_instrumentation_agents_env_path, &configuration);
+    var configuration = createDefaultConfiguration(gpa);
+    readConfigurationFile(gpa, config_file_path, &configuration);
+    readConfigurationFromEnvironment(gpa, &configuration);
+    readAllAgentsEnvFile(gpa, configuration.all_auto_instrumentation_agents_env_path, &configuration);
     cached_configuration_optional = configuration;
     return configuration;
 }
 
-fn printErrorReturnEmptyConfig(err: std.mem.Allocator.Error) InjectorConfiguration {
+fn printErrorReturnEmptyConfig(gpa: std.mem.Allocator, err: std.mem.Allocator.Error) InjectorConfiguration {
     print.printError("Cannot allocate memory for the default injector configuration: {t}", .{err});
     return InjectorConfiguration{
         .dotnet_auto_instrumentation_agent_path_prefix = "",
         .jvm_auto_instrumentation_agent_path = "",
         .nodejs_auto_instrumentation_agent_path = "",
         .all_auto_instrumentation_agents_env_path = "",
-        .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(alloc.page_allocator),
+        .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(gpa),
         .include_paths = &.{},
         .exclude_paths = &.{},
         .include_args = &.{},
@@ -92,20 +99,20 @@ fn printErrorReturnEmptyConfig(err: std.mem.Allocator.Error) InjectorConfigurati
     };
 }
 
-fn createDefaultConfiguration() InjectorConfiguration {
-    const all_agent_env_vars = std.StringHashMap([]u8).init(alloc.page_allocator);
+fn createDefaultConfiguration(gpa: std.mem.Allocator) InjectorConfiguration {
+    const all_agent_env_vars = std.StringHashMap([]u8).init(gpa);
 
-    const all_env_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_all_auto_instrumentation_agents_env_path}) catch |err| {
-        return printErrorReturnEmptyConfig(err);
+    const all_env_default = std.fmt.allocPrint(gpa, "{s}", .{default_all_auto_instrumentation_agents_env_path}) catch |err| {
+        return printErrorReturnEmptyConfig(gpa, err);
     };
-    const dotnet_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_dotnet_auto_instrumentation_agent_path_prefix}) catch |err| {
-        return printErrorReturnEmptyConfig(err);
+    const dotnet_default = std.fmt.allocPrint(gpa, "{s}", .{default_dotnet_auto_instrumentation_agent_path_prefix}) catch |err| {
+        return printErrorReturnEmptyConfig(gpa, err);
     };
-    const jvm_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_jvm_auto_instrumentation_agent_path}) catch |err| {
-        return printErrorReturnEmptyConfig(err);
+    const jvm_default = std.fmt.allocPrint(gpa, "{s}", .{default_jvm_auto_instrumentation_agent_path}) catch |err| {
+        return printErrorReturnEmptyConfig(gpa, err);
     };
-    const nodejs_default = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{default_nodejs_auto_instrumentation_agent_path}) catch |err| {
-        return printErrorReturnEmptyConfig(err);
+    const nodejs_default = std.fmt.allocPrint(gpa, "{s}", .{default_nodejs_auto_instrumentation_agent_path}) catch |err| {
+        return printErrorReturnEmptyConfig(gpa, err);
     };
 
     return InjectorConfiguration{
@@ -121,18 +128,18 @@ fn createDefaultConfiguration() InjectorConfiguration {
     };
 }
 
-fn applyCommaSeparatedPatternsOption(setting: *[][]const u8, value: []u8, pattern_name: []const u8, cfg_file_path: []const u8) void {
-    const new_patterns = patterns_util.splitByComma(alloc.page_allocator, value) catch |err| {
+fn applyCommaSeparatedPatternsOption(gpa: std.mem.Allocator, setting: *[][]const u8, value: []u8, pattern_name: []const u8, cfg_file_path: []const u8) void {
+    const new_patterns = patterns_util.splitByComma(gpa, value) catch |err| {
         print.printError("error parsing {s} value from configuration file {s}: {}", .{ pattern_name, cfg_file_path, err });
         return;
     };
-    setting.* = std.mem.concat(alloc.page_allocator, []const u8, &.{ setting.*, new_patterns }) catch |err| {
+    setting.* = std.mem.concat(gpa, []const u8, &.{ setting.*, new_patterns }) catch |err| {
         print.printError("error concatenating {s} from configuration file {s}: {}", .{ pattern_name, cfg_file_path, err });
         return;
     };
 }
 
-fn applyKeyValueToGeneralOptions(key: []const u8, value: []u8, _cfg_file_path: []const u8, _configuration: *InjectorConfiguration) void {
+fn applyKeyValueToGeneralOptions(gpa: std.mem.Allocator, key: []const u8, value: []u8, _cfg_file_path: []const u8, _configuration: *InjectorConfiguration) void {
     if (std.mem.eql(u8, key, all_agents_env_path_key)) {
         _configuration.all_auto_instrumentation_agents_env_path = value;
     } else if (std.mem.eql(u8, key, dotnet_path_key)) {
@@ -142,20 +149,20 @@ fn applyKeyValueToGeneralOptions(key: []const u8, value: []u8, _cfg_file_path: [
     } else if (std.mem.eql(u8, key, nodejs_path_key)) {
         _configuration.nodejs_auto_instrumentation_agent_path = value;
     } else if (std.mem.eql(u8, key, include_paths_key)) {
-        applyCommaSeparatedPatternsOption(&_configuration.include_paths, value, "include_paths", _cfg_file_path);
+        applyCommaSeparatedPatternsOption(gpa, &_configuration.include_paths, value, "include_paths", _cfg_file_path);
     } else if (std.mem.eql(u8, key, exclude_paths_key)) {
-        applyCommaSeparatedPatternsOption(&_configuration.exclude_paths, value, "exclude_paths", _cfg_file_path);
+        applyCommaSeparatedPatternsOption(gpa, &_configuration.exclude_paths, value, "exclude_paths", _cfg_file_path);
     } else if (std.mem.eql(u8, key, include_args_key)) {
-        applyCommaSeparatedPatternsOption(&_configuration.include_args, value, "include_arguments", _cfg_file_path);
+        applyCommaSeparatedPatternsOption(gpa, &_configuration.include_args, value, "include_arguments", _cfg_file_path);
     } else if (std.mem.eql(u8, key, exclude_args_key)) {
-        applyCommaSeparatedPatternsOption(&_configuration.exclude_args, value, "exclude_arguments", _cfg_file_path);
+        applyCommaSeparatedPatternsOption(gpa, &_configuration.exclude_args, value, "exclude_arguments", _cfg_file_path);
     } else {
         print.printError("ignoring unknown configuration key in {s}: {s}={s}", .{ _cfg_file_path, key, value });
-        alloc.page_allocator.free(value);
+        gpa.free(value);
     }
 }
 
-fn readConfigurationFile(cfg_file_path: []const u8, configuration: *InjectorConfiguration) void {
+fn readConfigurationFile(gpa: std.mem.Allocator, cfg_file_path: []const u8, configuration: *InjectorConfiguration) void {
     const config_file = std.fs.cwd().openFile(cfg_file_path, .{}) catch |err| {
         print.printDebug(
             "The configuration file {s} does not exist or cannot be opened. Configuration will use default values and environment variables only. Error: {t}",
@@ -165,16 +172,22 @@ fn readConfigurationFile(cfg_file_path: []const u8, configuration: *InjectorConf
     };
     defer config_file.close();
 
-    return parseConfiguration(configuration, config_file, cfg_file_path, applyKeyValueToGeneralOptions);
+    return parseConfiguration(
+        gpa,
+        configuration,
+        config_file,
+        cfg_file_path,
+        applyKeyValueToGeneralOptions,
+    );
 }
 
-fn applyKeyValueToAllAgentsEnv(key: []const u8, value: []u8, _file_path: []const u8, _configuration: *InjectorConfiguration) void {
+fn applyKeyValueToAllAgentsEnv(_: std.mem.Allocator, key: []const u8, value: []u8, _file_path: []const u8, _configuration: *InjectorConfiguration) void {
     _configuration.all_auto_instrumentation_agents_env_vars.put(key, value) catch |e| {
         print.printError("error storing environment variable {s} from file {s}: {}", .{ key, _file_path, e });
     };
 }
 
-fn readAllAgentsEnvFile(env_file_path: []const u8, configuration: *InjectorConfiguration) void {
+fn readAllAgentsEnvFile(gpa: std.mem.Allocator, env_file_path: []const u8, configuration: *InjectorConfiguration) void {
     if (env_file_path.len == 0) {
         return;
     }
@@ -185,10 +198,11 @@ fn readAllAgentsEnvFile(env_file_path: []const u8, configuration: *InjectorConfi
     };
     defer env_file.close();
 
-    return parseConfiguration(configuration, env_file, env_file_path, applyKeyValueToAllAgentsEnv);
+    return parseConfiguration(gpa, configuration, env_file, env_file_path, applyKeyValueToAllAgentsEnv);
 }
 
 fn parseConfiguration(
+    gpa: std.mem.Allocator,
     configuration: *InjectorConfiguration,
     config_file: std.fs.File,
     cfg_file_path: []const u8,
@@ -197,8 +211,8 @@ fn parseConfiguration(
     var buf: [max_line_length]u8 = undefined;
     var reader = config_file.reader(&buf);
     while (takeSentinelOrDiscardOverlyLongLine(&reader, cfg_file_path)) |line| {
-        if (parseLine(line, cfg_file_path)) |kv| {
-            applyKeyValueToConfig(kv.key, kv.value, cfg_file_path, configuration);
+        if (parseLine(gpa, line, cfg_file_path)) |kv| {
+            applyKeyValueToConfig(gpa, kv.key, kv.value, cfg_file_path, configuration);
         }
     } else |err| switch (err) {
         error.ReadFailed => {
@@ -209,8 +223,8 @@ fn parseConfiguration(
         error.EndOfStream => {
             var buffer: [max_line_length]u8 = undefined;
             const chars = reader.interface.readSliceShort(&buffer) catch 0;
-            if (parseLine(buffer[0..chars], cfg_file_path)) |kv| {
-                applyKeyValueToConfig(kv.key, kv.value, cfg_file_path, configuration);
+            if (parseLine(gpa, buffer[0..chars], cfg_file_path)) |kv| {
+                applyKeyValueToConfig(gpa, kv.key, kv.value, cfg_file_path, configuration);
             }
         },
     }
@@ -235,9 +249,11 @@ fn takeSentinelOrDiscardOverlyLongLine(reader: *std.fs.File.Reader, cfg_file_pat
 }
 
 test "readConfigurationFile: file does not exist" {
-    var configuration = createDefaultConfiguration();
+    const allocator = std.heap.page_allocator;
+    var configuration = createDefaultConfiguration(allocator);
+    defer configuration.freeAll(allocator);
 
-    readConfigurationFile("/does/not/exist", &configuration);
+    readConfigurationFile(allocator, "/does/not/exist", &configuration);
 
     try testing.expectEqualStrings(
         default_all_auto_instrumentation_agents_env_path,
@@ -262,15 +278,16 @@ test "readConfigurationFile: file does not exist" {
 }
 
 test "readConfigurationFile: empty file" {
-    const allocator = std.testing.allocator;
+    const allocator = std.heap.page_allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
     const absolute_path_to_config_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/empty.conf" });
     defer allocator.free(absolute_path_to_config_file);
 
-    var configuration = createDefaultConfiguration();
+    var configuration = createDefaultConfiguration(allocator);
+    defer configuration.freeAll(allocator);
 
-    readConfigurationFile(absolute_path_to_config_file, &configuration);
+    readConfigurationFile(allocator, absolute_path_to_config_file, &configuration);
 
     try testing.expectEqualStrings(
         default_all_auto_instrumentation_agents_env_path,
@@ -300,9 +317,9 @@ test "readConfigurationFile: all configuration values" {
     defer allocator.free(cwd_path);
     const absolute_path_to_config_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/all_values.conf" });
     defer allocator.free(absolute_path_to_config_file);
-    var configuration = createDefaultConfiguration();
+    var configuration = createDefaultConfiguration(allocator);
 
-    readConfigurationFile(absolute_path_to_config_file, &configuration);
+    readConfigurationFile(allocator, absolute_path_to_config_file, &configuration);
 
     try testing.expectEqualStrings(
         "/custom/path/to/auto_instrumentation_env.conf",
@@ -345,9 +362,10 @@ test "readConfigurationFile: all configuration values plus whitespace and commen
     defer allocator.free(cwd_path);
     const absolute_path_to_config_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/with_comments_and_whitespace.conf" });
     defer allocator.free(absolute_path_to_config_file);
-    var configuration = createDefaultConfiguration();
+    var configuration = createDefaultConfiguration(allocator);
+    defer configuration.freeAll(allocator);
 
-    readConfigurationFile(absolute_path_to_config_file, &configuration);
+    readConfigurationFile(allocator, absolute_path_to_config_file, &configuration);
 
     try testing.expectEqualStrings(
         "/custom/path/to/auto_instrumentation_env.conf",
@@ -373,9 +391,10 @@ test "readConfigurationFile: does not parse overly long lines" {
     defer allocator.free(cwd_path);
     const absolute_path_to_config_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/very_long_lines.conf" });
     defer allocator.free(absolute_path_to_config_file);
-    var configuration = createDefaultConfiguration();
+    var configuration = createDefaultConfiguration(allocator);
+    defer configuration.freeAll(allocator);
 
-    readConfigurationFile(absolute_path_to_config_file, &configuration);
+    readConfigurationFile(allocator, absolute_path_to_config_file, &configuration);
 
     try testing.expectEqualStrings(
         default_dotnet_auto_instrumentation_agent_path_prefix,
@@ -394,7 +413,7 @@ test "readConfigurationFile: does not parse overly long lines" {
 /// Parses a single line from a configuration file.
 /// Returns a key-value pair if the line is a valid key-value pair, and null for empty
 /// lines, comments and invalid lines.
-fn parseLine(line: []u8, cfg_file_path: []const u8) ?struct {
+fn parseLine(gpa: std.mem.Allocator, line: []u8, cfg_file_path: []const u8) ?struct {
     key: []const u8,
     value: []u8,
 } {
@@ -412,14 +431,14 @@ fn parseLine(line: []u8, cfg_file_path: []const u8) ?struct {
 
     if (std.mem.indexOfScalar(u8, trimmed, '=')) |equalsIdx| {
         const key_trimmed = std.mem.trim(u8, trimmed[0..equalsIdx], " \t\r\n");
-        const key = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{key_trimmed}) catch |err| {
+        const key = std.fmt.allocPrint(gpa, "{s}", .{key_trimmed}) catch |err| {
             print.printError("error in allocPrint while allocating key from file {s}: {}", .{ cfg_file_path, err });
             return null;
         };
         const value_trimmed = std.mem.trim(u8, trimmed[equalsIdx + 1 ..], " \t\r\n");
-        const value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{value_trimmed}) catch |err| {
+        const value = std.fmt.allocPrint(gpa, "{s}", .{value_trimmed}) catch |err| {
             print.printError("error in allocPrint while allocating value from file {s}: {}", .{ cfg_file_path, err });
-            alloc.page_allocator.free(key);
+            gpa.free(key);
             return null;
         };
         return .{
@@ -434,7 +453,9 @@ fn parseLine(line: []u8, cfg_file_path: []const u8) ?struct {
 }
 
 test "parseLine: empty line" {
+    const allocator = testing.allocator;
     const result = parseLine(
+        allocator,
         "",
         "/path/to/configuration",
     );
@@ -442,125 +463,165 @@ test "parseLine: empty line" {
 }
 
 test "parseLine: whitespace only" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "  \t ", .{});
+    defer allocator.free(line);
     const result = parseLine(
-        try std.fmt.allocPrint(test_util.test_allocator, "  \t ", .{}),
+        allocator,
+        line,
         "/path/to/configuration",
     );
     try test_util.expectWithMessage(result == null, "parseLine(whitespace) returns null");
 }
 
 test "parseLine: full line comment" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "# this is a comment", .{});
+    defer allocator.free(line);
     const result = parseLine(
-        try std.fmt.allocPrint(test_util.test_allocator, "# this is a comment", .{}),
+        allocator,
+        line,
         "/path/to/configuration",
     );
     try test_util.expectWithMessage(result == null, "parseLine(full line comment) returns null");
 }
 
 test "parseLine: end of line comment" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=value # comment", .{});
+    defer allocator.free(line);
     const result = parseLine(
-        try std.fmt.allocPrint(test_util.test_allocator, "key=value # comment", .{}),
+        allocator,
+        line,
         "/path/to/configuration",
     );
     try test_util.expectWithMessage(result != null, "parseLine(end-of-line comment) returns key-value");
     if (result) |kv| {
         try testing.expectEqualStrings("key", kv.key);
         try testing.expectEqualStrings("value", kv.value);
-        alloc.page_allocator.free(kv.key);
-        alloc.page_allocator.free(kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
     }
 }
 
 test "parseLine: valid key-value pair for unknown key" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=value", .{});
+    defer allocator.free(line);
     const result = parseLine(
-        try std.fmt.allocPrint(test_util.test_allocator, "key=value", .{}),
+        allocator,
+        line,
         "/path/to/configuration",
     );
     try test_util.expectWithMessage(result != null, "parseLine(key-value pair/unknown key) returns key-value");
     if (result) |kv| {
         try testing.expectEqualStrings("key", kv.key);
         try testing.expectEqualStrings("value", kv.value);
-        alloc.page_allocator.free(kv.key);
-        alloc.page_allocator.free(kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
     }
 }
 
 test "parseLine: valid key-value pair for known key" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "jvm_auto_instrumentation_agent_path=/custom/path/to/jvm/agent", .{});
+    defer allocator.free(line);
     const result = parseLine(
-        try std.fmt.allocPrint(test_util.test_allocator, "jvm_auto_instrumentation_agent_path=/custom/path/to/jvm/agent", .{}),
+        allocator,
+        line,
         "/path/to/configuration",
     );
     try test_util.expectWithMessage(result != null, "parseLine(key-value pair/known key) returns key-value");
     if (result) |kv| {
         try testing.expectEqualStrings("jvm_auto_instrumentation_agent_path", kv.key);
         try testing.expectEqualStrings("/custom/path/to/jvm/agent", kv.value);
-        alloc.page_allocator.free(kv.key);
-        alloc.page_allocator.free(kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
     }
 }
 
 test "parseLine: valid key-value pair for known key with end-of-line comment" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "jvm_auto_instrumentation_agent_path=/custom/path/to/jvm/agent # comment", .{});
+    defer allocator.free(line);
     const result = parseLine(
-        try std.fmt.allocPrint(test_util.test_allocator, "jvm_auto_instrumentation_agent_path=/custom/path/to/jvm/agent # comment", .{}),
+        allocator,
+        line,
         "/path/to/configuration",
     );
     try test_util.expectWithMessage(result != null, "parseLine(key-value pair/known key/eol comment) returns key-value");
     if (result) |kv| {
         try testing.expectEqualStrings("jvm_auto_instrumentation_agent_path", kv.key);
         try testing.expectEqualStrings("/custom/path/to/jvm/agent", kv.value);
-        alloc.page_allocator.free(kv.key);
-        alloc.page_allocator.free(kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
     }
 }
 
 test "parseLine: valid key-value pair with whitespace" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "  jvm_auto_instrumentation_agent_path \t =  /custom/path/to/jvm/agent  ", .{});
+    defer allocator.free(line);
     const result = parseLine(
-        try std.fmt.allocPrint(test_util.test_allocator, "  jvm_auto_instrumentation_agent_path \t =  /custom/path/to/jvm/agent  ", .{}),
+        allocator,
+        line,
         "/path/to/configuration",
     );
     try test_util.expectWithMessage(result != null, "parseLine(key-value pair/known key/whitespace) returns key-value");
     if (result) |kv| {
         try testing.expectEqualStrings("jvm_auto_instrumentation_agent_path", kv.key);
         try testing.expectEqualStrings("/custom/path/to/jvm/agent", kv.value);
-        alloc.page_allocator.free(kv.key);
-        alloc.page_allocator.free(kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
     }
 }
 
 test "parseLine: multiple equals characters" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "jvm_auto_instrumentation_agent_path=/path/with/=/character/===", .{});
+    defer allocator.free(line);
     const result = parseLine(
-        try std.fmt.allocPrint(test_util.test_allocator, "jvm_auto_instrumentation_agent_path=/path/with/=/character/===", .{}),
+        allocator,
+        line,
         "/path/to/configuration",
     );
     try test_util.expectWithMessage(result != null, "parseLine(key-value pair/known key/multiple equals) returns key-value");
     if (result) |kv| {
         try testing.expectEqualStrings("jvm_auto_instrumentation_agent_path", kv.key);
         try testing.expectEqualStrings("/path/with/=/character/===", kv.value);
-        alloc.page_allocator.free(kv.key);
-        alloc.page_allocator.free(kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
     }
 }
 
 test "parseLine: invalid line (no = character)" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "this line is invalid", .{});
+    defer allocator.free(line);
     const result = parseLine(
-        try std.fmt.allocPrint(test_util.test_allocator, "this line is invalid", .{}),
+        allocator,
+        line,
         "/path/to/configuration",
     );
     try test_util.expectWithMessage(result == null, "parseLine(invalid line) returns null");
 }
 
 test "parseLine: invalid line (line too long)" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "this line is invalid", .{});
+    defer allocator.free(line);
     const result = parseLine(
-        try std.fmt.allocPrint(test_util.test_allocator, "this line is invalid", .{}),
+        allocator,
+        line,
         "/path/to/configuration",
     );
     try test_util.expectWithMessage(result == null, "parseLine(invalid line) returns null");
 }
 
-fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void {
+fn readConfigurationFromEnvironment(gpa: std.mem.Allocator, configuration: *InjectorConfiguration) void {
     if (std.posix.getenv(dotnet_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const dotnet_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
+        const dotnet_value = std.fmt.allocPrint(gpa, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
@@ -568,7 +629,7 @@ fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void 
     }
     if (std.posix.getenv(jvm_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const jvm_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
+        const jvm_value = std.fmt.allocPrint(gpa, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
@@ -576,7 +637,7 @@ fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void 
     }
     if (std.posix.getenv(nodejs_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const nodejs_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
+        const nodejs_value = std.fmt.allocPrint(gpa, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
@@ -584,44 +645,44 @@ fn readConfigurationFromEnvironment(configuration: *InjectorConfiguration) void 
     }
     if (std.posix.getenv(include_paths_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const include_paths_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
+        const include_paths_value = std.fmt.allocPrint(gpa, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
-        configuration.include_paths = patterns_util.splitByComma(alloc.page_allocator, include_paths_value) catch |err| {
+        configuration.include_paths = patterns_util.splitByComma(gpa, include_paths_value) catch |err| {
             print.printError("error parsing include_paths value from the environment {s}: {}", .{ include_paths_value, err });
             return;
         };
     }
     if (std.posix.getenv(exclude_paths_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const exclude_paths_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
+        const exclude_paths_value = std.fmt.allocPrint(gpa, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
-        configuration.exclude_paths = patterns_util.splitByComma(alloc.page_allocator, exclude_paths_value) catch |err| {
+        configuration.exclude_paths = patterns_util.splitByComma(gpa, exclude_paths_value) catch |err| {
             print.printError("error parsing exclude_paths value from the environment {s}: {}", .{ exclude_paths_value, err });
             return;
         };
     }
     if (std.posix.getenv(include_args_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const include_args_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
+        const include_args_value = std.fmt.allocPrint(gpa, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
-        configuration.include_args = patterns_util.splitByComma(alloc.page_allocator, include_args_value) catch |err| {
+        configuration.include_args = patterns_util.splitByComma(gpa, include_args_value) catch |err| {
             print.printError("error parsing include_arguments value from the environment {s}: {}", .{ include_args_value, err });
             return;
         };
     }
     if (std.posix.getenv(exclude_args_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const exclude_args_value = std.fmt.allocPrint(alloc.page_allocator, "{s}", .{trimmed_value}) catch |err| {
+        const exclude_args_value = std.fmt.allocPrint(gpa, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
-        configuration.exclude_args = patterns_util.splitByComma(alloc.page_allocator, exclude_args_value) catch |err| {
+        configuration.exclude_args = patterns_util.splitByComma(gpa, exclude_args_value) catch |err| {
             print.printError("error parsing exclude_arguments value from the environment {s}: {}", .{ exclude_args_value, err });
             return;
         };

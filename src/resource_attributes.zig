@@ -61,7 +61,9 @@ const mappings: [7]EnvToResourceAttributeMapping =
 
 /// Derive the modified value for OTEL_RESOURCE_ATTRIBUTES based on the original value, and on other resource attributes
 /// provided via the OTEL_INJECTOR_* environment variables.
-pub fn getModifiedOtelResourceAttributesValue(gpa: std.mem.Allocator, original_value_optional: ?[:0]const u8) !?types.NullTerminatedString {
+/// The caller is responsible for freeing the returned string (unless the result is passed on to setenv and needs to
+/// stay in memory).
+pub fn getModifiedOtelResourceAttributesValue(gpa: std.mem.Allocator, original_value_optional: ?[:0]const u8) !?[:0]u8 {
     var result_list = try std.ArrayList(u8).initCapacity(gpa, std.heap.pageSize());
     const result_writer = result_list.writer(gpa);
 
@@ -183,10 +185,5 @@ pub fn getModifiedOtelResourceAttributesValue(gpa: std.mem.Allocator, original_v
         return null;
     }
 
-    try result_writer.writeAll("\x00");
-
-    const result_owned = try result_list.toOwnedSlice(gpa);
-    const result_as_null_terminated_string: types.NullTerminatedString = @ptrCast(result_owned.ptr);
-
-    return result_as_null_terminated_string;
+    return try result_list.toOwnedSliceSentinel(gpa, 0);
 }

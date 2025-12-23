@@ -79,6 +79,8 @@ fn initEnviron() callconv(.c) void {
     };
 
     if (maybe_modified_resource_attributes) |modified_resource_attributes| {
+        // Note: getModifiedOtelResourceAttributesValue returns a sentinel-terminated slices, which can be coerced
+        // automatically into the sentinel-terminated many pointer which is required by setenv.
         const setenv_res =
             libc_info.setenv_fn_ptr(
                 res_attrs.otel_resource_attributes_env_var_name,
@@ -269,6 +271,10 @@ fn modifyEnvironmentVariable(
     configuration: config.InjectorConfiguration,
 ) void {
     if (getEnvValue(allocator, name, configuration)) |value| {
+        // Note: We must *not* free/deallocate the return value of getEnvValue after handing it over to setenv, or we
+        // may cause a USE_AFTER_FREE memory corruption in the parent process.
+        // Note: getEnvValue returns a sentinel-terminated slices, which can be coerced automatically into the
+        // sentinel-terminated many pointer which is required by setenv.
         const setenv_res = setenv_fn_ptr(name, value, true);
         if (setenv_res == 0) {
             print.printDebug(
@@ -288,7 +294,7 @@ fn getEnvValue(
     allocator: std.mem.Allocator,
     name: [:0]const u8,
     configuration: config.InjectorConfiguration,
-) ?types.NullTerminatedString {
+) ?[:0]const u8 {
     const original_value = std.posix.getenv(name);
     if (std.mem.eql(u8, name, jvm.java_tool_options_env_var_name)) {
         return jvm.checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(

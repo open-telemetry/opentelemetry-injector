@@ -13,14 +13,26 @@ const test_util = @import("test_util.zig");
 const testing = std.testing;
 
 pub const DotnetValues = struct {
-    coreclr_enable_profiling: types.NullTerminatedString,
-    coreclr_profiler: types.NullTerminatedString,
-    coreclr_profiler_path: types.NullTerminatedString,
-    additional_deps: types.NullTerminatedString,
-    shared_store: types.NullTerminatedString,
-    startup_hooks: types.NullTerminatedString,
-    otel_auto_home: types.NullTerminatedString,
+    coreclr_enable_profiling: [:0]const u8,
+    coreclr_profiler: [:0]const u8,
+    coreclr_profiler_path: [:0]u8,
+    additional_deps: [:0]u8,
+    shared_store: [:0]u8,
+    startup_hooks: [:0]u8,
+    otel_auto_home: [:0]u8,
+
+    pub fn freeAll(self: DotnetValues, allocator: std.mem.Allocator) void {
+        allocator.free(self.coreclr_profiler_path);
+        allocator.free(self.additional_deps);
+        allocator.free(self.shared_store);
+        allocator.free(self.startup_hooks);
+        allocator.free(self.otel_auto_home);
+    }
 };
+
+const coreclr_enable_profiling_value = "1";
+// See https://opentelemetry.io/docs/zero-code/dotnet/configuration/#net-clr-profiler.
+const coreclr_profiler_value = "{918728DD-259F-4A6A-AC2B-B85E1B658318}";
 
 pub const CachedDotnetValues = struct {
     values: ?DotnetValues,
@@ -57,6 +69,10 @@ pub fn setLibcFlavor(lf: types.LibCFlavor) void {
     libc_flavor = lf;
 }
 
+/// Returns the values for .NET-profiler related environment variables.
+///
+/// The caller is responsible for freeing the returned strings (unless the results are passed on to setenv and need to
+/// stay in memory).
 pub fn getDotnetValues(
     gpa: std.mem.Allocator,
     configuration: config.InjectorConfiguration,
@@ -99,7 +115,7 @@ fn doGetDotnetValues(gpa: std.mem.Allocator, dotnet_path_prefix: []u8) ?DotnetVa
             return null;
         };
 
-        const paths_to_check = [_]types.NullTerminatedString{
+        const paths_to_check = [_][:0]const u8{
             dotnet_values.coreclr_profiler_path,
             dotnet_values.additional_deps,
             dotnet_values.otel_auto_home,
@@ -107,13 +123,15 @@ fn doGetDotnetValues(gpa: std.mem.Allocator, dotnet_path_prefix: []u8) ?DotnetVa
             dotnet_values.startup_hooks,
         };
         for (paths_to_check) |p| {
-            std.fs.cwd().access(std.mem.span(p), .{}) catch |err| {
+            std.fs.cwd().access(p, .{}) catch |err| {
                 print.printError("Skipping injection of injecting the .NET OpenTelemetry instrumentation because of an issue accessing {s}: {}", .{ p, err });
                 cached_dotnet_values = .{
                     .values = null,
                     // do not try to determine the .NET values again
                     .done = true,
                 };
+                // free strings allocated in determineDotnetValues
+                dotnet_values.freeAll(gpa);
                 return null;
             };
         }
@@ -129,26 +147,28 @@ fn doGetDotnetValues(gpa: std.mem.Allocator, dotnet_path_prefix: []u8) ?DotnetVa
 }
 
 test "doGetDotnetValues: should return null value if the libc flavor has not been set" {
+    const allocator = testing.allocator;
     _resetState();
     defer _resetState();
 
-    const path = try std.fmt.allocPrint(testing.allocator, "", .{});
-    defer testing.allocator.free(path);
+    const path = try std.fmt.allocPrint(allocator, "", .{});
+    defer allocator.free(path);
 
     libc_flavor = null;
-    const dotnet_values = doGetDotnetValues(std.heap.page_allocator, path);
+    const dotnet_values = doGetDotnetValues(allocator, path);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
 
 test "doGetDotnetValues: should return null value if the profiler path cannot be accessed" {
+    const allocator = testing.allocator;
     _resetState();
     defer _resetState();
 
-    const path = try std.fmt.allocPrintSentinel(testing.allocator, "/invalid/path", .{}, 0);
-    defer testing.allocator.free(path);
+    const path = try std.fmt.allocPrintSentinel(allocator, "/invalid/path", .{}, 0);
+    defer allocator.free(path);
 
     libc_flavor = .GNU;
-    const dotnet_values = doGetDotnetValues(std.heap.page_allocator, path);
+    const dotnet_values = doGetDotnetValues(allocator, path);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
 
@@ -197,8 +217,8 @@ fn determineDotnetValues(
     }, 0);
 
     return .{
-        .coreclr_enable_profiling = "1",
-        .coreclr_profiler = "{918728DD-259F-4A6A-AC2B-B85E1B658318}",
+        .coreclr_enable_profiling = coreclr_enable_profiling_value,
+        .coreclr_profiler = coreclr_profiler_value,
         .coreclr_profiler_path = coreclr_profiler_path,
         .additional_deps = additional_deps,
         .otel_auto_home = otel_auto_home,
@@ -209,7 +229,7 @@ fn determineDotnetValues(
 
 test "determineDotnetValues: should return error for unsupported CPU architecture" {
     try testing.expectError(error.UnsupportedCpuArchitecture, determineDotnetValues(
-        std.heap.page_allocator,
+        testing.allocator,
         "",
         .GNU,
         .powerpc64le,
@@ -218,7 +238,7 @@ test "determineDotnetValues: should return error for unsupported CPU architectur
 
 test "determineDotnetValues: should return error for unknown libc flavor" {
     try testing.expectError(error.UnknownLibCFlavor, determineDotnetValues(
-        std.heap.page_allocator,
+        testing.allocator,
         "",
         .UNKNOWN,
         .x86_64,
@@ -226,169 +246,181 @@ test "determineDotnetValues: should return error for unknown libc flavor" {
 }
 
 test "determineDotnetValues: should return values for glibc/x86_64" {
-    const path = try std.fmt.allocPrint(testing.allocator, "/__otel_auto_instrumentation/dotnet", .{});
-    defer testing.allocator.free(path);
+    const allocator = testing.allocator;
+    const path = try std.fmt.allocPrint(allocator, "/__otel_auto_instrumentation/dotnet", .{});
+    defer allocator.free(path);
 
     const dotnet_values =
         try determineDotnetValues(
-            std.heap.page_allocator,
+            allocator,
             path,
             .GNU,
             .x86_64,
         );
+    defer dotnet_values.freeAll(allocator);
+
     try testing.expectEqualStrings(
-        "1",
-        std.mem.span(dotnet_values.coreclr_enable_profiling),
+        coreclr_enable_profiling_value,
+        dotnet_values.coreclr_enable_profiling,
     );
     try testing.expectEqualStrings(
-        "{918728DD-259F-4A6A-AC2B-B85E1B658318}",
-        std.mem.span(dotnet_values.coreclr_profiler),
+        coreclr_profiler_value,
+        dotnet_values.coreclr_profiler,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/glibc/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so",
-        std.mem.span(dotnet_values.coreclr_profiler_path),
+        dotnet_values.coreclr_profiler_path,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/glibc/AdditionalDeps",
-        std.mem.span(dotnet_values.additional_deps),
+        dotnet_values.additional_deps,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/glibc",
-        std.mem.span(dotnet_values.otel_auto_home),
+        dotnet_values.otel_auto_home,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/glibc/store",
-        std.mem.span(dotnet_values.shared_store),
+        dotnet_values.shared_store,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/glibc/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
-        std.mem.span(dotnet_values.startup_hooks),
+        dotnet_values.startup_hooks,
     );
 }
 
 test "determineDotnetValues: should return values for glibc/arm64" {
+    const allocator = testing.allocator;
     const path =
-        try std.fmt.allocPrint(testing.allocator, "/__otel_auto_instrumentation/dotnet", .{});
-    defer testing.allocator.free(path);
+        try std.fmt.allocPrint(allocator, "/__otel_auto_instrumentation/dotnet", .{});
+    defer allocator.free(path);
 
     const dotnet_values =
         try determineDotnetValues(
-            std.heap.page_allocator,
+            allocator,
             path,
             .GNU,
             .aarch64,
         );
+    defer dotnet_values.freeAll(allocator);
+
     try testing.expectEqualStrings(
-        "1",
-        std.mem.span(dotnet_values.coreclr_enable_profiling),
+        coreclr_enable_profiling_value,
+        dotnet_values.coreclr_enable_profiling,
     );
     try testing.expectEqualStrings(
-        "{918728DD-259F-4A6A-AC2B-B85E1B658318}",
-        std.mem.span(dotnet_values.coreclr_profiler),
+        coreclr_profiler_value,
+        dotnet_values.coreclr_profiler,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/glibc/linux-arm64/OpenTelemetry.AutoInstrumentation.Native.so",
-        std.mem.span(dotnet_values.coreclr_profiler_path),
+        dotnet_values.coreclr_profiler_path,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/glibc/AdditionalDeps",
-        std.mem.span(dotnet_values.additional_deps),
+        dotnet_values.additional_deps,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/glibc",
-        std.mem.span(dotnet_values.otel_auto_home),
+        dotnet_values.otel_auto_home,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/glibc/store",
-        std.mem.span(dotnet_values.shared_store),
+        dotnet_values.shared_store,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/glibc/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
-        std.mem.span(dotnet_values.startup_hooks),
+        dotnet_values.startup_hooks,
     );
 }
 
 test "determineDotnetValues: should return values for musl/x86_64" {
+    const allocator = testing.allocator;
     const path =
-        try std.fmt.allocPrint(testing.allocator, "/__otel_auto_instrumentation/dotnet", .{});
-    defer testing.allocator.free(path);
+        try std.fmt.allocPrint(allocator, "/__otel_auto_instrumentation/dotnet", .{});
+    defer allocator.free(path);
 
     const dotnet_values =
         try determineDotnetValues(
-            std.heap.page_allocator,
+            allocator,
             path,
             .MUSL,
             .x86_64,
         );
+    defer dotnet_values.freeAll(allocator);
+
     try testing.expectEqualStrings(
-        "1",
-        std.mem.span(dotnet_values.coreclr_enable_profiling),
+        coreclr_enable_profiling_value,
+        dotnet_values.coreclr_enable_profiling,
     );
     try testing.expectEqualStrings(
-        "{918728DD-259F-4A6A-AC2B-B85E1B658318}",
-        std.mem.span(dotnet_values.coreclr_profiler),
+        coreclr_profiler_value,
+        dotnet_values.coreclr_profiler,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/musl/linux-musl-x64/OpenTelemetry.AutoInstrumentation.Native.so",
-        std.mem.span(dotnet_values.coreclr_profiler_path),
+        dotnet_values.coreclr_profiler_path,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/musl/AdditionalDeps",
-        std.mem.span(dotnet_values.additional_deps),
+        dotnet_values.additional_deps,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/musl",
-        std.mem.span(dotnet_values.otel_auto_home),
+        dotnet_values.otel_auto_home,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/musl/store",
-        std.mem.span(dotnet_values.shared_store),
+        dotnet_values.shared_store,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/musl/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
-        std.mem.span(dotnet_values.startup_hooks),
+        dotnet_values.startup_hooks,
     );
 }
 
 test "determineDotnetValues: should return values for musl/arm64" {
+    const allocator = testing.allocator;
     const path =
-        try std.fmt.allocPrint(testing.allocator, "/__otel_auto_instrumentation/dotnet", .{});
-    defer testing.allocator.free(path);
+        try std.fmt.allocPrint(allocator, "/__otel_auto_instrumentation/dotnet", .{});
+    defer allocator.free(path);
 
     const dotnet_values =
         try determineDotnetValues(
-            std.heap.page_allocator,
+            allocator,
             path,
             .MUSL,
             .aarch64,
         );
+    defer dotnet_values.freeAll(allocator);
+
     try testing.expectEqualStrings(
-        "1",
-        std.mem.span(dotnet_values.coreclr_enable_profiling),
+        coreclr_enable_profiling_value,
+        dotnet_values.coreclr_enable_profiling,
     );
     try testing.expectEqualStrings(
-        "{918728DD-259F-4A6A-AC2B-B85E1B658318}",
-        std.mem.span(dotnet_values.coreclr_profiler),
+        coreclr_profiler_value,
+        dotnet_values.coreclr_profiler,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/musl/linux-musl-arm64/OpenTelemetry.AutoInstrumentation.Native.so",
-        std.mem.span(dotnet_values.coreclr_profiler_path),
+        dotnet_values.coreclr_profiler_path,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/musl/AdditionalDeps",
-        std.mem.span(dotnet_values.additional_deps),
+        dotnet_values.additional_deps,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/musl",
-        std.mem.span(dotnet_values.otel_auto_home),
+        dotnet_values.otel_auto_home,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/musl/store",
-        std.mem.span(dotnet_values.shared_store),
+        dotnet_values.shared_store,
     );
     try testing.expectEqualStrings(
         "/__otel_auto_instrumentation/dotnet/musl/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
-        std.mem.span(dotnet_values.startup_hooks),
+        dotnet_values.startup_hooks,
     );
 }
 

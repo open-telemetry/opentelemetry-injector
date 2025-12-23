@@ -12,11 +12,16 @@ const testing = std.testing;
 
 pub const node_options_env_var_name = "NODE_OPTIONS";
 
+/// Returns the modified value for NODE_OPTIONS, including the --require flag; based on the original value of
+/// NODE_OPTIONS.
+///
+/// The caller is responsible for freeing the returned string (unless the result is passed on to setenv and needs to
+/// stay in memory).
 pub fn checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
     gpa: std.mem.Allocator,
     original_value_optional: ?[:0]const u8,
     configuration: config.InjectorConfiguration,
-) ?types.NullTerminatedString {
+) ?[:0]u8 {
     return doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
         gpa,
         original_value_optional,
@@ -28,7 +33,7 @@ fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
     gpa: std.mem.Allocator,
     original_value_optional: ?[:0]const u8,
     nodejs_auto_instrumentation_agent_path: []u8,
-) ?types.NullTerminatedString {
+) ?[:0]u8 {
     if (nodejs_auto_instrumentation_agent_path.len == 0) {
         print.printInfo("Skipping the injection of the Node.js OpenTelemetry auto instrumentation because it has been explicitly disabled.", .{});
         return null;
@@ -41,10 +46,12 @@ fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
         print.printError("Skipping the injection of the Node.js OpenTelemetry auto instrumentation in \"{s}\" because of an issue accessing the Node.js module at \"{s}\": {}", .{ node_options_env_var_name, nodejs_auto_instrumentation_agent_path, err });
         return null;
     };
+
     const require_nodejs_auto_instrumentation_agent = std.fmt.allocPrintSentinel(gpa, "--require {s}", .{nodejs_auto_instrumentation_agent_path}, 0) catch |err| {
         print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ node_options_env_var_name, err });
         return null;
     };
+
     return getModifiedNodeOptionsValue(
         gpa,
         original_value_optional,
@@ -55,46 +62,48 @@ fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
 test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: should return null if the Node.js OTel auto instrumentation agent cannot be accessed (no other NODE_OPTIONS are present)" {
     const path = try std.fmt.allocPrint(testing.allocator, "/invalid/path", .{});
     defer testing.allocator.free(path);
-    const modifiedNodeOptionsValue =
+    const modified_node_options_value =
         doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
-            std.heap.page_allocator,
+            testing.allocator,
             null,
             path,
         );
-    try testing.expect(modifiedNodeOptionsValue == null);
+    try test_util.expectWithMessage(modified_node_options_value == null, "modified_node_options_value == null");
 }
 
 test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: should return null if the Node.js OTel auto instrumentation agent cannot be accessed (other NODE_OPTIONS are present)" {
     const path = try std.fmt.allocPrint(testing.allocator, "/invalid/path", .{});
     defer testing.allocator.free(path);
-    const modifiedNodeOptionsValue =
+    const modified_node_options_value =
         doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
-            std.heap.page_allocator,
+            testing.allocator,
             "--abort-on-uncaught-exception"[0.. :0],
             path,
         );
-    try testing.expect(modifiedNodeOptionsValue == null);
+    try test_util.expectWithMessage(modified_node_options_value == null, "modified_node_options_value == null");
 }
 
 fn getModifiedNodeOptionsValue(
     gpa: std.mem.Allocator,
     original_value_optional: ?[:0]const u8,
-    require_nodejs_auto_instrumentation_agent: types.NullTerminatedString,
-) ?types.NullTerminatedString {
+    require_nodejs_auto_instrumentation_agent: [:0]u8,
+) ?[:0]u8 {
     if (original_value_optional) |original_value| {
-        if (std.mem.indexOf(u8, original_value, std.mem.span(require_nodejs_auto_instrumentation_agent))) |_| {
+        if (std.mem.indexOf(u8, original_value, require_nodejs_auto_instrumentation_agent)) |_| {
             // If the correct "--require ..." flag is already present in NODE_OPTIONS, do nothing. This is particularly
             // important to avoid double injection, for example if we are injecting into a container which has a shell
             // executable as its entry point (into which we inject env var modifications), and then this shell starts
             // the Node.js executable as a child process, which inherits the environment from the already injected
             // shell.
+            gpa.free(require_nodejs_auto_instrumentation_agent);
             return null;
         }
 
         // If NODE_OPTIONS is already set, prepend the "--require ..." flag to the original value.
-        // Note: We must never free the return_buffer, or we may cause a USE_AFTER_FREE memory corruption in the
-        // parent process.
-        const return_buffer = std.fmt.allocPrintSentinel(
+        // Since we copy over require_nodejs_auto_instrumentation_agent into newly allocated memory, we can free the
+        // parameter here.
+        defer gpa.free(require_nodejs_auto_instrumentation_agent);
+        return std.fmt.allocPrintSentinel(
             gpa,
             "{s} {s}",
             .{ require_nodejs_auto_instrumentation_agent, original_value },
@@ -103,7 +112,6 @@ fn getModifiedNodeOptionsValue(
             print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ node_options_env_var_name, err });
             return null;
         };
-        return return_buffer.ptr;
     }
 
     // If NODE_OPTIONS is not set, simply return the "--require ..." flag.
@@ -111,38 +119,63 @@ fn getModifiedNodeOptionsValue(
 }
 
 test "getModifiedNodeOptionsValue: should return --require if original value is unset" {
-    const modifiedNodeOptionsValue =
+    const require_nodejs_auto_instrumentation_agent = try std.fmt.allocPrintSentinel(
+        testing.allocator,
+        "--require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument",
+        .{},
+        0,
+    );
+    const modified_node_options_value =
         getModifiedNodeOptionsValue(
-            std.heap.page_allocator,
+            testing.allocator,
             null,
-            "--require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument",
+            require_nodejs_auto_instrumentation_agent,
         );
+    defer (if (modified_node_options_value) |val| {
+        testing.allocator.free(val);
+    });
     try testing.expectEqualStrings(
         "--require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument",
-        std.mem.span(modifiedNodeOptionsValue orelse "-"),
+        modified_node_options_value orelse "-",
     );
 }
 
 test "getModifiedNodeOptionsValue: should prepend --require if original value exists" {
     const original_value: [:0]const u8 = "--abort-on-uncaught-exception"[0.. :0];
+    const require_nodejs_auto_instrumentation_agent = try std.fmt.allocPrintSentinel(
+        testing.allocator,
+        "--require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument",
+        .{},
+        0,
+    );
     const modified_node_options_value =
         getModifiedNodeOptionsValue(
-            std.heap.page_allocator,
+            testing.allocator,
             original_value,
-            "--require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument",
+            require_nodejs_auto_instrumentation_agent,
         );
+    defer (if (modified_node_options_value) |val| {
+        testing.allocator.free(val);
+    });
     try testing.expectEqualStrings(
         "--require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument --abort-on-uncaught-exception",
-        std.mem.span(modified_node_options_value orelse "-"),
+        modified_node_options_value orelse "-",
     );
 }
 
 test "getModifiedNodeOptionsValue: should do nothing if our --require is already present" {
-    const modifiedNodeOptionsValue =
+    const original_value: [:0]const u8 = "--abort-on-uncaught-exception --require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument --something-else"[0.. :0];
+    const require_nodejs_auto_instrumentation_agent = try std.fmt.allocPrintSentinel(
+        testing.allocator,
+        "--require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument",
+        .{},
+        0,
+    );
+    const modified_node_options_value =
         getModifiedNodeOptionsValue(
-            std.heap.page_allocator,
-            "--abort-on-uncaught-exception --require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument --something-else"[0.. :0],
-            "--require /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument",
+            testing.allocator,
+            original_value,
+            require_nodejs_auto_instrumentation_agent,
         );
-    try test_util.expectWithMessage(modifiedNodeOptionsValue == null, "modifiedNodeOptionsValue == null");
+    try test_util.expectWithMessage(modified_node_options_value == null, "modified_node_options_value == null");
 }

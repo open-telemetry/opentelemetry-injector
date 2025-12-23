@@ -6,9 +6,9 @@ used via the environment variable [`LD_PRELOAD`](https://man7.org/linux/man-page
 environment variables into processes at startup.
 
 It serves two main purposes:
-* Inject an OpenTelemetry Auto Instrumentation agent into the process to capture and report distributed traces and
+* Inject an OpenTelemetry auto-instrumentation agent into the process to capture and report distributed traces and
   metrics to the [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) for supported runtimes.
-* Set resource attributes automatically, (for example Kubernetes related resource attributes and service related
+* Set resource attributes automatically (for example Kubernetes related resource attributes and service related
   resource attributes in environments where this is applicable).
 
 The injector can be used to enable automatic zero-touch instrumentation of processes.
@@ -20,10 +20,10 @@ can be downloaded from the [releases page](https://github.com/open-telemetry/ope
 The OpenTelemetry injector Debian/RPM packages install the OpenTelemetry auto-instrumentation agents, the
 `libotelinject.so` shared object library, and a default configuration file to automatically instrument applications and
 services to capture and report distributed traces and metrics to the
-[OpenTelemetry Collector](https://opentelemetry.io/docs/collector/)
+[OpenTelemetry Collector](https://opentelemetry.io/docs/collector/).
 
-The `opentelemetry-injector` deb/rpm package installs and supports configuration of the following Auto
-Instrumentation agents:
+The `opentelemetry-injector` deb/rpm package installs and supports configuration of the following auto-instrumentation
+agents:
 
 - [Java](https://opentelemetry.io/docs/zero-code/java/)
 - [Node.js](https://opentelemetry.io/docs/zero-code/js/)
@@ -34,13 +34,13 @@ Instrumentation agents:
 This method requires `root` privileges.
 
 1. Add the path of the provided `/usr/lib/opentelemetry/libotelinject.so` shared object library to the
-   [`/etc/ld.so.preload`](https://man7.org/linux/man-pages/man8/ld.so.8.html#FILES) file to activate Auto
-   Instrumentation for ***all*** supported processes on the system. For example:
+   [`/etc/ld.so.preload`](https://man7.org/linux/man-pages/man8/ld.so.8.html#FILES) file to activate auto-
+   instrumentation for ***all*** supported processes on the system. For example:
    ```
    echo /usr/lib/opentelemetry/libotelinject.so >> /etc/ld.so.preload
    ```
    Alternatively, set the environment variable `LD_PRELOAD=/usr/lib/opentelemetry/libotelinject.so` for a specific
-   process to activate auto-instrumentation for tha process. For example:
+   process to activate auto-instrumentation for that process. For example:
    ```
    LD_PRELOAD=/usr/lib/opentelemetry/libotelinject.so node myapp.js
    ```
@@ -70,7 +70,7 @@ This method requires `root` privileges.
 
    The values set in `/etc/opentelemetry/otelinject.conf` can be overridden with environment variables.
    (This should usually not be necessary.)
-   - `DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the .NET Auto Instrumentation
+   - `DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the .NET auto-instrumentation
      agent files
    - `JVM_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Java auto-instrumentation agent JAR file
    - `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Node.js auto-instrumentation agent registration file
@@ -152,7 +152,7 @@ Here is an overview of the modifications that the injector will apply:
       they are already set.
       In contrast to other runtimes, .NET does not support adding multiple agents.
 * It inspects specific existing environment variables and populates `OTEL_RESOURCE_ATTRIBUTES` with additional resource
-  attributes. These environment variables need to be externally (for example by a Kubernetes operator with a mutating
+  attributes. These environment variables need to be set externally (for example by a Kubernetes operator with a mutating
   webhook on the pod spec template of the workload). If `OTEL_RESOURCE_ATTRIBUTES` is already set, the additional
   key-value pairs are appended to the existing value of `OTEL_RESOURCE_ATTRIBUTES`. Existing key-value pairs are not
   overwritten, that is if e.g. `OTEL_RESOURCE_ATTRIBUTES` already has a key-value pair for `k8s.pod.name`, the existing
@@ -172,7 +172,7 @@ Here is an overview of the modifications that the injector will apply:
 
 While you can set all resource attributes with `OTEL_INJECTOR_RESOURCE_ATTRIBUTES`, the additional environment
 variables controlling individual resource attributes (like `OTEL_INJECTOR_SERVICE_NAME` or
-`OTEL_INJECTOR_K8S_NAMESPACE_NAME` are useful in Kubernetes for deriving resource attributes via
+`OTEL_INJECTOR_K8S_NAMESPACE_NAME`) are useful in Kubernetes for deriving resource attributes via
 [field selectors](https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/#use-pod-fields-as-values-for-environment-variables),
 e.g. by adding a snippet like this to the pod spec template:
 ```
@@ -183,17 +183,19 @@ e.g. by adding a snippet like this to the pod spec template:
 ```
 
 The following provides an overview of the intended mappings:
+
+| Environment Variable               | Intended Mapping |
+| ---------------------------------- | ---------------- |
 | `OTEL_INJECTOR_K8S_NAMESPACE_NAME` | `valueFrom.fieldRef.fieldPath: metadata.namespace` |
 | `OTEL_INJECTOR_K8S_POD_NAME`       | `valueFrom.fieldRef.fieldPath: metadata.name` |
 | `OTEL_INJECTOR_K8S_POD_UID`        | `valueFrom.fieldRef.fieldPath: metadata.uid` |
-| `OTEL_INJECTOR_K8S_CONTAINER_NAME` | The container's name (no field selector) |
 | `OTEL_INJECTOR_K8S_CONTAINER_NAME` | The container's name (no field selector) |
 | `OTEL_INJECTOR_SERVICE_NAME`       | `valueFrom.fieldRef.fieldPath: metadata.labels['app.kubernetes.io/name']` |
 | `OTEL_INJECTOR_SERVICE_VERSION`    | `valueFrom.fieldRef.fieldPath: metadata.labels['app.kubernetes.io/version']` |
 | `OTEL_INJECTOR_SERVICE_NAMESPACE`  | `valueFrom.fieldRef.fieldPath: metadata.labels['app.kubernetes.io/part-of']` |
 
 The environment variable `OTEL_INJECTOR_RESOURCE_ATTRIBUTES` can be set to key-value pairs derived from the
-annotations `resource.opentelemetry.io/*`, to support e.g. mapping annotations like
+annotations `resource.opentelemetry.io/*`, to support mapping annotations like
 `resource.opentelemetry.io/service.namespace`, `resource.opentelemetry.io/service.name` to their respective resource
 attributes.
 

@@ -64,7 +64,8 @@ fn initEnviron() callconv(.c) void {
         return;
     };
 
-    const configuration = config.readConfiguration(allocator);
+    var configuration = config.readConfiguration(allocator);
+    defer configuration.deinit(allocator);
 
     if (!evaluateAllowDeny(allocator, configuration)) {
         return;
@@ -347,10 +348,10 @@ fn setCustomEnvironmentVariables(
     while (env_var_iterator.next()) |env_var| {
         const name = allocator.dupeZ(u8, env_var.key_ptr.*) catch |err| {
             print.printError(
-                "error allocating memory for name when setting custom environment variable \"{}\"=\"{}\" (remaining custom environment variables will be skipped) : {}",
+                "error allocating memory for name when setting custom environment variable \"{s}\"=\"{s}\" (remaining custom environment variables will be skipped): {}",
                 .{
-                    env_var.key_ptr,
-                    env_var.value_ptr,
+                    env_var.key_ptr.*,
+                    env_var.value_ptr.*,
                     err,
                 },
             );
@@ -358,10 +359,10 @@ fn setCustomEnvironmentVariables(
         };
         const value = allocator.dupeZ(u8, env_var.value_ptr.*) catch |err| {
             print.printError(
-                "error allocating memory for value when setting custom environment variable \"{}\"=\"{}\" (remaining custom environment variables will be skipped): {}",
+                "error allocating memory for value when setting custom environment variable \"{s}\"=\"{s}\" (remaining custom environment variables will be skipped): {}",
                 .{
-                    env_var.key_ptr,
-                    env_var.value_ptr,
+                    env_var.key_ptr.*,
+                    env_var.value_ptr.*,
                     err,
                 },
             );

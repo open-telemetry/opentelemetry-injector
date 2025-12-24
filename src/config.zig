@@ -37,22 +37,31 @@ const include_args_env_var = "OTEL_INJECTOR_INCLUDE_WITH_ARGUMENTS";
 const exclude_args_env_var = "OTEL_INJECTOR_EXCLUDE_WITH_ARGUMENTS";
 
 pub const InjectorConfiguration = struct {
-    all_auto_instrumentation_agents_env_path: []u8,
-    all_auto_instrumentation_agents_env_vars: std.StringHashMap([]u8),
     dotnet_auto_instrumentation_agent_path_prefix: []u8,
     jvm_auto_instrumentation_agent_path: []u8,
     nodejs_auto_instrumentation_agent_path: []u8,
+    all_auto_instrumentation_agents_env_path: []u8,
+    all_auto_instrumentation_agents_env_vars: std.StringHashMap([]u8),
     include_paths: [][]const u8,
     exclude_paths: [][]const u8,
     include_args: [][]const u8,
     exclude_args: [][]const u8,
 
-    pub fn freeAll(self: *InjectorConfiguration, allocator: std.mem.Allocator) void {
-        allocator.free(self.all_auto_instrumentation_agents_env_path);
-        self.all_auto_instrumentation_agents_env_vars.deinit();
+    pub fn deinit(self: *InjectorConfiguration, allocator: std.mem.Allocator) void {
         allocator.free(self.dotnet_auto_instrumentation_agent_path_prefix);
         allocator.free(self.jvm_auto_instrumentation_agent_path);
         allocator.free(self.nodejs_auto_instrumentation_agent_path);
+        allocator.free(self.all_auto_instrumentation_agents_env_path);
+        var it = self.all_auto_instrumentation_agents_env_vars.iterator();
+        while (it.next()) |entry| {
+            allocator.free(entry.key_ptr.*);
+            allocator.free(entry.value_ptr.*);
+        }
+        self.all_auto_instrumentation_agents_env_vars.deinit();
+        deinitStringArray(allocator, self.include_paths);
+        deinitStringArray(allocator, self.exclude_paths);
+        deinitStringArray(allocator, self.include_args);
+        deinitStringArray(allocator, self.exclude_args);
     }
 };
 
@@ -71,27 +80,24 @@ var cached_configuration_optional: ?InjectorConfiguration = null;
 ///
 /// The configuration will be read from the file /etc/opentelemetry/otelinject.conf (if it exists) and from environment
 /// variables. Environment variables have higher precedence and can override settings from the configuration file.
-pub fn readConfiguration(gpa: std.mem.Allocator) InjectorConfiguration {
+pub fn readConfiguration(allocator: std.mem.Allocator) InjectorConfiguration {
     if (cached_configuration_optional) |cached_configuration| {
         return cached_configuration;
     }
 
-    var configuration = createDefaultConfiguration(gpa);
-    readConfigurationFile(gpa, config_file_path, &configuration);
-    readConfigurationFromEnvironment(gpa, &configuration);
-    readAllAgentsEnvFile(gpa, configuration.all_auto_instrumentation_agents_env_path, &configuration);
-    cached_configuration_optional = configuration;
-    return configuration;
+    return readConfigurationFromPath(allocator, config_file_path) catch |err| {
+        print.printError("Cannot allocate memory while parsing configuration: {t}", .{err});
+        return createEmptyConfiguration(allocator);
+    };
 }
 
-fn printErrorReturnEmptyConfig(gpa: std.mem.Allocator, err: std.mem.Allocator.Error) InjectorConfiguration {
-    print.printError("Cannot allocate memory for the default injector configuration: {t}", .{err});
+fn createEmptyConfiguration(allocator: std.mem.Allocator) InjectorConfiguration {
     return InjectorConfiguration{
         .dotnet_auto_instrumentation_agent_path_prefix = "",
         .jvm_auto_instrumentation_agent_path = "",
         .nodejs_auto_instrumentation_agent_path = "",
         .all_auto_instrumentation_agents_env_path = "",
-        .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(gpa),
+        .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(allocator),
         .include_paths = &.{},
         .exclude_paths = &.{},
         .include_args = &.{},
@@ -99,28 +105,222 @@ fn printErrorReturnEmptyConfig(gpa: std.mem.Allocator, err: std.mem.Allocator.Er
     };
 }
 
-fn createDefaultConfiguration(gpa: std.mem.Allocator) InjectorConfiguration {
-    const all_agent_env_vars = std.StringHashMap([]u8).init(gpa);
+fn readConfigurationFromPath(allocator: std.mem.Allocator, cfg_file_path: []const u8) std.mem.Allocator.Error!InjectorConfiguration {
+    // We create a good amount of intermediate values - keys, values, comma-separated parts of strings, default config
+    // values that might or might not be later overwritten, etc. It would tricky and error-prone to release each of
+    // them individually at exactly the right time. Instead, we use an arena for all allocations (including the actual
+    // config values). Once we have compiled the final configuration values, we copy them over to memory allocated via
+    // the allocator passed in via the allocator parameter, then we free all intermediate values in bulk by deinit-ing
+    // the arena.
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
 
-    const all_env_default = std.fmt.allocPrint(gpa, "{s}", .{default_all_auto_instrumentation_agents_env_path}) catch |err| {
-        return printErrorReturnEmptyConfig(gpa, err);
-    };
-    const dotnet_default = std.fmt.allocPrint(gpa, "{s}", .{default_dotnet_auto_instrumentation_agent_path_prefix}) catch |err| {
-        return printErrorReturnEmptyConfig(gpa, err);
-    };
-    const jvm_default = std.fmt.allocPrint(gpa, "{s}", .{default_jvm_auto_instrumentation_agent_path}) catch |err| {
-        return printErrorReturnEmptyConfig(gpa, err);
-    };
-    const nodejs_default = std.fmt.allocPrint(gpa, "{s}", .{default_nodejs_auto_instrumentation_agent_path}) catch |err| {
-        return printErrorReturnEmptyConfig(gpa, err);
-    };
+    var preliminary_configuration = try createDefaultConfiguration(arena_allocator);
+    readConfigurationFile(arena_allocator, cfg_file_path, &preliminary_configuration);
+    readConfigurationFromEnvironment(arena_allocator, &preliminary_configuration);
+    readAllAgentsEnvFile(
+        arena_allocator,
+        preliminary_configuration.all_auto_instrumentation_agents_env_path,
+        &preliminary_configuration,
+    );
 
+    const final_configuration =
+        try copyToPermanentlyAllocatedHeap(allocator, preliminary_configuration);
+    cached_configuration_optional = final_configuration;
+    return final_configuration;
+}
+
+test "readConfigurationFromPath: file does not exist, no environment variables" {
+    const allocator = testing.allocator;
+
+    const original_environ = try test_util.clearStdCEnviron();
+    defer test_util.resetStdCEnviron(original_environ);
+
+    var configuration = try readConfigurationFromPath(allocator, @constCast("/does/not/exist"));
+    defer configuration.deinit(allocator);
+
+    try testing.expectEqualStrings(
+        default_dotnet_auto_instrumentation_agent_path_prefix,
+        configuration.dotnet_auto_instrumentation_agent_path_prefix,
+    );
+    try testing.expectEqualStrings(
+        default_jvm_auto_instrumentation_agent_path,
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        default_nodejs_auto_instrumentation_agent_path,
+        configuration.nodejs_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        default_all_auto_instrumentation_agents_env_path,
+        configuration.all_auto_instrumentation_agents_env_path,
+    );
+    try testing.expectEqual(0, configuration.all_auto_instrumentation_agents_env_vars.count());
+    try testing.expectEqual(0, configuration.include_paths.len);
+    try testing.expectEqual(0, configuration.exclude_paths.len);
+    try testing.expectEqual(0, configuration.include_args.len);
+    try testing.expectEqual(0, configuration.exclude_args.len);
+}
+
+test "readConfigurationFromPath: file does not exist, environment variables are set" {
+    const allocator = testing.allocator;
+
+    const original_environ = try test_util.setStdCEnviron(&[7][]const u8{
+        "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/dotnet",
+        "JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/jvm",
+        "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/node.js",
+        "OTEL_INJECTOR_INCLUDE_PATHS=/path/from/env/var/include1,/path/from/env/var/include2",
+        "OTEL_INJECTOR_EXCLUDE_PATHS=/path/from/env/var/exclude1,/path/from/env/var/exclude2",
+        "OTEL_INJECTOR_INCLUDE_WITH_ARGUMENTS=--from-env-var-include1,--from-env-var-include2",
+        "OTEL_INJECTOR_EXCLUDE_WITH_ARGUMENTS=--from-env-var-exclude1,--from-env-var-exclude2",
+    });
+    defer test_util.resetStdCEnviron(original_environ);
+
+    var configuration = try readConfigurationFromPath(allocator, @constCast("/does/not/exist"));
+    defer configuration.deinit(allocator);
+
+    try testing.expectEqualStrings(
+        "/path/from/env/var/dotnet",
+        configuration.dotnet_auto_instrumentation_agent_path_prefix,
+    );
+    try testing.expectEqualStrings(
+        "/path/from/env/var/jvm",
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        "/path/from/env/var/node.js",
+        configuration.nodejs_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        default_all_auto_instrumentation_agents_env_path,
+        configuration.all_auto_instrumentation_agents_env_path,
+    );
+    try testing.expectEqual(0, configuration.all_auto_instrumentation_agents_env_vars.count());
+    try testing.expectEqual(2, configuration.include_paths.len);
+    try testing.expectEqualStrings("/path/from/env/var/include1", configuration.include_paths[0]);
+    try testing.expectEqualStrings("/path/from/env/var/include2", configuration.include_paths[1]);
+    try testing.expectEqual(2, configuration.exclude_paths.len);
+    try testing.expectEqualStrings("/path/from/env/var/exclude1", configuration.exclude_paths[0]);
+    try testing.expectEqualStrings("/path/from/env/var/exclude2", configuration.exclude_paths[1]);
+    try testing.expectEqual(2, configuration.include_args.len);
+    try testing.expectEqualStrings("--from-env-var-include1", configuration.include_args[0]);
+    try testing.expectEqualStrings("--from-env-var-include2", configuration.include_args[1]);
+    try testing.expectEqual(2, configuration.exclude_args.len);
+    try testing.expectEqualStrings("--from-env-var-exclude1", configuration.exclude_args[0]);
+    try testing.expectEqualStrings("--from-env-var-exclude2", configuration.exclude_args[1]);
+}
+
+test "readConfigurationFromPath: all configuration values from file, no environment variables" {
+    const allocator = testing.allocator;
+    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    defer allocator.free(cwd_path);
+    const absolute_path_to_config_file =
+        try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/all_values.conf" });
+    defer allocator.free(absolute_path_to_config_file);
+
+    const original_environ = try test_util.clearStdCEnviron();
+    defer test_util.resetStdCEnviron(original_environ);
+
+    var configuration = try readConfigurationFromPath(allocator, absolute_path_to_config_file);
+    defer configuration.deinit(allocator);
+
+    try testing.expectEqualStrings(
+        "/custom/path/to/dotnet/instrumentation",
+        configuration.dotnet_auto_instrumentation_agent_path_prefix,
+    );
+    try testing.expectEqualStrings(
+        "/custom/path/to/jvm/opentelemetry-javaagent.jar",
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        "/custom/path/to/node_js/node_modules/@opentelemetry-js/otel/instrument",
+        configuration.nodejs_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        "/custom/path/to/auto_instrumentation_env.conf",
+        configuration.all_auto_instrumentation_agents_env_path,
+    );
+    try testing.expectEqual(0, configuration.all_auto_instrumentation_agents_env_vars.count());
+    try testing.expectEqual(3, configuration.include_paths.len);
+    try testing.expectEqualStrings("/app/*", configuration.include_paths[0]);
+    try testing.expectEqualStrings("/home/user/test/*", configuration.include_paths[1]);
+    try testing.expectEqualStrings("/another_dir/*", configuration.include_paths[2]);
+    try testing.expectEqual(3, configuration.exclude_paths.len);
+    try testing.expectEqualStrings("/usr/*", configuration.exclude_paths[0]);
+    try testing.expectEqualStrings("/opt/*", configuration.exclude_paths[1]);
+    try testing.expectEqualStrings("/another_excluded_dir/*", configuration.exclude_paths[2]);
+    try testing.expectEqual(4, configuration.include_args.len);
+    try testing.expectEqualStrings("-jar", configuration.include_args[0]);
+    try testing.expectEqualStrings("*my-app*", configuration.include_args[1]);
+    try testing.expectEqualStrings("*.js", configuration.include_args[2]);
+    try testing.expectEqualStrings("*.dll", configuration.include_args[3]);
+    try testing.expectEqual(3, configuration.exclude_args.len);
+    try testing.expectEqualStrings("-javaagent*", configuration.exclude_args[0]);
+    try testing.expectEqualStrings("*@opentelemetry-js*", configuration.exclude_args[1]);
+    try testing.expectEqualStrings("-debug", configuration.exclude_args[2]);
+}
+
+test "readConfigurationFromPath: override some configuration values from file with environment variables" {
+    const allocator = testing.allocator;
+    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    defer allocator.free(cwd_path);
+    const absolute_path_to_config_file =
+        try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/all_values.conf" });
+    defer allocator.free(absolute_path_to_config_file);
+
+    const original_environ = try test_util.setStdCEnviron(&[4][]const u8{
+        "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/dotnet",
+        "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/node.js",
+        "OTEL_INJECTOR_INCLUDE_PATHS=/path/from/env/var/include1,/path/from/env/var/include2",
+        "OTEL_INJECTOR_EXCLUDE_WITH_ARGUMENTS=--from-env-var-exclude1,--from-env-var-exclude2",
+    });
+    defer test_util.resetStdCEnviron(original_environ);
+
+    var configuration = try readConfigurationFromPath(allocator, absolute_path_to_config_file);
+    defer configuration.deinit(allocator);
+
+    try testing.expectEqualStrings(
+        "/path/from/env/var/dotnet",
+        configuration.dotnet_auto_instrumentation_agent_path_prefix,
+    );
+    try testing.expectEqualStrings(
+        "/custom/path/to/jvm/opentelemetry-javaagent.jar",
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        "/path/from/env/var/node.js",
+        configuration.nodejs_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        "/custom/path/to/auto_instrumentation_env.conf",
+        configuration.all_auto_instrumentation_agents_env_path,
+    );
+    try testing.expectEqual(0, configuration.all_auto_instrumentation_agents_env_vars.count());
+    try testing.expectEqual(2, configuration.include_paths.len);
+    try testing.expectEqualStrings("/path/from/env/var/include1", configuration.include_paths[0]);
+    try testing.expectEqualStrings("/path/from/env/var/include2", configuration.include_paths[1]);
+    try testing.expectEqual(3, configuration.exclude_paths.len);
+    try testing.expectEqualStrings("/usr/*", configuration.exclude_paths[0]);
+    try testing.expectEqualStrings("/opt/*", configuration.exclude_paths[1]);
+    try testing.expectEqualStrings("/another_excluded_dir/*", configuration.exclude_paths[2]);
+    try testing.expectEqual(4, configuration.include_args.len);
+    try testing.expectEqualStrings("-jar", configuration.include_args[0]);
+    try testing.expectEqualStrings("*my-app*", configuration.include_args[1]);
+    try testing.expectEqualStrings("*.js", configuration.include_args[2]);
+    try testing.expectEqualStrings("*.dll", configuration.include_args[3]);
+    try testing.expectEqual(2, configuration.exclude_args.len);
+    try testing.expectEqualStrings("--from-env-var-exclude1", configuration.exclude_args[0]);
+    try testing.expectEqualStrings("--from-env-var-exclude2", configuration.exclude_args[1]);
+}
+
+fn createDefaultConfiguration(arena_allocator: std.mem.Allocator) std.mem.Allocator.Error!InjectorConfiguration {
     return InjectorConfiguration{
-        .dotnet_auto_instrumentation_agent_path_prefix = dotnet_default,
-        .jvm_auto_instrumentation_agent_path = jvm_default,
-        .nodejs_auto_instrumentation_agent_path = nodejs_default,
-        .all_auto_instrumentation_agents_env_path = all_env_default,
-        .all_auto_instrumentation_agents_env_vars = all_agent_env_vars,
+        .dotnet_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_dotnet_auto_instrumentation_agent_path_prefix}),
+        .jvm_auto_instrumentation_agent_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_jvm_auto_instrumentation_agent_path}),
+        .nodejs_auto_instrumentation_agent_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_nodejs_auto_instrumentation_agent_path}),
+        .all_auto_instrumentation_agents_env_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_all_auto_instrumentation_agents_env_path}),
+        .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(arena_allocator),
         .include_paths = &.{},
         .exclude_paths = &.{},
         .include_args = &.{},
@@ -128,41 +328,40 @@ fn createDefaultConfiguration(gpa: std.mem.Allocator) InjectorConfiguration {
     };
 }
 
-fn applyCommaSeparatedPatternsOption(gpa: std.mem.Allocator, setting: *[][]const u8, value: []u8, pattern_name: []const u8, cfg_file_path: []const u8) void {
-    const new_patterns = patterns_util.splitByComma(gpa, value) catch |err| {
+fn applyCommaSeparatedPatternsOption(arena_allocator: std.mem.Allocator, setting: *[][]const u8, value: []u8, pattern_name: []const u8, cfg_file_path: []const u8) void {
+    const new_patterns = patterns_util.splitByComma(arena_allocator, value) catch |err| {
         print.printError("error parsing {s} value from configuration file {s}: {}", .{ pattern_name, cfg_file_path, err });
         return;
     };
-    setting.* = std.mem.concat(gpa, []const u8, &.{ setting.*, new_patterns }) catch |err| {
+    setting.* = std.mem.concat(arena_allocator, []const u8, &.{ setting.*, new_patterns }) catch |err| {
         print.printError("error concatenating {s} from configuration file {s}: {}", .{ pattern_name, cfg_file_path, err });
         return;
     };
 }
 
-fn applyKeyValueToGeneralOptions(gpa: std.mem.Allocator, key: []const u8, value: []u8, _cfg_file_path: []const u8, _configuration: *InjectorConfiguration) void {
-    if (std.mem.eql(u8, key, all_agents_env_path_key)) {
-        _configuration.all_auto_instrumentation_agents_env_path = value;
-    } else if (std.mem.eql(u8, key, dotnet_path_key)) {
+fn applyKeyValueToGeneralOptions(arena_allocator: std.mem.Allocator, key: []const u8, value: []u8, _cfg_file_path: []const u8, _configuration: *InjectorConfiguration) void {
+    if (std.mem.eql(u8, key, dotnet_path_key)) {
         _configuration.dotnet_auto_instrumentation_agent_path_prefix = value;
     } else if (std.mem.eql(u8, key, jvm_path_key)) {
         _configuration.jvm_auto_instrumentation_agent_path = value;
     } else if (std.mem.eql(u8, key, nodejs_path_key)) {
         _configuration.nodejs_auto_instrumentation_agent_path = value;
+    } else if (std.mem.eql(u8, key, all_agents_env_path_key)) {
+        _configuration.all_auto_instrumentation_agents_env_path = value;
     } else if (std.mem.eql(u8, key, include_paths_key)) {
-        applyCommaSeparatedPatternsOption(gpa, &_configuration.include_paths, value, "include_paths", _cfg_file_path);
+        applyCommaSeparatedPatternsOption(arena_allocator, &_configuration.include_paths, value, "include_paths", _cfg_file_path);
     } else if (std.mem.eql(u8, key, exclude_paths_key)) {
-        applyCommaSeparatedPatternsOption(gpa, &_configuration.exclude_paths, value, "exclude_paths", _cfg_file_path);
+        applyCommaSeparatedPatternsOption(arena_allocator, &_configuration.exclude_paths, value, "exclude_paths", _cfg_file_path);
     } else if (std.mem.eql(u8, key, include_args_key)) {
-        applyCommaSeparatedPatternsOption(gpa, &_configuration.include_args, value, "include_arguments", _cfg_file_path);
+        applyCommaSeparatedPatternsOption(arena_allocator, &_configuration.include_args, value, "include_arguments", _cfg_file_path);
     } else if (std.mem.eql(u8, key, exclude_args_key)) {
-        applyCommaSeparatedPatternsOption(gpa, &_configuration.exclude_args, value, "exclude_arguments", _cfg_file_path);
+        applyCommaSeparatedPatternsOption(arena_allocator, &_configuration.exclude_args, value, "exclude_arguments", _cfg_file_path);
     } else {
         print.printError("ignoring unknown configuration key in {s}: {s}={s}", .{ _cfg_file_path, key, value });
-        gpa.free(value);
     }
 }
 
-fn readConfigurationFile(gpa: std.mem.Allocator, cfg_file_path: []const u8, configuration: *InjectorConfiguration) void {
+fn readConfigurationFile(arena_allocator: std.mem.Allocator, cfg_file_path: []const u8, configuration: *InjectorConfiguration) void {
     const config_file = std.fs.cwd().openFile(cfg_file_path, .{}) catch |err| {
         print.printDebug(
             "The configuration file {s} does not exist or cannot be opened. Configuration will use default values and environment variables only. Error: {t}",
@@ -173,7 +372,7 @@ fn readConfigurationFile(gpa: std.mem.Allocator, cfg_file_path: []const u8, conf
     defer config_file.close();
 
     return parseConfiguration(
-        gpa,
+        arena_allocator,
         configuration,
         config_file,
         cfg_file_path,
@@ -187,7 +386,7 @@ fn applyKeyValueToAllAgentsEnv(_: std.mem.Allocator, key: []const u8, value: []u
     };
 }
 
-fn readAllAgentsEnvFile(gpa: std.mem.Allocator, env_file_path: []const u8, configuration: *InjectorConfiguration) void {
+fn readAllAgentsEnvFile(arena_allocator: std.mem.Allocator, env_file_path: []const u8, configuration: *InjectorConfiguration) void {
     if (env_file_path.len == 0) {
         return;
     }
@@ -198,11 +397,17 @@ fn readAllAgentsEnvFile(gpa: std.mem.Allocator, env_file_path: []const u8, confi
     };
     defer env_file.close();
 
-    return parseConfiguration(gpa, configuration, env_file, env_file_path, applyKeyValueToAllAgentsEnv);
+    parseConfiguration(
+        arena_allocator,
+        configuration,
+        env_file,
+        env_file_path,
+        applyKeyValueToAllAgentsEnv,
+    );
 }
 
 fn parseConfiguration(
-    gpa: std.mem.Allocator,
+    arena_allocator: std.mem.Allocator,
     configuration: *InjectorConfiguration,
     config_file: std.fs.File,
     cfg_file_path: []const u8,
@@ -211,8 +416,8 @@ fn parseConfiguration(
     var buf: [max_line_length]u8 = undefined;
     var reader = config_file.reader(&buf);
     while (takeSentinelOrDiscardOverlyLongLine(&reader, cfg_file_path)) |line| {
-        if (parseLine(gpa, line, cfg_file_path)) |kv| {
-            applyKeyValueToConfig(gpa, kv.key, kv.value, cfg_file_path, configuration);
+        if (parseLine(arena_allocator, line, cfg_file_path)) |kv| {
+            applyKeyValueToConfig(arena_allocator, kv.key, kv.value, cfg_file_path, configuration);
         }
     } else |err| switch (err) {
         error.ReadFailed => {
@@ -223,11 +428,47 @@ fn parseConfiguration(
         error.EndOfStream => {
             var buffer: [max_line_length]u8 = undefined;
             const chars = reader.interface.readSliceShort(&buffer) catch 0;
-            if (parseLine(gpa, buffer[0..chars], cfg_file_path)) |kv| {
-                applyKeyValueToConfig(gpa, kv.key, kv.value, cfg_file_path, configuration);
+            if (parseLine(arena_allocator, buffer[0..chars], cfg_file_path)) |kv| {
+                applyKeyValueToConfig(arena_allocator, kv.key, kv.value, cfg_file_path, configuration);
             }
         },
     }
+}
+
+fn copyToPermanentlyAllocatedHeap(
+    allocator: std.mem.Allocator,
+    preliminary_configuration: InjectorConfiguration,
+) std.mem.Allocator.Error!InjectorConfiguration {
+    return InjectorConfiguration{
+        .dotnet_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(
+            allocator,
+            "{s}",
+            .{preliminary_configuration.dotnet_auto_instrumentation_agent_path_prefix},
+        ),
+        .jvm_auto_instrumentation_agent_path = try std.fmt.allocPrint(
+            allocator,
+            "{s}",
+            .{preliminary_configuration.jvm_auto_instrumentation_agent_path},
+        ),
+        .nodejs_auto_instrumentation_agent_path = try std.fmt.allocPrint(
+            allocator,
+            "{s}",
+            .{preliminary_configuration.nodejs_auto_instrumentation_agent_path},
+        ),
+        .all_auto_instrumentation_agents_env_path = try std.fmt.allocPrint(
+            allocator,
+            "{s}",
+            .{preliminary_configuration.all_auto_instrumentation_agents_env_path},
+        ),
+        .all_auto_instrumentation_agents_env_vars = try copyMap(
+            allocator,
+            preliminary_configuration.all_auto_instrumentation_agents_env_vars,
+        ),
+        .include_paths = try copyStringArray(allocator, preliminary_configuration.include_paths),
+        .exclude_paths = try copyStringArray(allocator, preliminary_configuration.exclude_paths),
+        .include_args = try copyStringArray(allocator, preliminary_configuration.include_args),
+        .exclude_args = try copyStringArray(allocator, preliminary_configuration.exclude_args),
+    };
 }
 
 fn takeSentinelOrDiscardOverlyLongLine(reader: *std.fs.File.Reader, cfg_file_path: []const u8) ![]u8 {
@@ -249,16 +490,15 @@ fn takeSentinelOrDiscardOverlyLongLine(reader: *std.fs.File.Reader, cfg_file_pat
 }
 
 test "readConfigurationFile: file does not exist" {
-    const allocator = std.heap.page_allocator;
-    var configuration = createDefaultConfiguration(allocator);
-    defer configuration.freeAll(allocator);
+    const allocator = testing.allocator;
 
-    readConfigurationFile(allocator, "/does/not/exist", &configuration);
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
 
-    try testing.expectEqualStrings(
-        default_all_auto_instrumentation_agents_env_path,
-        configuration.all_auto_instrumentation_agents_env_path,
-    );
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    readConfigurationFile(arena_allocator, "/does/not/exist", &configuration);
+
     try testing.expectEqualStrings(
         default_dotnet_auto_instrumentation_agent_path_prefix,
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
@@ -271,6 +511,11 @@ test "readConfigurationFile: file does not exist" {
         default_nodejs_auto_instrumentation_agent_path,
         configuration.nodejs_auto_instrumentation_agent_path,
     );
+    try testing.expectEqualStrings(
+        default_all_auto_instrumentation_agents_env_path,
+        configuration.all_auto_instrumentation_agents_env_path,
+    );
+    try testing.expectEqual(0, configuration.all_auto_instrumentation_agents_env_vars.count());
     try testing.expectEqual(0, configuration.include_paths.len);
     try testing.expectEqual(0, configuration.exclude_paths.len);
     try testing.expectEqual(0, configuration.include_args.len);
@@ -278,21 +523,19 @@ test "readConfigurationFile: file does not exist" {
 }
 
 test "readConfigurationFile: empty file" {
-    const allocator = std.heap.page_allocator;
+    const allocator = testing.allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
     const absolute_path_to_config_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/empty.conf" });
     defer allocator.free(absolute_path_to_config_file);
 
-    var configuration = createDefaultConfiguration(allocator);
-    defer configuration.freeAll(allocator);
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
 
-    readConfigurationFile(allocator, absolute_path_to_config_file, &configuration);
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    readConfigurationFile(arena_allocator, absolute_path_to_config_file, &configuration);
 
-    try testing.expectEqualStrings(
-        default_all_auto_instrumentation_agents_env_path,
-        configuration.all_auto_instrumentation_agents_env_path,
-    );
     try testing.expectEqualStrings(
         default_dotnet_auto_instrumentation_agent_path_prefix,
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
@@ -305,6 +548,11 @@ test "readConfigurationFile: empty file" {
         default_nodejs_auto_instrumentation_agent_path,
         configuration.nodejs_auto_instrumentation_agent_path,
     );
+    try testing.expectEqualStrings(
+        default_all_auto_instrumentation_agents_env_path,
+        configuration.all_auto_instrumentation_agents_env_path,
+    );
+    try testing.expectEqual(0, configuration.all_auto_instrumentation_agents_env_vars.count());
     try testing.expectEqual(0, configuration.include_paths.len);
     try testing.expectEqual(0, configuration.exclude_paths.len);
     try testing.expectEqual(0, configuration.include_args.len);
@@ -312,19 +560,19 @@ test "readConfigurationFile: empty file" {
 }
 
 test "readConfigurationFile: all configuration values" {
-    const allocator = std.heap.page_allocator;
+    const allocator = testing.allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
     const absolute_path_to_config_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/all_values.conf" });
     defer allocator.free(absolute_path_to_config_file);
-    var configuration = createDefaultConfiguration(allocator);
 
-    readConfigurationFile(allocator, absolute_path_to_config_file, &configuration);
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
 
-    try testing.expectEqualStrings(
-        "/custom/path/to/auto_instrumentation_env.conf",
-        configuration.all_auto_instrumentation_agents_env_path,
-    );
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    readConfigurationFile(arena_allocator, absolute_path_to_config_file, &configuration);
+
     try testing.expectEqualStrings(
         "/custom/path/to/dotnet/instrumentation",
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
@@ -337,6 +585,11 @@ test "readConfigurationFile: all configuration values" {
         "/custom/path/to/node_js/node_modules/@opentelemetry-js/otel/instrument",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
+    try testing.expectEqualStrings(
+        "/custom/path/to/auto_instrumentation_env.conf",
+        configuration.all_auto_instrumentation_agents_env_path,
+    );
+    try testing.expectEqual(0, configuration.all_auto_instrumentation_agents_env_vars.count());
     try testing.expectEqual(3, configuration.include_paths.len);
     try testing.expectEqualStrings("/app/*", configuration.include_paths[0]);
     try testing.expectEqualStrings("/home/user/test/*", configuration.include_paths[1]);
@@ -357,20 +610,19 @@ test "readConfigurationFile: all configuration values" {
 }
 
 test "readConfigurationFile: all configuration values plus whitespace and comments" {
-    const allocator = std.heap.page_allocator;
+    const allocator = testing.allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
     const absolute_path_to_config_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/with_comments_and_whitespace.conf" });
     defer allocator.free(absolute_path_to_config_file);
-    var configuration = createDefaultConfiguration(allocator);
-    defer configuration.freeAll(allocator);
 
-    readConfigurationFile(allocator, absolute_path_to_config_file, &configuration);
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
 
-    try testing.expectEqualStrings(
-        "/custom/path/to/auto_instrumentation_env.conf",
-        configuration.all_auto_instrumentation_agents_env_path,
-    );
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    readConfigurationFile(arena_allocator, absolute_path_to_config_file, &configuration);
+
     try testing.expectEqualStrings(
         "/custom/path/to/dotnet/instrumentation",
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
@@ -383,18 +635,25 @@ test "readConfigurationFile: all configuration values plus whitespace and commen
         "/custom/path/to/node_js/node_modules/@opentelemetry-js/otel/instrument",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
+    try testing.expectEqualStrings(
+        "/custom/path/to/auto_instrumentation_env.conf",
+        configuration.all_auto_instrumentation_agents_env_path,
+    );
 }
 
 test "readConfigurationFile: does not parse overly long lines" {
-    const allocator = std.heap.page_allocator;
+    const allocator = testing.allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
     const absolute_path_to_config_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/very_long_lines.conf" });
     defer allocator.free(absolute_path_to_config_file);
-    var configuration = createDefaultConfiguration(allocator);
-    defer configuration.freeAll(allocator);
 
-    readConfigurationFile(allocator, absolute_path_to_config_file, &configuration);
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    readConfigurationFile(arena_allocator, absolute_path_to_config_file, &configuration);
 
     try testing.expectEqualStrings(
         default_dotnet_auto_instrumentation_agent_path_prefix,
@@ -413,7 +672,7 @@ test "readConfigurationFile: does not parse overly long lines" {
 /// Parses a single line from a configuration file.
 /// Returns a key-value pair if the line is a valid key-value pair, and null for empty
 /// lines, comments and invalid lines.
-fn parseLine(gpa: std.mem.Allocator, line: []u8, cfg_file_path: []const u8) ?struct {
+fn parseLine(arena_allocator: std.mem.Allocator, line: []u8, cfg_file_path: []const u8) ?struct {
     key: []const u8,
     value: []u8,
 } {
@@ -431,14 +690,13 @@ fn parseLine(gpa: std.mem.Allocator, line: []u8, cfg_file_path: []const u8) ?str
 
     if (std.mem.indexOfScalar(u8, trimmed, '=')) |equalsIdx| {
         const key_trimmed = std.mem.trim(u8, trimmed[0..equalsIdx], " \t\r\n");
-        const key = std.fmt.allocPrint(gpa, "{s}", .{key_trimmed}) catch |err| {
+        const key = std.fmt.allocPrint(arena_allocator, "{s}", .{key_trimmed}) catch |err| {
             print.printError("error in allocPrint while allocating key from file {s}: {}", .{ cfg_file_path, err });
             return null;
         };
         const value_trimmed = std.mem.trim(u8, trimmed[equalsIdx + 1 ..], " \t\r\n");
-        const value = std.fmt.allocPrint(gpa, "{s}", .{value_trimmed}) catch |err| {
+        const value = std.fmt.allocPrint(arena_allocator, "{s}", .{value_trimmed}) catch |err| {
             print.printError("error in allocPrint while allocating value from file {s}: {}", .{ cfg_file_path, err });
-            gpa.free(key);
             return null;
         };
         return .{
@@ -618,10 +876,10 @@ test "parseLine: invalid line (line too long)" {
     try test_util.expectWithMessage(result == null, "parseLine(invalid line) returns null");
 }
 
-fn readConfigurationFromEnvironment(gpa: std.mem.Allocator, configuration: *InjectorConfiguration) void {
+fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configuration: *InjectorConfiguration) void {
     if (std.posix.getenv(dotnet_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const dotnet_value = std.fmt.allocPrint(gpa, "{s}", .{trimmed_value}) catch |err| {
+        const dotnet_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
@@ -629,7 +887,7 @@ fn readConfigurationFromEnvironment(gpa: std.mem.Allocator, configuration: *Inje
     }
     if (std.posix.getenv(jvm_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const jvm_value = std.fmt.allocPrint(gpa, "{s}", .{trimmed_value}) catch |err| {
+        const jvm_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
@@ -637,7 +895,7 @@ fn readConfigurationFromEnvironment(gpa: std.mem.Allocator, configuration: *Inje
     }
     if (std.posix.getenv(nodejs_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const nodejs_value = std.fmt.allocPrint(gpa, "{s}", .{trimmed_value}) catch |err| {
+        const nodejs_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
@@ -645,46 +903,159 @@ fn readConfigurationFromEnvironment(gpa: std.mem.Allocator, configuration: *Inje
     }
     if (std.posix.getenv(include_paths_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const include_paths_value = std.fmt.allocPrint(gpa, "{s}", .{trimmed_value}) catch |err| {
+        const include_paths_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
-        configuration.include_paths = patterns_util.splitByComma(gpa, include_paths_value) catch |err| {
+        configuration.include_paths = patterns_util.splitByComma(arena_allocator, include_paths_value) catch |err| {
             print.printError("error parsing include_paths value from the environment {s}: {}", .{ include_paths_value, err });
             return;
         };
     }
     if (std.posix.getenv(exclude_paths_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const exclude_paths_value = std.fmt.allocPrint(gpa, "{s}", .{trimmed_value}) catch |err| {
+        const exclude_paths_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
-        configuration.exclude_paths = patterns_util.splitByComma(gpa, exclude_paths_value) catch |err| {
+        configuration.exclude_paths = patterns_util.splitByComma(arena_allocator, exclude_paths_value) catch |err| {
             print.printError("error parsing exclude_paths value from the environment {s}: {}", .{ exclude_paths_value, err });
             return;
         };
     }
     if (std.posix.getenv(include_args_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const include_args_value = std.fmt.allocPrint(gpa, "{s}", .{trimmed_value}) catch |err| {
+        const include_args_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
-        configuration.include_args = patterns_util.splitByComma(gpa, include_args_value) catch |err| {
+        configuration.include_args = patterns_util.splitByComma(arena_allocator, include_args_value) catch |err| {
             print.printError("error parsing include_arguments value from the environment {s}: {}", .{ include_args_value, err });
             return;
         };
     }
     if (std.posix.getenv(exclude_args_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const exclude_args_value = std.fmt.allocPrint(gpa, "{s}", .{trimmed_value}) catch |err| {
+        const exclude_args_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
-        configuration.exclude_args = patterns_util.splitByComma(gpa, exclude_args_value) catch |err| {
+        configuration.exclude_args = patterns_util.splitByComma(arena_allocator, exclude_args_value) catch |err| {
             print.printError("error parsing exclude_arguments value from the environment {s}: {}", .{ exclude_args_value, err });
             return;
         };
     }
+}
+
+test "readConfigurationFromEnvironment: empty environment values" {
+    const allocator = testing.allocator;
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const original_environ = try test_util.clearStdCEnviron();
+    defer test_util.resetStdCEnviron(original_environ);
+
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    readConfigurationFromEnvironment(arena_allocator, &configuration);
+
+    try testing.expectEqualStrings(
+        default_dotnet_auto_instrumentation_agent_path_prefix,
+        configuration.dotnet_auto_instrumentation_agent_path_prefix,
+    );
+    try testing.expectEqualStrings(
+        default_jvm_auto_instrumentation_agent_path,
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        default_nodejs_auto_instrumentation_agent_path,
+        configuration.nodejs_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        default_all_auto_instrumentation_agents_env_path,
+        configuration.all_auto_instrumentation_agents_env_path,
+    );
+    try testing.expectEqual(0, configuration.include_paths.len);
+    try testing.expectEqual(0, configuration.exclude_paths.len);
+    try testing.expectEqual(0, configuration.include_args.len);
+    try testing.expectEqual(0, configuration.exclude_args.len);
+}
+
+test "readConfigurationFromEnvironment: all values" {
+    const allocator = testing.allocator;
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const original_environ = try test_util.setStdCEnviron(&[7][]const u8{
+        "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/dotnet",
+        "JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/jvm",
+        "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/node.js",
+        "OTEL_INJECTOR_INCLUDE_PATHS=/path/from/env/var/include1,/path/from/env/var/include2",
+        "OTEL_INJECTOR_EXCLUDE_PATHS=/path/from/env/var/exclude1,/path/from/env/var/exclude2",
+        "OTEL_INJECTOR_INCLUDE_WITH_ARGUMENTS=--from-env-var-include1,--from-env-var-include2",
+        "OTEL_INJECTOR_EXCLUDE_WITH_ARGUMENTS=--from-env-var-exclude1,--from-env-var-exclude2",
+    });
+    defer test_util.resetStdCEnviron(original_environ);
+
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    readConfigurationFromEnvironment(arena_allocator, &configuration);
+
+    try testing.expectEqualStrings(
+        "/path/from/env/var/dotnet",
+        configuration.dotnet_auto_instrumentation_agent_path_prefix,
+    );
+    try testing.expectEqualStrings(
+        "/path/from/env/var/jvm",
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        "/path/from/env/var/node.js",
+        configuration.nodejs_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        default_all_auto_instrumentation_agents_env_path,
+        configuration.all_auto_instrumentation_agents_env_path,
+    );
+    try testing.expectEqual(2, configuration.include_paths.len);
+    try testing.expectEqualStrings("/path/from/env/var/include1", configuration.include_paths[0]);
+    try testing.expectEqualStrings("/path/from/env/var/include2", configuration.include_paths[1]);
+    try testing.expectEqual(2, configuration.exclude_paths.len);
+    try testing.expectEqualStrings("/path/from/env/var/exclude1", configuration.exclude_paths[0]);
+    try testing.expectEqualStrings("/path/from/env/var/exclude2", configuration.exclude_paths[1]);
+    try testing.expectEqual(2, configuration.include_args.len);
+    try testing.expectEqualStrings("--from-env-var-include1", configuration.include_args[0]);
+    try testing.expectEqualStrings("--from-env-var-include2", configuration.include_args[1]);
+    try testing.expectEqual(2, configuration.exclude_args.len);
+    try testing.expectEqualStrings("--from-env-var-exclude1", configuration.exclude_args[0]);
+    try testing.expectEqualStrings("--from-env-var-exclude2", configuration.exclude_args[1]);
+}
+
+fn copyMap(allocator: std.mem.Allocator, source: std.StringHashMap([]u8)) !std.StringHashMap([]u8) {
+    var target = std.StringHashMap([]u8).init(allocator);
+    try target.ensureTotalCapacity(source.count());
+    var it = source.iterator();
+    while (it.next()) |entry| {
+        const key = try std.fmt.allocPrint(allocator, "{s}", .{entry.key_ptr.*});
+        const value = try std.fmt.allocPrint(allocator, "{s}", .{entry.value_ptr.*});
+        try target.put(key, value);
+    }
+    return target;
+}
+
+fn copyStringArray(allocator: std.mem.Allocator, source: [][]const u8) std.mem.Allocator.Error![][]const u8 {
+    const target = try allocator.alloc([]const u8, source.len);
+    for (source, 0..) |p, i| {
+        target[i] = try std.fmt.allocPrint(allocator, "{s}", .{p});
+    }
+    return target;
+}
+
+fn deinitStringArray(allocator: std.mem.Allocator, array: [][]const u8) void {
+    for (array) |item| {
+        allocator.free(item);
+    }
+    allocator.free(array);
 }

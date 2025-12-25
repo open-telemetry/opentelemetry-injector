@@ -9,7 +9,10 @@ const _print = @import("print.zig");
 
 const testing = std.testing;
 
-pub const test_allocator: std.mem.Allocator = std.heap.page_allocator;
+// An allocator just for clearStdCEnviron/setStdCEnviron. Since this is never part of production code but only used in
+// tests, it is not a concern whether we leak memory in these two helper functions, so there is no need to use
+// std.test.allocator here.
+const environ_allocator = std.heap.page_allocator;
 
 /// Clears all entries from std.c.environ, i.e. all environment variables are discarded. The original content before
 /// making any changes is returned. The caller is expected to reset std.c.environ to the return value of this function
@@ -17,7 +20,7 @@ pub const test_allocator: std.mem.Allocator = std.heap.page_allocator;
 /// this function (where original_environ is the return value of this function).
 pub fn clearStdCEnviron() anyerror![*:null]?[*:0]u8 {
     const original_environ = std.c.environ;
-    const new_environ = try test_allocator.allocSentinel(?[*:0]u8, 0, null);
+    const new_environ = try environ_allocator.allocSentinel(?[*:0]u8, 0, null);
     std.c.environ = new_environ;
     return original_environ;
 }
@@ -35,10 +38,10 @@ pub fn setStdCEnviron(env_vars: []const []const u8) anyerror![*:null]?[*:0]u8 {
     // Hence, for tests that require certain environment variables to be set, we mess around with std.c.environ.
     // Note: To manipulate std.os.environ instead of std.c.environ, use allocator.alloc([*:0]u8, n); instead of
     // allocator.allocSentinel(?[*:0]u8, n, null).
-    const new_environ = try test_allocator.allocSentinel(?[*:0]u8, env_vars.len, null);
+    const new_environ = try environ_allocator.allocSentinel(?[*:0]u8, env_vars.len, null);
     for (env_vars, 0..) |env_var, i| {
         new_environ[i] = try std.fmt.allocPrintSentinel(
-            test_allocator,
+            environ_allocator,
             "{s}",
             .{env_var},
             0,

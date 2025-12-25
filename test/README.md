@@ -27,8 +27,9 @@ Usage
   whose names _contain_ one of the provided strings as a substring.
   The test cases are listed in the different `scripts/*.tests` files.
   Can be combined with `ARCHITECTURES`, `LIBC_FLAVORS` etc., cannot be combined with `TEST_CASES`.
-* Set `VERBOSE=true` to always include the output from running the test case. Otherwise, the output is only
-  printed to stdout when a test case fails.
+* Set `VERBOSE=true` to set `OTEL_INJECTOR_LOG_LEVEL=debug` when running test cases and to always include the output
+  from running the test case. Otherwise, the default log level (`error`) is used, and output is only printed to stdout
+  when a test case fails.
 * Set `INTERACTIVE=true` to get a shell into the container under test, instead of running a test. Best used when working
   on a test for one specific runtime, you would usually want to combine this with something like
   `ARCHITECTURES=arm64 LIBC_FLAVORS=glibc TEST_SETS=dotnet INTERACTIVE=true scripts/test-all.sh` to narrow down the

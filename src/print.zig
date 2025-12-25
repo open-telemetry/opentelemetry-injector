@@ -99,7 +99,7 @@ fn takeSentinelOrDiscardOverlyLongLine(reader: *std.fs.File.Reader) ![:0]u8 {
 
 test "initLogLevel: OTEL_INJECTOR_LOG_LEVEL is not set" {
     defer resetLogLevel();
-    const allocator = std.heap.page_allocator;
+    const allocator = testing.allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
     const absolute_path_to_environ_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-environ/environ-no-log-level" });
@@ -111,7 +111,7 @@ test "initLogLevel: OTEL_INJECTOR_LOG_LEVEL is not set" {
 
 test "initLogLevel: OTEL_INJECTOR_LOG_LEVEL=debug" {
     defer resetLogLevel();
-    const allocator = std.heap.page_allocator;
+    const allocator = testing.allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
     const absolute_path_to_environ_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-environ/environ-log-level-debug" });
@@ -122,7 +122,7 @@ test "initLogLevel: OTEL_INJECTOR_LOG_LEVEL=debug" {
 
 test "initLogLevel: OTEL_INJECTOR_LOG_LEVEL=info" {
     defer resetLogLevel();
-    const allocator = std.heap.page_allocator;
+    const allocator = testing.allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
     const absolute_path_to_environ_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-environ/environ-log-level-info" });
@@ -133,7 +133,7 @@ test "initLogLevel: OTEL_INJECTOR_LOG_LEVEL=info" {
 
 test "initLogLevel: OTEL_INJECTOR_LOG_LEVEL=warn" {
     defer resetLogLevel();
-    const allocator = std.heap.page_allocator;
+    const allocator = testing.allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
     const absolute_path_to_environ_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-environ/environ-log-level-warn" });
@@ -144,7 +144,7 @@ test "initLogLevel: OTEL_INJECTOR_LOG_LEVEL=warn" {
 
 test "initLogLevel: OTEL_INJECTOR_LOG_LEVEL=error" {
     defer resetLogLevel();
-    const allocator = std.heap.page_allocator;
+    const allocator = testing.allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
     const absolute_path_to_environ_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-environ/environ-log-level-error" });
@@ -155,7 +155,7 @@ test "initLogLevel: OTEL_INJECTOR_LOG_LEVEL=error" {
 
 test "initLogLevel: OTEL_INJECTOR_LOG_LEVEL=none" {
     defer resetLogLevel();
-    const allocator = std.heap.page_allocator;
+    const allocator = testing.allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
     const absolute_path_to_environ_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-environ/environ-log-level-none" });
@@ -166,7 +166,7 @@ test "initLogLevel: OTEL_INJECTOR_LOG_LEVEL=none" {
 
 test "initLogLevel: OTEL_INJECTOR_LOG_LEVEL=none with overly long environment variable" {
     defer resetLogLevel();
-    const allocator = std.heap.page_allocator;
+    const allocator = testing.allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
     const absolute_path_to_environ_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-environ/environ-log-level-none-overly-long-env-var" });
@@ -177,7 +177,7 @@ test "initLogLevel: OTEL_INJECTOR_LOG_LEVEL=none with overly long environment va
 
 test "initLogLevel: OTEL_INJECTOR_LOG_LEVEL is an arbitrary string" {
     defer resetLogLevel();
-    const allocator = std.heap.page_allocator;
+    const allocator = testing.allocator;
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd_path);
     const absolute_path_to_environ_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-environ/environ-log-level-arbitrary-string" });

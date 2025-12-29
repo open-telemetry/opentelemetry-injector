@@ -23,7 +23,7 @@ public class Main {
                 echoProperties(new String[]{"otel.injector.jvm.no_op_agent.has_been_loaded", "some-property"});
                 break;
             case "custom-env-var":
-                echoEnvVar("CUSTOM_ENV_VAR");
+                echoEnvVar(args[1]);
                 break;
             default:
                 System.out.println("error: unknown test app command: " +  command);

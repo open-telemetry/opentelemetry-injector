@@ -29,7 +29,14 @@ run_test_case \
   "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX="
 
 run_test_case \
-  "custom env var is returned with env file provided" \
+  "OTEL_ custom env var is returned according to the env file provided" \
   "app" \
-  "./dotnetapp custom-env-var" \
-  "CUSTOM_ENV_VAR: custom-value-123"
+  "./dotnetapp custom-env-var OTEL_SDK_DISABLED" \
+  "OTEL_SDK_DISABLED: true"
+
+run_test_case \
+  "non OTEL_ custom env var is ignored" \
+  "app" \
+  "./dotnetapp  custom-env-var CUSTOM_ENV_VAR" \
+  "CUSTOM_ENV_VAR: -"
+

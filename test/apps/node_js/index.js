@@ -44,7 +44,7 @@ function main() {
       echoEnvVar('DOTNET_STARTUP_HOOKS');
       break;
     case 'custom-env-var':
-      echoEnvVar('CUSTOM_ENV_VAR');
+      echoEnvVar(process.argv[3]);
       break;
     default:
       console.error(`unknown test app command: ${command}`);

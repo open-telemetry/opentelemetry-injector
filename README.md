@@ -86,14 +86,15 @@ This method requires `root` privileges.
     - `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=""` to disable Node.js auto-instrumentation
 
 3. (Optional) The default env agent configuration file `/etc/opentelemetry/default_auto_instrumentation_env.conf` is empty (use
-   `all_auto_instrumentation_agents_env_path` option to specify other path). You can add environment variables
-   in this file - these variables will be passed to all agents' envs.
+   `all_auto_instrumentation_agents_env_path` option to specify other path). Environment variables added to this file
+   will be passed to all agents' environments. **NOTE**: environment variables which do not start with `OTEL_` are
+   ignored.
 
    The `auto_instrumentation_env.conf` file format is the same as other configurations:
 
    ```
-   VARIABLE_1=some-value
-   ANOTHER_VAR=other-value
+   OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4317
+   OTEL_PROPAGATORS=tracecontext,baggage
    ```
 
 4. Reboot the system or restart the applications/services for any changes to take effect. The `libotelinject.so` shared

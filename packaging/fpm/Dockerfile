@@ -1,4 +1,4 @@
-FROM node:24-bookworm@sha256:aa648b387728c25f81ff811799bbf8de39df66d7e2d9b3ab55cc6300cb9175d9
+FROM node:24-bookworm@sha256:b52a8d1206132b36d60e51e413d9a81336e8a0206d3b648cabd6d5a49c4c0f54
 
 VOLUME /repo
 WORKDIR /repo

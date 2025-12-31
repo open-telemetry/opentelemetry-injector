@@ -171,7 +171,7 @@ fn readConfigurationFile(cfg_file_path: []const u8, configuration: *InjectorConf
 
 fn applyKeyValueToAllAgentsEnv(key: []const u8, value: []u8, _file_path: []const u8, _configuration: *InjectorConfiguration) void {
     if (!std.mem.startsWith(u8, key, otel_env_var_prefix)) {
-        print.printError("env var {s} does not start with {s}. ignoring.", .{ key, otel_env_var_prefix });
+        print.printWarn("environment variable {s} does not start with {s}. ignoring.", .{ key, otel_env_var_prefix });
         return;
     }
 

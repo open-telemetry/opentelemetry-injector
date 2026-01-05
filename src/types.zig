@@ -1,11 +1,9 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-pub const NullTerminatedString = [*:0]const u8;
+pub const DlSymFn = *const fn (handle: ?*anyopaque, symbol: [*:0]const u8) ?*anyopaque;
 
-pub const DlSymFn = *const fn (handle: ?*anyopaque, symbol: NullTerminatedString) ?*anyopaque;
-
-pub const SetenvFnPtr = *const fn (name: NullTerminatedString, value: NullTerminatedString, overwrite: bool) c_int;
+pub const SetenvFnPtr = *const fn (name: [*:0]const u8, value: [*:0]const u8, overwrite: bool) c_int;
 
 pub const EnvironPtr = *[*c][*c]const u8;
 

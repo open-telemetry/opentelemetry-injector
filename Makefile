@@ -4,6 +4,15 @@ INSTALL_DIR=/usr/lib/opentelemetry/otelinject
 # Docker repository used.
 DOCKER_REPO?=docker.io
 
+DIST_SRCS:= \
+	$(wildcard src/*.*) \
+	build.zig \
+	build.zig.zon \
+	Dockerfile \
+	zig-version
+
+DIST_TARGET := dist/libotelinject_$(ARCH).so
+
 .PHONY: all
 all: so/libotelinject.so
 
@@ -20,8 +29,7 @@ clean:
 so/libotelinject.so: so
 	zig build -Dcpu-arch=${ARCH} --prominent-compile-errors --summary none
 
-.PHONY: dist
-dist:
+$(DIST_TARGET): $(DIST_SRCS)
 	@set -e
 	@mkdir -p dist
 	if [[ "$(ARCH)" = arm64 ]]; then \
@@ -35,6 +43,9 @@ dist:
 	docker exec libotelinject-builder make ARCH=$(ARCH) SHELL=/bin/sh all
 	docker cp libotelinject-builder:/libotelinject/so/libotelinject.so dist/libotelinject_$(ARCH).so
 	docker rm -f libotelinject-builder
+
+.PHONY: dist
+dist: $(DIST_TARGET)
 
 .PHONY: deb-rpm-package
 %-package:

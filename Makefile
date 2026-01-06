@@ -8,6 +8,9 @@ BINARY_NAME:=$(BINARY_NAME_PREFIX)_$(ARCH).so
 DIST_DIR_PACKAGE:=instrumentation/dist
 PACKAGE_NAME:=opentelemetry-injector
 
+DOCKER_CACHE_FROM?=
+DOCKER_CACHE_TO?=
+
 # Docker repository used.
 DOCKER_REPO?=docker.io
 
@@ -68,7 +71,15 @@ $(DIST_TARGET): $(DIST_SRCS)
 	elif [[ "$(ARCH)" = amd64 ]]; then \
 	  ZIG_ARCHITECTURE=x86_64; \
 	fi; \
-	docker buildx build --platform linux/$(ARCH) --build-arg DOCKER_REPO=$(DOCKER_REPO) --build-arg ZIG_ARCHITECTURE=$$ZIG_ARCHITECTURE -o type=image,name=libotelinject-builder:$(ARCH),push=false .
+	docker buildx build \
+	  --platform linux/$(ARCH) \
+	  --build-arg DOCKER_REPO=$(DOCKER_REPO) \
+	  --build-arg ZIG_ARCHITECTURE=$$ZIG_ARCHITECTURE \
+	  --output=type=docker \
+	  $(DOCKER_CACHE_FROM) \
+	  $(DOCKER_CACHE_TO) \
+	  -t libotelinject-builder:$(ARCH) \
+	  .
 	docker rm -f libotelinject-builder 2>/dev/null || true
 	docker run -d --platform linux/$(ARCH) --name libotelinject-builder libotelinject-builder:$(ARCH) sleep inf
 	docker exec libotelinject-builder make ARCH=$(ARCH) SHELL=/bin/sh all

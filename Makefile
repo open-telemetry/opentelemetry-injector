@@ -1,20 +1,50 @@
 ARCH?=amd64
-INSTALL_DIR=/usr/lib/opentelemetry/otelinject
+VERSION?=0.0.0-dev
+INSTALL_DIR:=/usr/lib/opentelemetry/otelinject
+DIST_DIR_BINARY:=dist
+BINARY_NAME_PREFIX:=libotelinject
+BINARY_NAME_NO_ARCH:=$(BINARY_NAME_PREFIX).so
+BINARY_NAME:=$(BINARY_NAME_PREFIX)_$(ARCH).so
+DIST_DIR_PACKAGE:=instrumentation/dist
+PACKAGE_NAME:=opentelemetry-injector
 
 # Docker repository used.
 DOCKER_REPO?=docker.io
 
-DIST_SRCS:= \
+DIST_SRCS:=\
 	$(wildcard src/*.*) \
 	build.zig \
 	build.zig.zon \
 	Dockerfile \
 	zig-version
 
-DIST_TARGET := dist/libotelinject_$(ARCH).so
+DIST_TARGET:=$(DIST_DIR_BINARY)/$(BINARY_NAME)
+
+COMMON_PACKAGE_SRCS:=\
+  $(DIST_SRCS) \
+	$(wildcard packaging/*-release.txt) \
+	$(wildcard packaging/fpm/*.*) \
+	$(wildcard packaging/fpm/etc/*.*) \
+	$(wildcard packaging/fpm/etc/**/*.*)
+
+DEB_PACKAGE_SRCS:=\
+	$(COMMON_PACKAGE_SRCS) \
+	$(wildcard packaging/fpm/deb/*.*)
+DEB_PACKAGE_TARGET:=$(DIST_DIR_PACKAGE)/$(PACKAGE_NAME)_$(VERSION)_$(ARCH).deb
+
+RPM_PACKAGE_SRCS:=\
+	$(COMMON_PACKAGE_SRCS) \
+	$(wildcard packaging/fpm/rpm/*.*)
+ifeq ($(ARCH),arm64)
+  RPM_PACKAGE_ARCH:=aarch64
+else
+  RPM_PACKAGE_ARCH:=x86_64
+endif
+RPM_VERSION=$(subst -,_,$(VERSION))
+RPM_PACKAGE_TARGET := $(DIST_DIR_PACKAGE)/$(PACKAGE_NAME)-$(RPM_VERSION)-1.$(RPM_PACKAGE_ARCH).rpm
 
 .PHONY: all
-all: so/libotelinject.so
+all: so/$(BINARY_NAME_NO_ARCH)
 
 so:
 	@mkdir -p so
@@ -24,14 +54,15 @@ obj:
 
 .PHONY: clean
 clean:
-	rm -rf so dist instrumentation zig-out .zig-cache
+	rm -rf so $(DIST_DIR_BINARY) $(DIST_DIR_PACKAGE) zig-out .zig-cache
 
-so/libotelinject.so: so
+so/$(BINARY_NAME_NO_ARCH): so
 	zig build -Dcpu-arch=${ARCH} --prominent-compile-errors --summary none
 
 $(DIST_TARGET): $(DIST_SRCS)
+	@echo building the injector binary for architecture $(ARCH)
 	@set -e
-	@mkdir -p dist
+	@mkdir -p $(DIST_DIR_BINARY)
 	if [[ "$(ARCH)" = arm64 ]]; then \
 	  ZIG_ARCHITECTURE=aarch64; \
 	elif [[ "$(ARCH)" = amd64 ]]; then \
@@ -41,39 +72,51 @@ $(DIST_TARGET): $(DIST_SRCS)
 	docker rm -f libotelinject-builder 2>/dev/null || true
 	docker run -d --platform linux/$(ARCH) --name libotelinject-builder libotelinject-builder:$(ARCH) sleep inf
 	docker exec libotelinject-builder make ARCH=$(ARCH) SHELL=/bin/sh all
-	docker cp libotelinject-builder:/libotelinject/so/libotelinject.so dist/libotelinject_$(ARCH).so
+	docker cp libotelinject-builder:/libotelinject/so/$(BINARY_NAME_NO_ARCH) $(DIST_DIR_BINARY)/$(BINARY_NAME)
 	docker rm -f libotelinject-builder
 
 .PHONY: dist
 dist: $(DIST_TARGET)
 
-.PHONY: deb-rpm-package
-%-package:
-ifneq ($(SKIP_COMPILE), true)
+.PHONY: deb-package
+deb-package: $(DEB_PACKAGE_TARGET)
+
+.PHONY: rpm-package
+rpm-package: $(RPM_PACKAGE_TARGET)
+
+$(DEB_PACKAGE_TARGET): $(DEB_PACKAGE_SRCS)
 	$(MAKE) dist
-endif
-	@mkdir -p dist
-	mkdir -p instrumentation/dist
-	docker build -t instrumentation-fpm packaging/fpm
-	docker rm -f libotelinject-packager 2>/dev/null || true
-	docker run -d --name libotelinject-packager --rm -v $(CURDIR):/repo -e PACKAGE=$* -e VERSION=$(VERSION) -e ARCH=$(ARCH) instrumentation-fpm sleep inf
-	docker exec libotelinject-packager ./packaging/fpm/$*/build.sh "$(VERSION)" "$(ARCH)" "/repo/instrumentation/dist"
-	docker cp libotelinject-packager:/repo/instrumentation/dist/. instrumentation/dist
-	docker rm -f libotelinject-packager
+	@$(call build_package,deb)
+
+$(RPM_PACKAGE_TARGET): $(RPM_PACKAGE_SRCS)
+	$(MAKE) dist
+	@$(call build_package,rpm)
+
+define build_package
+$(eval $@_SYS_PACKAGE = $(1))
+@echo building the injector package for architecture $(ARCH) and system package type $($@_SYS_PACKAGE)
+@mkdir -p $(DIST_DIR_PACKAGE)
+docker build -t instrumentation-fpm packaging/fpm
+docker rm -f libotelinject-packager 2>/dev/null || true
+docker run -d --name libotelinject-packager --rm -v $(CURDIR):/repo -e PACKAGE=$* -e VERSION=$(VERSION) -e ARCH=$(ARCH) instrumentation-fpm sleep inf
+docker exec libotelinject-packager ./packaging/fpm/$($@_SYS_PACKAGE)/build.sh "$(VERSION)" "$(ARCH)" "/repo/$(DIST_DIR_PACKAGE)"
+docker cp libotelinject-packager:/repo/$(DIST_DIR_PACKAGE)/. $(DIST_DIR_PACKAGE)
+docker rm -f libotelinject-packager
+endef
 
 # Run this to install and enable the auto-instrumentation files. Mostly intended for development.
 .PHONY: install
 install: all uninstall
 	mkdir -p $(INSTALL_DIR)
 	cp javaagent.jar $(INSTALL_DIR)
-	cp so/libotelinject.so $(INSTALL_DIR)
-	echo $(INSTALL_DIR)/libotelinject.so > /etc/ld.so.preload
+	cp so/$(BINARY_NAME_NO_ARCH) $(INSTALL_DIR)
+	echo $(INSTALL_DIR)/$(BINARY_NAME_NO_ARCH) > /etc/ld.so.preload
 
 .PHONY: uninstall
 uninstall:
 	rm -f /etc/ld.so.preload
 	rm -f $(INSTALL_DIR)/javaagent.jar
-	rm -f $(INSTALL_DIR)/libotelinject.so
+	rm -f $(INSTALL_DIR)/$(BINARY_NAME_NO_ARCH)
 
 # Run this from with this directory to build and run the development container.
 # Once you have a command line inside the container, you can run make zig-build, make zig-unit-tests,
@@ -203,9 +246,9 @@ list:
 	@grep '^[^#[:space:]].*:' Makefile
 
 .PHONY: packaging-integration-test-deb
-packaging-integration-test-deb-%: dist deb-package
+packaging-integration-test-deb-%: deb-package
 	(cd packaging/tests/deb/$* && ARCH=$(ARCH) ./run.sh)
 
 .PHONY: packaging-integration-test-rpm
-packaging-integration-test-rpm-%: dist rpm-package
+packaging-integration-test-rpm-%: rpm-package
 	(cd packaging/tests/rpm/$* && ARCH=$(ARCH) ./run.sh)

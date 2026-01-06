@@ -43,7 +43,7 @@ get_version() {
         if [[ -n "$latest_tag" ]]; then
             echo "${latest_tag}-post"
         else
-            echo "0.0.1-post"
+            echo "0.0.0-dev"
         fi
     else
         echo "$commit_tag"

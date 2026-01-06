@@ -14,6 +14,8 @@ else
   exit 1
 fi
 
+echo "running package integration tests for .NET/rpm/$arch."
+
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR/../../../.."
 

@@ -12,6 +12,8 @@ else
   exit 1
 fi
 
+echo "running package integration tests for Node.js/deb/$arch."
+
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR/../../../.."
 

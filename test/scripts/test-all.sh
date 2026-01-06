@@ -17,9 +17,6 @@ if ! docker info > /dev/null 2>&1; then
   exit 1
 fi
 
-# remove all outdated injector binaries
-make clean
-
 architectures=""
 if [[ -n "${ARCHITECTURES:-}" ]]; then
   architectures=("${ARCHITECTURES//,/ }")

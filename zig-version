@@ -1,3 +1,3 @@
 # See https://ziglang.org/download/ for available versions.
-# Keep this in sync with .github/workflows/build.yaml -> mlugg/setup-zig.with.version.
+# Keep this in sync with build.zig.zon -> .minimum_zig_version.
 ZIG_VERSION=0.15.2

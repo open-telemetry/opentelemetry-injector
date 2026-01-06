@@ -31,6 +31,7 @@
 
     // Tracks the earliest Zig version that the package considers to be a
     // supported use case.
+    // Keep this in sync with ./zig-version.
     .minimum_zig_version = "0.15.2",
 
     // This field is optional.

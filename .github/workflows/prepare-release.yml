@@ -6,7 +6,7 @@ on:
     inputs:
       candidate:
         required: true
-        description: Release candidate version (like 0.70.0)
+        description: Release candidate version (like 0.70.0 or 0.70.0-20260109)
 permissions:
   contents: read
 jobs:

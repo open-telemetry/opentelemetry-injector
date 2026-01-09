@@ -98,10 +98,10 @@ run_test_case() {
   fi
 
   set +e
-  match=$(expr "$test_case_label" : ".*configuration file.*")
+  match=$(expr "$test_case_label" : ".*default configuration file.*")
   set -e
   if [ "$match" -gt 0 ]; then
-    echo "providing configuration file at /etc/opentelemetry/otelinject.conf for test case \"$test_case_label\""
+    echo "providing configuration file at default location /etc/opentelemetry/otelinject.conf for test case \"$test_case_label\""
     cp otelinject.conf /etc/opentelemetry/otelinject.conf
   fi
 

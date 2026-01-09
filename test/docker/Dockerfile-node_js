@@ -26,6 +26,7 @@ COPY test/scripts/run-tests-within-container.sh scripts/
 COPY test/scripts/create-*.sh scripts/
 COPY test/scripts/*.tests scripts/
 COPY test/docker/otelinject.conf otelinject.conf
+COPY test/docker/otelinject.custom-location.conf /custom/config/path/otelinject.conf
 COPY test/docker/default_auto_instrumentation_env.conf default_auto_instrumentation_env.conf
 
 RUN ${create_sdk_dummy_files_script}

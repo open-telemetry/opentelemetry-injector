@@ -51,11 +51,14 @@ This method requires `root` privileges.
    jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/javaagent.jar
    nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
    ```
+
+   You can override the location of the configuration file by setting `OTEL_INJECTOR_CONFIG_FILE`.
+
    You may want to modify this file for a couple of reasons:
    - You want to provide your own instrumentation files.
 
    - You want to selectively disable auto-instrumentation for a specific runtime, by setting the respective path
-     to an empty string in the configuration file `/etc/opentelemetry/otelinject.conf`.
+     to an empty string in the configuration file.
      For example, the following file would leave JVM and Node.js auto-instrumentation active, while disabling .NET
      auto-instrumentation:
       ```
@@ -68,7 +71,7 @@ This method requires `root` privileges.
      to programs that do not contain certain arguments on the command line.
      See [details on configuring the program inclusion and exclusion criteria](#details-on-configuring-the-program-inclusion-and-exclusion-criteria) for more information.
 
-   The values set in `/etc/opentelemetry/otelinject.conf` can be overridden with environment variables.
+   The values set in the configuration file can be overridden with environment variables.
    (This should usually not be necessary.)
    - `DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the .NET auto-instrumentation
      agent files

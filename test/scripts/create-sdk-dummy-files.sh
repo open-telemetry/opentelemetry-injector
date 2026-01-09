@@ -37,8 +37,10 @@ fi
 mkdir -p /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument
 touch /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument/index.js
 
-# Provide instrumentation files also in two more locations, for testing configuration via
-# /etc/opentelemetry/otelinject.conf and via environment variables NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH and friends.
+# Provide instrumentation files also in three more locations, for testing configuration via
+# /etc/opentelemetry/otelinject.conf/, OTEL_INJECTOR_CONFIG_FILE, and via environment variables
+# NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH and friends.
 mkdir -p /path/from
 cp -R /__otel_auto_instrumentation /path/from/config-file
 cp -R /__otel_auto_instrumentation /path/from/environment-variable
+cp -R /__otel_auto_instrumentation /path/from/config-file-custom-location

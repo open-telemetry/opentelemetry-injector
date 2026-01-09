@@ -9,7 +9,8 @@ const patterns_util = @import("patterns_util.zig");
 
 const testing = std.testing;
 
-const config_file_path = "/etc/opentelemetry/otelinject.conf";
+const default_config_file_path = "/etc/opentelemetry/otelinject.conf";
+const config_file_path_env_var = "OTEL_INJECTOR_CONFIG_FILE";
 const max_line_length = 8192;
 const empty_string = @constCast("");
 const otel_env_var_prefix = "OTEL_";
@@ -79,11 +80,24 @@ var cached_configuration_optional: ?InjectorConfiguration = null;
 /// Checks whether the configuration has already been read and reads it if necessary. The configuration will only be
 /// read once per process and the result will be cached for subsequent calls.
 ///
-/// The configuration will be read from the file /etc/opentelemetry/otelinject.conf (if it exists) and from environment
-/// variables. Environment variables have higher precedence and can override settings from the configuration file.
+/// The configuration will be read from the path denoted by the environment variable OTEL_INJECTOR_CONFIG_FILE, or from
+/// the default location /etc/opentelemetry/otelinject.conf if this environment variable is unset or empty.
+/// If the file does not exist or cannot be opened, readConfiguration continues with default values.
+///
+/// After reading the configuration file, the configuration will be merged with values read from environment variables
+/// (DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX, JVM_AUTO_INSTRUMENTATION_AGENT_PATH, etc.). Environment variables
+/// have higher precedence and can override settings from the configuration file.
 pub fn readConfiguration(allocator: std.mem.Allocator) InjectorConfiguration {
     if (cached_configuration_optional) |cached_configuration| {
         return cached_configuration;
+    }
+
+    var config_file_path: []const u8 = default_config_file_path;
+    if (std.posix.getenv(config_file_path_env_var)) |value| {
+        config_file_path = std.mem.trim(u8, value, " \t\r\n");
+        if (config_file_path.len == 0) {
+            config_file_path = default_config_file_path;
+        }
     }
 
     return readConfigurationFromPath(allocator, config_file_path) catch |err| {
@@ -363,6 +377,7 @@ fn applyKeyValueToGeneralOptions(arena_allocator: std.mem.Allocator, key: []cons
 }
 
 fn readConfigurationFile(arena_allocator: std.mem.Allocator, cfg_file_path: []const u8, configuration: *InjectorConfiguration) void {
+    print.printDebug("reading configuration file from {s}.", .{cfg_file_path});
     const config_file = std.fs.cwd().openFile(cfg_file_path, .{}) catch |err| {
         print.printDebug(
             "The configuration file {s} does not exist or cannot be opened. Configuration will use default values and environment variables only. Error: {t}",
@@ -371,6 +386,7 @@ fn readConfigurationFile(arena_allocator: std.mem.Allocator, cfg_file_path: []co
         return;
     };
     defer config_file.close();
+    print.printDebug("successfully read configuration file from {s}.", .{cfg_file_path});
 
     return parseConfiguration(
         arena_allocator,

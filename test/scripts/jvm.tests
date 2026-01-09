@@ -13,15 +13,15 @@ run_test_case \
   "otel.injector.jvm.no_op_agent.has_been_loaded: true; some-property: some-value" \
   "JAVA_TOOL_OPTIONS=-Dsome-property=some-value"
 
-# For test cases with the "configuration file" substring in their label, test/scripts/run-tests-within-container.sh
+# For test cases with the "default configuration file" substring in their label, test/scripts/run-tests-within-container.sh
 # will provide a configuration file in the expected location (/etc/opentelemetry/otelinject.conf).
 run_test_case \
-  "uses the Java agent path from the configuration file" \
+  "uses the Java agent path from the default configuration file" \
   "app" \
   "java -jar Main.jar verify-javaagent-has-been-injected" \
   "otel.injector.jvm.no_op_agent.has_been_loaded: true"
 run_test_case \
-  "the JVM_AUTO_INSTRUMENTATION_AGENT_PATH environment variable overrides the Java agent path from the configuration file" \
+  "the JVM_AUTO_INSTRUMENTATION_AGENT_PATH environment variable overrides the Java agent path from the default configuration file" \
   "app" \
   "java -jar Main.jar verify-javaagent-has-been-injected" \
   "otel.injector.jvm.no_op_agent.has_been_loaded: true" \

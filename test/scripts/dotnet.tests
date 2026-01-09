@@ -7,15 +7,15 @@ run_test_case \
   "./dotnetapp verify-startup-hook-has-been-injected" \
   "otel_injector_dotnet_no_op_startup_hook_has_been_loaded: true"
 
-# For test cases with the "configuration file" substring in their label, test/scripts/run-tests-within-container.sh
+# For test cases with the "default configuration file" substring in their label, test/scripts/run-tests-within-container.sh
 # will provide a configuration file in the expected location (/etc/opentelemetry/otelinject.conf).
 run_test_case \
-  "uses the .NET profiler path from the configuration file" \
+  "uses the .NET profiler path from the default configuration file" \
   "app" \
   "./dotnetapp verify-startup-hook-has-been-injected" \
   "otel_injector_dotnet_no_op_startup_hook_has_been_loaded: true"
 run_test_case \
-  "the DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX environment variable overrides .NET profiler path from the configuration file" \
+  "the DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX environment variable overrides .NET profiler path from the default configuration file" \
   "app" \
   "./dotnetapp verify-startup-hook-has-been-injected" \
   "otel_injector_dotnet_no_op_startup_hook_has_been_loaded: true" \

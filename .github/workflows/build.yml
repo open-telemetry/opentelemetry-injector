@@ -139,4 +139,4 @@ jobs:
         with:
           body_path: release-notes.md
           files: |
-            artifacts/*
+            opentelemetry-injector/artifacts/*

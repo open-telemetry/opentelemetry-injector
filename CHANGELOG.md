@@ -4,6 +4,70 @@
 
 <!-- next version -->
 
+## v0.0.3-20260109
+
+### 🛑 Breaking changes 🛑
+
+- `injector`: Remove link-time dependency on `__environ`, inject environment variables once at startup via setenv instead of overriding libc's getenv function. (#166)
+  This removes the declaration `extern var __environ: [*]u8` from the injector, that is, the dependency on the `__environ`
+  pointer symbol exported by libc.
+  
+  Motivation: The injector may be linked to binaries that, while dynamically linked, do not link any libc. This would
+  result in the injector preventing the program from starting due to a linker error, effectively crashing the
+  application under monitoring.
+  
+  This change introduces a way to look up the `dlsym` symbol, and then in turn through `dlsym` the `__environ` and
+  `setenv` symbols. This happens at runtime in an initialization step, by inspecting the process' memory and
+  finding the `dlsym` symbol in memory. This allows us to read and manipulate the process environment without depending
+  on any external symbols at link time. More importantly, we have the option to stand down if looking up
+  `dlsym`/`__environ`/`setenv` fails, and let the host process continue, instead of crashing it at startup.
+  
+  Also, the injector now no longer overrides libc's `getenv` to inject environment variables but instead unconditionally
+  injects all environment variables by calling `setenv` at startup. This change is necessary, because even when removing
+  the dependency on the `__environ` symbol (see above), there would still be potential to break certain executables:
+    - For example, on some older distributions (Debian 11/bullseye is one), `libc` and `libdl` are two distinct libary
+      files, with `libdl` containing `dlopen`, `dlcose`, `dlsym` and `dlerror`. When a binary only binds `libc`, but not
+      `libdl`, we would not find the `dlsym` symbol (because it is actually really not loaded into memory), hence we
+      wouldn't be able to find the `__environ` or `setenv` symbols. As a consequence, we would not be able to backfill
+      the injector-internal representation of the environment (std.os.environ/std.posix.getenv in the Zig code) and
+      _all_ calls to `getenv` would return null; i.e. we would effectively obliterate the environment of the process.
+    - Another issue is that, if a binary binds `libcrypto` (i.e. uses OpenSSL), it will try to look up the
+      `OPENSSL_armcap` environment variable before the injector init code even has ran. With the `getenv` override, this
+      would always return null, even if `OPENSSL_armcap` is set (independent of the `libdl` issue described above).
+      Hence, overriding `getenv` would break some of OpenSSL's assumptions.
+    - Many runtimes do not use `getenv` to read environment variables. E.g. the JVM as well as the CLR use `getenv` in
+      their native startup code, but when environment variables are read from with the runtime, the reading bypasses
+      `getenv`. Hence, overriding getenv is not feasible to inject reliably into these runtimes. The same is true for
+      Python. Injecting via `setenv` solves this problem.
+  
+  Last but not least, we no longer inject resource attributes into the JVM via the workaround of adding
+  `-Dotel.resource.attributes` to `JAVA_TOOL_OPTIONS`. This was only necessary because the JVM does not read
+  `OTEL_RESOURCE_ATTRIBUTES` via `getenv` (see previous paragraph), hence this was a necessary workaround with the
+  override-getenv approach. With the switch to `setenv`, it is no longer necessary.
+  
+
+### 💡 Enhancements 💡
+
+- `environment`: Limit all_auto_instrumentation_agents_env_path env vars to entries prefixed with OTEL_. (#176)
+- `config`: add OTEL_INJECTOR_CONFIG_FILE to set config file location (#188)
+  This adds support for a new environment variable `OTEL_INJECTOR_CONFIG_FILE` that determines from which path the
+  injector's configuration file is read. If the variable is not set or empty, the configuration file is read from the
+  default path `/etc/opentelemetry/otelinject.conf`.
+  
+  This is useful in environments where you want to provide a configuration file, but you do not want to make any
+  assumptions about the underlying file system's structure. I.e. you want to keep all assets of the injector (injector
+  binary, auto-instrumentation agents and the injector configuration) completely separate from standard OS directories
+  like `/etc`.
+  
+
+### 🧰 Bug fixes 🧰
+
+- `environment`: Fix out of index error when leveraging all_auto_instrumentation_agents_env_path with more than one env var. (#173)
+- `config`: Fix handling of overly long lines in config file (#174)
+  Continue to read the rest of the config file after discarding an overly long line
+
+<!-- previous-version -->
+
 ## v0.0.2-20251216
 
 ### 🛑 Breaking changes 🛑

@@ -125,11 +125,14 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
       - run: mkdir -p artifacts
+
       - name: Download artifacts
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           path: ./artifacts/
+
       - name: Prepare release notes
         run: ./.github/workflows/scripts/prepare-release-notes.sh
         env:
@@ -140,20 +143,14 @@ jobs:
         run: |
           set -x
           pwd
-          ls -la /home/runner/work || true
-          ls -la /home/runner/work/opentelemetry-injector || true
-          ls -la /home/runner/work/opentelemetry-injector/opentelemetry-injector || true
-          ls -la /home/runner/work/opentelemetry-injector/opentelemetry-injector/artifacts || true
+          ls -la .
           ls -laR /home/runner/work/opentelemetry-injector/opentelemetry-injector/artifacts || true
-          ls -la opentelemetry-injector/artifacts/* || true
-          ls -la ./opentelemetry-injector/artifacts/* || true
-          ls -laR ./opentelemetry-injector/artifacts/* || true
-          file ./opentelemetry-injector/artifacts/* || true
-          echo ./opentelemetry-injector/artifacts/* || true
+          ls -laR artifacts || true
 
       - name: Release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
           body_path: release-notes.md
+          fail_on_unmatched_files: true
           files: |
-            ./opentelemetry-injector/artifacts/*
+            artifacts/**/*

@@ -134,9 +134,26 @@ jobs:
         run: ./.github/workflows/scripts/prepare-release-notes.sh
         env:
           RELEASE_TAG: ${{ steps.github_tag.outputs.tag }}
+
+      - name: debug release artifacts
+        shell: bash
+        run: |
+          set -x
+          pwd
+          ls -la /home/runner/work || true
+          ls -la /home/runner/work/opentelemetry-injector || true
+          ls -la /home/runner/work/opentelemetry-injector/opentelemetry-injector || true
+          ls -la /home/runner/work/opentelemetry-injector/opentelemetry-injector/artifacts || true
+          ls -laR /home/runner/work/opentelemetry-injector/opentelemetry-injector/artifacts || true
+          ls -la opentelemetry-injector/artifacts/* || true
+          ls -la ./opentelemetry-injector/artifacts/* || true
+          ls -laR ./opentelemetry-injector/artifacts/* || true
+          file ./opentelemetry-injector/artifacts/* || true
+          echo ./opentelemetry-injector/artifacts/* || true
+
       - name: Release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
           body_path: release-notes.md
           files: |
-            opentelemetry-injector/artifacts/*
+            ./opentelemetry-injector/artifacts/*

@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     # Determine the version number that will be assigned to the release.
     inputs:
-      candidate:
+      version:
         required: true
-        description: Release candidate version (like 0.70.0 or 0.70.0-20260109)
+        description: Release version or release candidate version (like v0.70.0 or v0.70.0-20260109)
 permissions:
   contents: read
 jobs:
@@ -30,5 +30,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.otelbot-token.outputs.token }}
           REPO: open-telemetry/opentelemetry-injector
-          CANDIDATE: ${{ inputs.candidate }}
+          VERSION: ${{ inputs.version }}
         run: ./.github/workflows/scripts/prepare-release.sh

@@ -1,0 +1,21 @@
+name: Automation - Create Tag for Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  create-tag-for-release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Create tag for release
+        run: .github/workflows/scripts/create-tag-for-release.sh

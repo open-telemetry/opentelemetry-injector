@@ -1,4 +1,4 @@
-name: build
+name: Build
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  verify-and-build-binary:
     runs-on: ${{ matrix.ARCH == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     strategy:
       matrix:
@@ -44,7 +44,7 @@ jobs:
           if-no-files-found: error
 
   build-package:
-    needs: verify
+    needs: verify-and-build-binary
     runs-on: ${{ matrix.ARCH == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     strategy:
       matrix:

@@ -29,7 +29,7 @@ if [[ -n "${LIBC_FLAVORS:-}" ]]; then
   echo Only testing a subset of libc flavors: "${libc_flavors[@]}"
 fi
 
-all_test_sets_string=$(find test/scripts/ -name \*.tests -print0 | xargs -0 -n 1 basename | sort | tr '\n' ' ')
+all_test_sets_string=$(find injector-integration-tests/tests/ -name \*.tests -print0 | xargs -0 -n 1 basename | sort | tr '\n' ' ')
 read -ra all_test_sets <<< "$all_test_sets_string"
 echo Found test sets: "${all_test_sets[@]}"
 
@@ -38,7 +38,7 @@ if [[ -n "${TEST_SETS:-}" ]]; then
   test_sets=("${TEST_SETS//,/ }")
   echo Only running a subset of test sets: "${test_sets[@]}"
   for test_set_id in "${test_sets[@]}"; do
-    test_set_file_name="test/scripts/$test_set_id.tests"
+    test_set_file_name="injector-integration-tests/tests/$test_set_id.tests"
     if [[ ! -f "$test_set_file_name" ]]; then
       echo "Error: test set \"$test_set_id\" does not exist. Available test sets are: ${all_test_sets_string//\.tests/}"
       exit 1
@@ -79,7 +79,7 @@ run_test_set_for_architecture_and_libc_flavor() {
     TEST_SET="$test_set" \
     TEST_CASES="$TEST_CASES" \
     TEST_CASES_CONTAINING="$TEST_CASES_CONTAINING" \
-    test/scripts/run-tests-for-container.sh
+    injector-integration-tests/scripts/run-tests-for-container.sh
   test_exit_code_last_test_set=$?
   set -e
   echo

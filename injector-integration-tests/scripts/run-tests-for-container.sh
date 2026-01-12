@@ -41,14 +41,16 @@ if [[ "$TEST_SET" = "jvm.tests" ]]; then
   runtime="jvm"
 fi
 
-dockerfile_name="test/docker/Dockerfile-nodejs"
+# We also use the Node.js test app for non-runtime specific tests (e.g. injector-integration-tests/tests/default.tests
+# etc.), so this is the default Dockerfile.
+dockerfile_name="injector-integration-tests/runtimes/nodejs/Dockerfile"
 image_name=otel-injector-test-$ARCH-$LIBC-$runtime
 
 base_image_run=unknown
 base_image_build=unknown
 case "$runtime" in
   "dotnet")
-    dockerfile_name="test/docker/Dockerfile-dotnet"
+    dockerfile_name="injector-integration-tests/runtimes/dotnet/Dockerfile"
     base_image_build=mcr.microsoft.com/dotnet/sdk:9.0-bookworm-slim
     base_image_run=mcr.microsoft.com/dotnet/runtime:9.0-bookworm-slim
     if [[ "$LIBC" = "musl" ]]; then
@@ -57,7 +59,7 @@ case "$runtime" in
     fi
     ;;
   "jvm")
-    dockerfile_name="test/docker/Dockerfile-jvm"
+    dockerfile_name="injector-integration-tests/runtimes/jvm/Dockerfile"
     base_image_run=eclipse-temurin:11
     if [[ "$LIBC" = "musl" ]]; then
       # Older images of eclipse-temurin:xx-alpine (before 21) are single platform and do not support arm64.

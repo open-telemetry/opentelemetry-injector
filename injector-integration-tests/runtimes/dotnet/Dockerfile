@@ -5,17 +5,16 @@ FROM ${base_image_build} AS build
 ARG TARGETARCH
 
 WORKDIR /no-op-startup-hook-source
-COPY test/docker/dotnet/no-op-startup-hook .
+COPY injector-integration-tests/runtimes/dotnet/no-op-startup-hook .
 RUN dotnet restore
 RUN dotnet publish --no-restore -o /no-op-startup-hook
+
 WORKDIR /source
-
 # copy csproj and restore as distinct layers
-COPY test/apps/dotnet/*.csproj .
+COPY injector-integration-tests/runtimes/dotnet/app/*.csproj .
 RUN dotnet restore
-
 # copy and publish app and libraries
-COPY test/apps/dotnet/* .
+COPY injector-integration-tests/runtimes/dotnet/app/* .
 RUN dotnet publish --no-restore -o /app
 
 # final stage/image
@@ -39,12 +38,12 @@ echo "Error: build argument create_sdk_dummy_files_script is required but not se
 exit 1; \
 fi
 
-COPY test/scripts/run-tests-within-container.sh scripts/
-COPY test/scripts/create-*.sh scripts/
-COPY test/scripts/*.tests scripts/
-COPY test/docker/otelinject.conf otelinject.conf
-COPY test/docker/otelinject.custom-location.conf /custom/config/path/otelinject.conf
-COPY test/docker/default_auto_instrumentation_env.conf default_auto_instrumentation_env.conf
+COPY injector-integration-tests/scripts/run-tests-within-container.sh scripts/
+COPY injector-integration-tests/scripts/create-*.sh scripts/
+COPY injector-integration-tests/tests/*.tests tests/
+COPY injector-integration-tests/common/otelinject.conf otelinject.conf
+COPY injector-integration-tests/common/otelinject.custom-location.conf /custom/config/path/otelinject.conf
+COPY injector-integration-tests/common/default_auto_instrumentation_env.conf default_auto_instrumentation_env.conf
 
 RUN ${create_sdk_dummy_files_script}
 

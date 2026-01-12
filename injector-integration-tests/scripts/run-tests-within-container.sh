@@ -157,8 +157,8 @@ run_test_case() {
 
 exit_code=0
 
-# shellcheck source=test/scripts/default.tests
-. "scripts/${TEST_SET:-default.tests}"
+# shellcheck source=injector-integration-tests/tests/default.tests
+. "tests/${TEST_SET:-default.tests}"
 
 exit $exit_code
 

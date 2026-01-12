@@ -20,14 +20,14 @@ RUN mkdir -p /etc/opentelemetry && chmod 777 /etc/opentelemetry
 
 WORKDIR /usr/src/otel/injector/
 
-COPY test/apps/nodejs app
+COPY injector-integration-tests/runtimes/nodejs app
 
-COPY test/scripts/run-tests-within-container.sh scripts/
-COPY test/scripts/create-*.sh scripts/
-COPY test/scripts/*.tests scripts/
-COPY test/docker/otelinject.conf otelinject.conf
-COPY test/docker/otelinject.custom-location.conf /custom/config/path/otelinject.conf
-COPY test/docker/default_auto_instrumentation_env.conf default_auto_instrumentation_env.conf
+COPY injector-integration-tests/scripts/run-tests-within-container.sh scripts/
+COPY injector-integration-tests/scripts/create-*.sh scripts/
+COPY injector-integration-tests/tests/*.tests tests/
+COPY injector-integration-tests/common/otelinject.conf otelinject.conf
+COPY injector-integration-tests/common/otelinject.custom-location.conf /custom/config/path/otelinject.conf
+COPY injector-integration-tests/common/default_auto_instrumentation_env.conf default_auto_instrumentation_env.conf
 
 RUN ${create_sdk_dummy_files_script}
 

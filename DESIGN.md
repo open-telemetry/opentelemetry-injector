@@ -251,7 +251,7 @@ from the suite of CNI network plug-ins, which runs in Kubernetes pods in the `ku
 Here is how this binary is
 [built](https://github.com/aws/amazon-vpc-cni-k8s/blob/4ee9789484258d1ae8f6bf36859ea325097d5d7b/Makefile#L149-L152):
 It is written in Go and built with `-buildmode=pie` and `-ldflags '-s -w'`.
-There is also a [trivial test application](test/no_environ_symbol) that is built in the
+There is also a [trivial test application](injector-integration-tests/runtimes/no_environ_symbol) that is built in the
 same way, contained in this repository.
 
 When using an `LD_PRELOAD`-based injector that declares a dependency on `__environ` (or any other libc symbol), a binary

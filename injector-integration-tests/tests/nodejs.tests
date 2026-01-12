@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 run_test_case \
-  "overrides NODE_OPTIONS if it is not present" \
+  "injects NODE_OPTIONS if it is not present" \
   "app" \
   "node index.js node-options" \
   "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js"
@@ -24,7 +24,7 @@ run_test_case \
   "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js --no-deprecation; NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js --no-deprecation" \
   "NODE_OPTIONS=--no-deprecation"
 
-# For test cases with the "default configuration file" substring in their label, test/scripts/run-tests-within-container.sh
+# For test cases with the "default configuration file" substring in their label, run-tests-within-container.sh
 # will provide a configuration file in the default location (/etc/opentelemetry/otelinject.conf).
 run_test_case \
   "uses NODE_OPTIONS path from the default configuration file" \

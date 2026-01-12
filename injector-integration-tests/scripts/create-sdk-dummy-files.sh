@@ -26,7 +26,7 @@ if [ -d no-op-startup-hook ]; then
 fi
 
 # JVM
-# Copy the no-op agent jar file that is created in test/docker/Dockerfile-jvm
+# Copy the no-op agent jar file that is created in injector-integration-tests/runtimes/jvm/Dockerfile
 if [ -f no-op-agent/no-op-agent.jar ]; then
   mkdir -p /usr/lib/opentelemetry/jvm
   cp no-op-agent/no-op-agent.jar /usr/lib/opentelemetry/jvm/javaagent.jar

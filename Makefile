@@ -159,11 +159,11 @@ tests: zig-unit-tests injector-integration-tests-for-one-architecture
 
 .PHONY: injector-integration-tests-for-one-architecture
 injector-integration-tests-for-one-architecture:
-	ARCHITECTURES=$(ARCH) test/scripts/test-all.sh
+	ARCHITECTURES=$(ARCH) injector-integration-tests/scripts/test-all.sh
 
 .PHONY: injector-integration-tests-for-all-architectures
 injector-integration-tests-for-all-architectures:
-	test/scripts/test-all.sh
+	injector-integration-tests/scripts/test-all.sh
 
 .PHONY: lint
 lint: zig-fmt-check zig-validate-test-imports shellcheck-lint

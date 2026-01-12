@@ -40,6 +40,9 @@ fi
 if [[ "$TEST_SET" = "jvm.tests" ]]; then
   runtime="jvm"
 fi
+if [[ "$TEST_SET" = "no-environ-symbol.tests" ]]; then
+  runtime="no-environ-symbol"
+fi
 
 # We also use the Node.js test app for non-runtime specific tests (e.g. injector-integration-tests/tests/default.tests
 # etc.), so this is the default Dockerfile.
@@ -71,6 +74,12 @@ case "$runtime" in
     if [[ "$LIBC" = "musl" ]]; then
       base_image_run=node:22.15.0-alpine3.21
     fi
+    ;;
+  "no-environ-symbol")
+    dockerfile_name="injector-integration-tests/runtimes/no-environ-symbol/Dockerfile"
+    base_image_run=golang:1.25.5-trixie
+    # We do not provide a different base image depending on the libc flavor, the point of this test scenario is to test
+    # an app that depends on no libc whatsoever, so the test is the same for LIBC=musl and LIBC=glibc.
     ;;
   *)
     echo "Unknown runtime: $runtime"

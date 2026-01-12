@@ -64,7 +64,7 @@ The approach taken by the OpenTelemetry injector is as follows:
     * Inspect the `DT_NEEDED` entries.
       If one of them contains the string `musl`, we know that this binary was linked against musl libc at build time.
       If one of them contains `libc.so.6`, we know that this binary was linked against glibc at build time.
-* Next, we try to find the location of the [`dlsym`](https://www.man7.org/linux/man-pages/man3/dlsym.3.html) symbol in 
+* Next, we try to find the location of the [`dlsym`](https://www.man7.org/linux/man-pages/man3/dlsym.3.html) symbol in
   the mapped memory of the process.
   This happens as follows:
     * Read `/proc/self/maps` and look for a memory segment that contains the libc shared object.
@@ -251,7 +251,7 @@ from the suite of CNI network plug-ins, which runs in Kubernetes pods in the `ku
 Here is how this binary is
 [built](https://github.com/aws/amazon-vpc-cni-k8s/blob/4ee9789484258d1ae8f6bf36859ea325097d5d7b/Makefile#L149-L152):
 It is written in Go and built with `-buildmode=pie` and `-ldflags '-s -w'`.
-There is also a [trivial test application](injector-integration-tests/runtimes/no_environ_symbol) that is built in the
+There is also a [trivial test application](injector-integration-tests/runtimes/no-environ-symbol) that is built in the
 same way, contained in this repository.
 
 When using an `LD_PRELOAD`-based injector that declares a dependency on `__environ` (or any other libc symbol), a binary

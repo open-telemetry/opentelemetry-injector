@@ -1,3 +1,6 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
 ARG base_image_build=mcr.microsoft.com/dotnet/sdk:9.0-bookworm-slim
 ARG base_image_run=mcr.microsoft.com/dotnet/runtime:9.0-bookworm-slim
 

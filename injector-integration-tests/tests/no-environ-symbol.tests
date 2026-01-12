@@ -1,0 +1,12 @@
+# Regression tests for missing __environ symbol:
+run_test_case \
+  "no __environ symbol: read unset environment variable" \
+  "app" \
+  "./noenviron" \
+  "The environment variable \"NO_ENVIRON_TEST_VAR\" is not set."
+run_test_case \
+  "no __environ symbol: read an environment variable that is set" \
+  "app" \
+  "./noenviron" \
+  "The environment variable \"NO_ENVIRON_TEST_VAR\" had the value: \"some-value\"." \
+  "NO_ENVIRON_TEST_VAR=some-value"

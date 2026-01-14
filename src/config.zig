@@ -69,9 +69,9 @@ pub const InjectorConfiguration = struct {
 
 const ConfigApplier = fn (gpa: std.mem.Allocator, key: []const u8, value: []u8, file_path: []const u8, configuration: *InjectorConfiguration) void;
 
-const default_dotnet_auto_instrumentation_agent_path_prefix = "/__otel_auto_instrumentation/dotnet";
-const default_jvm_auto_instrumentation_agent_path = "/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar";
-const default_nodejs_auto_instrumentation_agent_path = "/__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument";
+const default_dotnet_auto_instrumentation_agent_path_prefix = "/usr/lib/opentelemetry/dotnet";
+const default_jvm_auto_instrumentation_agent_path = "/usr/lib/opentelemetry/jvm/javaagent.jar";
+const default_nodejs_auto_instrumentation_agent_path = "/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js";
 
 const default_all_auto_instrumentation_agents_env_path = "/etc/opentelemetry/default_auto_instrumentation_env.conf";
 
@@ -184,7 +184,7 @@ test "readConfigurationFromPath: file does not exist, environment variables are 
     const original_environ = try test_util.setStdCEnviron(&[7][]const u8{
         "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/dotnet",
         "JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/jvm",
-        "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/node.js",
+        "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/nodejs",
         "OTEL_INJECTOR_INCLUDE_PATHS=/path/from/env/var/include1,/path/from/env/var/include2",
         "OTEL_INJECTOR_EXCLUDE_PATHS=/path/from/env/var/exclude1,/path/from/env/var/exclude2",
         "OTEL_INJECTOR_INCLUDE_WITH_ARGUMENTS=--from-env-var-include1,--from-env-var-include2",
@@ -204,7 +204,7 @@ test "readConfigurationFromPath: file does not exist, environment variables are 
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        "/path/from/env/var/node.js",
+        "/path/from/env/var/nodejs",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
@@ -245,11 +245,11 @@ test "readConfigurationFromPath: all configuration values from file, no environm
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        "/custom/path/to/jvm/opentelemetry-javaagent.jar",
+        "/custom/path/to/jvm/javaagent.jar",
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        "/custom/path/to/node_js/node_modules/@opentelemetry-js/otel/instrument",
+        "/custom/path/to/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
@@ -286,7 +286,7 @@ test "readConfigurationFromPath: override some configuration values from file wi
 
     const original_environ = try test_util.setStdCEnviron(&[4][]const u8{
         "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/dotnet",
-        "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/node.js",
+        "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/nodejs",
         "OTEL_INJECTOR_INCLUDE_PATHS=/path/from/env/var/include1,/path/from/env/var/include2",
         "OTEL_INJECTOR_EXCLUDE_WITH_ARGUMENTS=--from-env-var-exclude1,--from-env-var-exclude2",
     });
@@ -300,11 +300,11 @@ test "readConfigurationFromPath: override some configuration values from file wi
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        "/custom/path/to/jvm/opentelemetry-javaagent.jar",
+        "/custom/path/to/jvm/javaagent.jar",
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        "/path/from/env/var/node.js",
+        "/path/from/env/var/nodejs",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
@@ -599,11 +599,11 @@ test "readConfigurationFile: all configuration values" {
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        "/custom/path/to/jvm/opentelemetry-javaagent.jar",
+        "/custom/path/to/jvm/javaagent.jar",
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        "/custom/path/to/node_js/node_modules/@opentelemetry-js/otel/instrument",
+        "/custom/path/to/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
@@ -649,11 +649,11 @@ test "readConfigurationFile: all configuration values plus whitespace and commen
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        "/custom/path/to/jvm/opentelemetry-javaagent.jar",
+        "/custom/path/to/jvm/javaagent.jar",
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        "/custom/path/to/node_js/node_modules/@opentelemetry-js/otel/instrument",
+        "/custom/path/to/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
@@ -1013,7 +1013,7 @@ test "readConfigurationFromEnvironment: all values" {
     const original_environ = try test_util.setStdCEnviron(&[7][]const u8{
         "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/dotnet",
         "JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/jvm",
-        "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/node.js",
+        "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/nodejs",
         "OTEL_INJECTOR_INCLUDE_PATHS=/path/from/env/var/include1,/path/from/env/var/include2",
         "OTEL_INJECTOR_EXCLUDE_PATHS=/path/from/env/var/exclude1,/path/from/env/var/exclude2",
         "OTEL_INJECTOR_INCLUDE_WITH_ARGUMENTS=--from-env-var-include1,--from-env-var-include2",
@@ -1033,7 +1033,7 @@ test "readConfigurationFromEnvironment: all values" {
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        "/path/from/env/var/node.js",
+        "/path/from/env/var/nodejs",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(

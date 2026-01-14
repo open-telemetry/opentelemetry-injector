@@ -16,17 +16,16 @@ PKG_URL="https://github.com/open-telemetry/opentelemetry-injector"
 
 INSTALL_DIR="/usr/lib/opentelemetry"
 libotelinject_INSTALL_PATH="${INSTALL_DIR}/libotelinject.so"
-JAVA_AGENT_INSTALL_PATH="${INSTALL_DIR}/javaagent.jar"
 CONFIG_DIR_REPO_PATH="${FPM_DIR}/etc/opentelemetry"
 CONFIG_DIR_INSTALL_PATH="/etc/opentelemetry"
 
 JAVA_AGENT_RELEASE_PATH="${FPM_DIR}/../java-agent-release.txt"
 JAVA_AGENT_RELEASE_URL="https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases"
-JAVA_AGENT_INSTALL_PATH="${INSTALL_DIR}/javaagent.jar"
+JAVA_AGENT_INSTALL_PATH="${INSTALL_DIR}/jvm/javaagent.jar"
 
 NODEJS_AGENT_RELEASE_PATH="${FPM_DIR}/../nodejs-agent-release.txt"
 NODEJS_AGENT_INSTALL_PATH="${INSTALL_DIR}/otel-js.tgz"
-NODEJS_AGENT_INSTALL_DIR="${INSTALL_DIR}/js"
+NODEJS_AGENT_INSTALL_DIR="${INSTALL_DIR}/nodejs"
 
 DOTNET_AGENT_RELEASE_PATH="${FPM_DIR}/../dotnet-agent-release.txt"
 DOTNET_ARTIFACE_BASE_NAME="opentelemetry-dotnet-instrumentation"
@@ -69,8 +68,8 @@ download_nodejs_agent() {
     local tag="$1"
     local dest="$2"
     pushd "$(dirname "$dest")"
-    mkdir -p "js"
-    pushd "js"
+    mkdir -p "nodejs"
+    pushd "nodejs"
     npm pack "@opentelemetry/auto-instrumentations-node@${tag#v}"
     mv ./*.tgz otel-js.tgz
     npm install --global=false otel-js.tgz

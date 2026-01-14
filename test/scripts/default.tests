@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Note: The default test cases are run via the Node.js runtime. Node.js specific test case (so everything around
-# modifying NODE_OPTIONS) are in node_js.tests.
+# modifying NODE_OPTIONS) are in nodejs.tests.
 
 # Verify that unrelated environment variables are not accidentally modified.
 run_test_case \

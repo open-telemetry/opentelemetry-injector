@@ -117,7 +117,7 @@ fn getModifiedJavaToolOptionsValue(
 test "getModifiedJavaToolOptionsValue: should return -javaagent if original value is unset" {
     const javaagent_flag_value = try std.fmt.allocPrintSentinel(
         testing.allocator,
-        "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
+        "-javaagent:/usr/lib/opentelemetry/jvm/javaagent.jar",
         .{},
         0,
     );
@@ -130,7 +130,7 @@ test "getModifiedJavaToolOptionsValue: should return -javaagent if original valu
         testing.allocator.free(val);
     });
     try testing.expectEqualStrings(
-        "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
+        "-javaagent:/usr/lib/opentelemetry/jvm/javaagent.jar",
         modified_java_tool_options orelse "-",
     );
 }
@@ -139,7 +139,7 @@ test "getModifiedJavaToolOptionsValue: should append -javaagent if original valu
     const original_value: [:0]const u8 = "-Dsome.property=value"[0.. :0];
     const javaagent_flag_value = try std.fmt.allocPrintSentinel(
         testing.allocator,
-        "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
+        "-javaagent:/usr/lib/opentelemetry/jvm/javaagent.jar",
         .{},
         0,
     );
@@ -152,16 +152,16 @@ test "getModifiedJavaToolOptionsValue: should append -javaagent if original valu
         testing.allocator.free(val);
     });
     try testing.expectEqualStrings(
-        "-Dsome.property=value -javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
+        "-Dsome.property=value -javaagent:/usr/lib/opentelemetry/jvm/javaagent.jar",
         modified_java_tool_options orelse "-",
     );
 }
 
 test "getModifiedJavaToolOptionsValue: should do nothing if our -javaagent is already present" {
-    const original_value: [:0]const u8 = "-Dsome.property=value -javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar -Dsome.other.property=value"[0.. :0];
+    const original_value: [:0]const u8 = "-Dsome.property=value -javaagent:/usr/lib/opentelemetry/jvm/javaagent.jar -Dsome.other.property=value"[0.. :0];
     const javaagent_flag_value = try std.fmt.allocPrintSentinel(
         testing.allocator,
-        "-javaagent:/__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar",
+        "-javaagent:/usr/lib/opentelemetry/jvm/javaagent.jar",
         .{},
         0,
     );

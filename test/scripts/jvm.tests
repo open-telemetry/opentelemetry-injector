@@ -25,7 +25,7 @@ run_test_case \
   "app" \
   "java -jar Main.jar verify-javaagent-has-been-injected" \
   "otel.injector.jvm.no_op_agent.has_been_loaded: true" \
-  "JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/environment-variable/jvm/opentelemetry-javaagent.jar"
+  "JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/environment-variable/jvm/javaagent.jar"
 
 run_test_case \
   "setting JVM_AUTO_INSTRUMENTATION_AGENT_PATH to the empty string disables the JVM auto-instrumentation" \

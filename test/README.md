@@ -17,7 +17,7 @@ Usage
   Can be combined with `LIBC_FLAVORS` and other flags.
 * `LIBC_FLAVORS=glibc,musl scripts/test-all.sh` to run tests for a subset of libc flavors.
   Can be combined with `ARCHITECTURES` and other flags.
-* `TEST_SETS=default,node_js,jvm,sdk-does-not-exist,sdk-cannot-be-accessed` to only run a subset of test sets. The test
+* `TEST_SETS=default,nodejs,jvm,sdk-does-not-exist,sdk-cannot-be-accessed` to only run a subset of test sets. The test
    set names are the different `scripts/*.tests` files. Can be combined with `ARCHITECTURES`, `LIBC_FLAVORS` etc.
 * `TEST_CASES="overrides NODE_OPTIONS if it is not present" scripts/test-all.sh` to only run test cases whose
   names _exactly match_ one of the provided strings.

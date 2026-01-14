@@ -6,41 +6,41 @@
 # Add dummy no-op OTel auto instrumentation agents which actually do nothing but make the file check in the injector
 # pass, so we can test whether NODE_OPTIONS, JAVA_TOOL_OPTIONS, etc. have been modfied as expected.
 
-mkdir -p /__otel_auto_instrumentation/dotnet/glibc/linux-x64
-mkdir -p /__otel_auto_instrumentation/dotnet/glibc/linux-arm64
-mkdir -p /__otel_auto_instrumentation/dotnet/musl/linux-musl-x64
-mkdir -p /__otel_auto_instrumentation/dotnet/musl/linux-musl-arm64
-touch /__otel_auto_instrumentation/dotnet/glibc/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so
-touch /__otel_auto_instrumentation/dotnet/glibc/linux-arm64/OpenTelemetry.AutoInstrumentation.Native.so
-touch /__otel_auto_instrumentation/dotnet/musl/linux-musl-x64/OpenTelemetry.AutoInstrumentation.Native.so
-touch /__otel_auto_instrumentation/dotnet/musl/linux-musl-arm64/OpenTelemetry.AutoInstrumentation.Native.so
-mkdir -p /__otel_auto_instrumentation/dotnet/glibc/AdditionalDeps
-mkdir -p /__otel_auto_instrumentation/dotnet/musl/AdditionalDeps
-mkdir -p /__otel_auto_instrumentation/dotnet/glibc/store
-mkdir -p /__otel_auto_instrumentation/dotnet/musl/store
-mkdir -p /__otel_auto_instrumentation/dotnet/glibc/net
-mkdir -p /__otel_auto_instrumentation/dotnet/musl/net
+mkdir -p /usr/lib/opentelemetry/dotnet/glibc/linux-x64
+mkdir -p /usr/lib/opentelemetry/dotnet/glibc/linux-arm64
+mkdir -p /usr/lib/opentelemetry/dotnet/musl/linux-musl-x64
+mkdir -p /usr/lib/opentelemetry/dotnet/musl/linux-musl-arm64
+touch /usr/lib/opentelemetry/dotnet/glibc/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so
+touch /usr/lib/opentelemetry/dotnet/glibc/linux-arm64/OpenTelemetry.AutoInstrumentation.Native.so
+touch /usr/lib/opentelemetry/dotnet/musl/linux-musl-x64/OpenTelemetry.AutoInstrumentation.Native.so
+touch /usr/lib/opentelemetry/dotnet/musl/linux-musl-arm64/OpenTelemetry.AutoInstrumentation.Native.so
+mkdir -p /usr/lib/opentelemetry/dotnet/glibc/AdditionalDeps
+mkdir -p /usr/lib/opentelemetry/dotnet/musl/AdditionalDeps
+mkdir -p /usr/lib/opentelemetry/dotnet/glibc/store
+mkdir -p /usr/lib/opentelemetry/dotnet/musl/store
+mkdir -p /usr/lib/opentelemetry/dotnet/glibc/net
+mkdir -p /usr/lib/opentelemetry/dotnet/musl/net
 if [ -d no-op-startup-hook ]; then
-  cp no-op-startup-hook/* /__otel_auto_instrumentation/dotnet/glibc/net/
-  cp no-op-startup-hook/* /__otel_auto_instrumentation/dotnet/musl/net/
+  cp no-op-startup-hook/* /usr/lib/opentelemetry/dotnet/glibc/net/
+  cp no-op-startup-hook/* /usr/lib/opentelemetry/dotnet/musl/net/
 fi
 
 # JVM
 # Copy the no-op agent jar file that is created in test/docker/Dockerfile-jvm
 if [ -f no-op-agent/no-op-agent.jar ]; then
-  mkdir -p /__otel_auto_instrumentation/jvm
-  cp no-op-agent/no-op-agent.jar /__otel_auto_instrumentation/jvm/opentelemetry-javaagent.jar
+  mkdir -p /usr/lib/opentelemetry/jvm
+  cp no-op-agent/no-op-agent.jar /usr/lib/opentelemetry/jvm/javaagent.jar
 fi
 
 # Node.js
 # An empty file works fine as a no-op Node.js module.
-mkdir -p /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument
-touch /__otel_auto_instrumentation/node_js/node_modules/@opentelemetry-js/otel/instrument/index.js
+mkdir -p /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src
+touch /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
 
 # Provide instrumentation files also in three more locations, for testing configuration via
 # /etc/opentelemetry/otelinject.conf/, OTEL_INJECTOR_CONFIG_FILE, and via environment variables
 # NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH and friends.
 mkdir -p /path/from
-cp -R /__otel_auto_instrumentation /path/from/config-file
-cp -R /__otel_auto_instrumentation /path/from/environment-variable
-cp -R /__otel_auto_instrumentation /path/from/config-file-custom-location
+cp -R /usr/lib/opentelemetry /path/from/config-file
+cp -R /usr/lib/opentelemetry /path/from/environment-variable
+cp -R /usr/lib/opentelemetry /path/from/config-file-custom-location

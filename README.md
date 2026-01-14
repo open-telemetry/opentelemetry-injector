@@ -48,8 +48,8 @@ This method requires `root` privileges.
    the respective auto-instrumentation agents per runtime:
    ```
    dotnet_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/dotnet
-   jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/javaagent.jar
-   nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
+   jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/jvm/javaagent.jar
+   nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
    ```
 
    You can override the location of the configuration file by setting `OTEL_INJECTOR_CONFIG_FILE`.
@@ -63,8 +63,8 @@ This method requires `root` privileges.
      auto-instrumentation:
       ```
       dotnet_auto_instrumentation_agent_path_prefix=
-      jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/javaagent.jar
-      nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
+      jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/jvm/javaagent.jar
+      nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
       ```
    - You want to selectively enable (or disable) auto-instrumentation for a subset of programs (services) on your system.
      For example, you may want to only enable instrumentation of services that match a specific executable path pattern, or
@@ -240,8 +240,8 @@ precedence. For example, in the following configuration, all program executables
 included for instrumentation:
 ```
 dotnet_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/dotnet
-jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/javaagent.jar
-nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
+jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/jvm/javaagent.jar
+nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
 
 include_paths=/app/*,/utilities/*
 exclude_paths=/app/system/*
@@ -250,8 +250,8 @@ To give you an idea of what types of inclusion and exclusion criteria can be def
 look at the following example:
 ```
 dotnet_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/dotnet
-jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/javaagent.jar
-nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/otel-js/node_modules/@opentelemetry-js/otel/instrument
+jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/jvm/javaagent.jar
+nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
 
 include_paths=/app/*,/utilities/*,*.exe
 exclude_with_arguments=-javaagent:*,*@opentelemetry-js*,-Xmx?m

@@ -247,7 +247,7 @@ test "determineDotnetValues: should return error for unknown libc flavor" {
 
 test "determineDotnetValues: should return values for glibc/x86_64" {
     const allocator = testing.allocator;
-    const path = try std.fmt.allocPrint(allocator, "/__otel_auto_instrumentation/dotnet", .{});
+    const path = try std.fmt.allocPrint(allocator, "/usr/lib/opentelemetry/dotnet", .{});
     defer allocator.free(path);
 
     const dotnet_values =
@@ -268,23 +268,23 @@ test "determineDotnetValues: should return values for glibc/x86_64" {
         dotnet_values.coreclr_profiler,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/glibc/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so",
+        "/usr/lib/opentelemetry/dotnet/glibc/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so",
         dotnet_values.coreclr_profiler_path,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/glibc/AdditionalDeps",
+        "/usr/lib/opentelemetry/dotnet/glibc/AdditionalDeps",
         dotnet_values.additional_deps,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/glibc",
+        "/usr/lib/opentelemetry/dotnet/glibc",
         dotnet_values.otel_auto_home,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/glibc/store",
+        "/usr/lib/opentelemetry/dotnet/glibc/store",
         dotnet_values.shared_store,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/glibc/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
+        "/usr/lib/opentelemetry/dotnet/glibc/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
         dotnet_values.startup_hooks,
     );
 }
@@ -292,7 +292,7 @@ test "determineDotnetValues: should return values for glibc/x86_64" {
 test "determineDotnetValues: should return values for glibc/arm64" {
     const allocator = testing.allocator;
     const path =
-        try std.fmt.allocPrint(allocator, "/__otel_auto_instrumentation/dotnet", .{});
+        try std.fmt.allocPrint(allocator, "/usr/lib/opentelemetry/dotnet", .{});
     defer allocator.free(path);
 
     const dotnet_values =
@@ -313,23 +313,23 @@ test "determineDotnetValues: should return values for glibc/arm64" {
         dotnet_values.coreclr_profiler,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/glibc/linux-arm64/OpenTelemetry.AutoInstrumentation.Native.so",
+        "/usr/lib/opentelemetry/dotnet/glibc/linux-arm64/OpenTelemetry.AutoInstrumentation.Native.so",
         dotnet_values.coreclr_profiler_path,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/glibc/AdditionalDeps",
+        "/usr/lib/opentelemetry/dotnet/glibc/AdditionalDeps",
         dotnet_values.additional_deps,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/glibc",
+        "/usr/lib/opentelemetry/dotnet/glibc",
         dotnet_values.otel_auto_home,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/glibc/store",
+        "/usr/lib/opentelemetry/dotnet/glibc/store",
         dotnet_values.shared_store,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/glibc/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
+        "/usr/lib/opentelemetry/dotnet/glibc/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
         dotnet_values.startup_hooks,
     );
 }
@@ -337,7 +337,7 @@ test "determineDotnetValues: should return values for glibc/arm64" {
 test "determineDotnetValues: should return values for musl/x86_64" {
     const allocator = testing.allocator;
     const path =
-        try std.fmt.allocPrint(allocator, "/__otel_auto_instrumentation/dotnet", .{});
+        try std.fmt.allocPrint(allocator, "/usr/lib/opentelemetry/dotnet", .{});
     defer allocator.free(path);
 
     const dotnet_values =
@@ -358,23 +358,23 @@ test "determineDotnetValues: should return values for musl/x86_64" {
         dotnet_values.coreclr_profiler,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/musl/linux-musl-x64/OpenTelemetry.AutoInstrumentation.Native.so",
+        "/usr/lib/opentelemetry/dotnet/musl/linux-musl-x64/OpenTelemetry.AutoInstrumentation.Native.so",
         dotnet_values.coreclr_profiler_path,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/musl/AdditionalDeps",
+        "/usr/lib/opentelemetry/dotnet/musl/AdditionalDeps",
         dotnet_values.additional_deps,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/musl",
+        "/usr/lib/opentelemetry/dotnet/musl",
         dotnet_values.otel_auto_home,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/musl/store",
+        "/usr/lib/opentelemetry/dotnet/musl/store",
         dotnet_values.shared_store,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/musl/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
+        "/usr/lib/opentelemetry/dotnet/musl/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
         dotnet_values.startup_hooks,
     );
 }
@@ -382,7 +382,7 @@ test "determineDotnetValues: should return values for musl/x86_64" {
 test "determineDotnetValues: should return values for musl/arm64" {
     const allocator = testing.allocator;
     const path =
-        try std.fmt.allocPrint(allocator, "/__otel_auto_instrumentation/dotnet", .{});
+        try std.fmt.allocPrint(allocator, "/usr/lib/opentelemetry/dotnet", .{});
     defer allocator.free(path);
 
     const dotnet_values =
@@ -403,23 +403,23 @@ test "determineDotnetValues: should return values for musl/arm64" {
         dotnet_values.coreclr_profiler,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/musl/linux-musl-arm64/OpenTelemetry.AutoInstrumentation.Native.so",
+        "/usr/lib/opentelemetry/dotnet/musl/linux-musl-arm64/OpenTelemetry.AutoInstrumentation.Native.so",
         dotnet_values.coreclr_profiler_path,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/musl/AdditionalDeps",
+        "/usr/lib/opentelemetry/dotnet/musl/AdditionalDeps",
         dotnet_values.additional_deps,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/musl",
+        "/usr/lib/opentelemetry/dotnet/musl",
         dotnet_values.otel_auto_home,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/musl/store",
+        "/usr/lib/opentelemetry/dotnet/musl/store",
         dotnet_values.shared_store,
     );
     try testing.expectEqualStrings(
-        "/__otel_auto_instrumentation/dotnet/musl/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
+        "/usr/lib/opentelemetry/dotnet/musl/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
         dotnet_values.startup_hooks,
     );
 }

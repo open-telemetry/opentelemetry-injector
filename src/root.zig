@@ -8,7 +8,7 @@ const config = @import("config.zig");
 const dotnet = @import("dotnet.zig");
 const libc = @import("libc.zig");
 const jvm = @import("jvm.zig");
-const node_js = @import("node_js.zig");
+const nodejs = @import("nodejs.zig");
 const print = @import("print.zig");
 const res_attrs = @import("resource_attributes.zig");
 const types = @import("types.zig");
@@ -104,7 +104,7 @@ fn initEnviron() callconv(.c) void {
     modifyEnvironmentVariable(
         allocator,
         libc_info.setenv_fn_ptr,
-        node_js.node_options_env_var_name,
+        nodejs.node_options_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
@@ -303,8 +303,8 @@ fn getEnvValue(
             original_value,
             configuration,
         );
-    } else if (std.mem.eql(u8, name, node_js.node_options_env_var_name)) {
-        return node_js.checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+    } else if (std.mem.eql(u8, name, nodejs.node_options_env_var_name)) {
+        return nodejs.checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
             allocator,
             original_value,
             configuration,

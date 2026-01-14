@@ -33,7 +33,7 @@ fi
 
 # Note: Runtime-independent test sets like default.tests, sdk-does-not-exist.tests, and sdk-cannot-be-accessed.tests
 # also use Node.js as the runtime for the container under test.
-runtime="node_js"
+runtime="nodejs"
 if [[ "$TEST_SET" = "dotnet.tests" ]]; then
   runtime="dotnet"
 fi
@@ -41,7 +41,7 @@ if [[ "$TEST_SET" = "jvm.tests" ]]; then
   runtime="jvm"
 fi
 
-dockerfile_name="test/docker/Dockerfile-node_js"
+dockerfile_name="test/docker/Dockerfile-nodejs"
 image_name=otel-injector-test-$ARCH-$LIBC-$runtime
 
 base_image_run=unknown
@@ -64,7 +64,7 @@ case "$runtime" in
       base_image_run=eclipse-temurin:21-alpine
     fi
     ;;
-  "node_js")
+  "nodejs")
     base_image_run=node:22.15.0-bookworm-slim
     if [[ "$LIBC" = "musl" ]]; then
       base_image_run=node:22.15.0-alpine3.21

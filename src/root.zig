@@ -191,11 +191,17 @@ fn evaluateAllowDeny(allocator: std.mem.Allocator, configuration: config.Injecto
         // getExecutablePath.
         return true;
     };
+    defer allocator.free(exe_path);
+
     const args = getCommandLineArgs(allocator) catch {
         // Skip allow-deny evaluation if getting the arguments has failed. The error has already been logged in
         // getCommandLineArgs.
         return true;
     };
+    defer {
+        for (args) |arg| allocator.free(arg);
+        allocator.free(args);
+    }
 
     var allow = (configuration.include_paths.len == 0) or pattern_matcher.matchesAnyPattern(exe_path, configuration.include_paths);
     allow = allow or (configuration.include_args.len == 0) or pattern_matcher.matchesManyAnyPattern(args, configuration.include_args);

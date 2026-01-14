@@ -223,5 +223,6 @@ pub fn printError(comptime fmt: []const u8, args: anytype) void {
 }
 
 fn _printMessage(comptime fmt: []const u8, args: anytype) void {
-    std.debug.print(log_prefix ++ fmt ++ "\n", args);
+    const pid: u32 = @intCast(std.os.linux.getpid());
+    std.debug.print(log_prefix ++ "[{d:>7}] " ++ fmt ++ "\n", .{pid} ++ args);
 }

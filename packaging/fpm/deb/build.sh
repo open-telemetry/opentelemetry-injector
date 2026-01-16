@@ -19,6 +19,8 @@ if [[ -z "$VERSION" ]]; then
 fi
 VERSION="${VERSION#v}"
 
+echo "Building Debian package for version: $VERSION"
+
 buildroot="$(mktemp -d)"
 
 setup_files_and_permissions "$ARCH" "$buildroot"

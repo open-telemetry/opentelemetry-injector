@@ -19,8 +19,11 @@ if [[ -z "$VERSION" ]]; then
 fi
 
 # rpm doesn't like dashes in the version, replace with underscore
-VERSION="${VERSION/'-'/'_'}"
+VERSION="${VERSION//'-'/'_'}"
+# Strip leading "v" character.
 VERSION="${VERSION#v}"
+
+echo "Building RPM package for version: $VERSION"
 
 buildroot="$(mktemp -d)"
 

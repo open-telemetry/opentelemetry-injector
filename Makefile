@@ -100,8 +100,8 @@ docker build -t instrumentation-fpm packaging/fpm
 docker rm -f libotelinject-packager 2>/dev/null || true
 docker run -d --name libotelinject-packager --rm -v $(CURDIR):/repo -e PACKAGE=$* -e VERSION=$(VERSION) -e ARCH=$(ARCH) instrumentation-fpm sleep inf
 docker exec libotelinject-packager ./packaging/fpm/$($@_SYS_PACKAGE)/build.sh "$(VERSION)" "$(ARCH)" "/repo/$(DIST_DIR_PACKAGE)"
-docker cp libotelinject-packager:/repo/$(DIST_DIR_PACKAGE)/. $(DIST_DIR_PACKAGE)
-docker rm -f libotelinject-packager
+docker cp --quiet libotelinject-packager:/repo/$(DIST_DIR_PACKAGE)/. $(DIST_DIR_PACKAGE)
+docker rm -f libotelinject-packager 2>/dev/null
 endef
 
 # Run this to install and enable the auto-instrumentation files. Mostly intended for development.

@@ -86,20 +86,21 @@ rpm-package: $(RPM_PACKAGE_TARGET)
 
 $(DEB_PACKAGE_TARGET): $(DEB_PACKAGE_SRCS)
 	$(MAKE) dist
-	@$(call build_package,deb)
+	@$(call build_package,deb,$(VERSION))
 
 $(RPM_PACKAGE_TARGET): $(RPM_PACKAGE_SRCS)
 	$(MAKE) dist
-	@$(call build_package,rpm)
+	@$(call build_package,rpm,$(RPM_VERSION))
 
 define build_package
 $(eval $@_SYS_PACKAGE = $(1))
+$(eval $@_VERSION = $(2))
 @echo building the injector package for architecture $(ARCH) and system package type $($@_SYS_PACKAGE)
 @mkdir -p $(DIST_DIR_PACKAGE)
 docker build -t instrumentation-fpm packaging/fpm
 docker rm -f libotelinject-packager 2>/dev/null || true
-docker run -d --name libotelinject-packager --rm -v $(CURDIR):/repo -e PACKAGE=$* -e VERSION=$(VERSION) -e ARCH=$(ARCH) instrumentation-fpm sleep inf
-docker exec libotelinject-packager ./packaging/fpm/$($@_SYS_PACKAGE)/build.sh "$(VERSION)" "$(ARCH)" "/repo/$(DIST_DIR_PACKAGE)"
+docker run -d --name libotelinject-packager --rm -v $(CURDIR):/repo -e PACKAGE=$* -e VERSION=$($@_VERSION) -e ARCH=$(ARCH) instrumentation-fpm sleep inf
+docker exec libotelinject-packager ./packaging/fpm/$($@_SYS_PACKAGE)/build.sh "$($@_VERSION)" "$(ARCH)" "/repo/$(DIST_DIR_PACKAGE)"
 docker cp libotelinject-packager:/repo/$(DIST_DIR_PACKAGE)/. $(DIST_DIR_PACKAGE)
 docker rm -f libotelinject-packager
 endef

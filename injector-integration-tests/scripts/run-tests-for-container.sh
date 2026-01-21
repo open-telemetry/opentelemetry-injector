@@ -78,6 +78,13 @@ case "$runtime" in
     ;;
 esac
 
+if [[ "$TEST_SET" = "binary-validation.tests" ]]; then
+  runtime="-"
+  dockerfile_name="injector-integration-tests/binary/Dockerfile"
+  image_name=otel-injector-test-$ARCH-$LIBC-binary-validation
+  base_image_run=debian:bookworm-slim
+fi
+
 create_sdk_dummy_files_script="scripts/create-sdk-dummy-files.sh"
 if [[ "$TEST_SET" = "sdk-does-not-exist.tests" ]]; then
   create_sdk_dummy_files_script="scripts/create-no-sdk-dummy-files.sh"

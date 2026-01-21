@@ -19,7 +19,9 @@ const empty_z_string = "\x00";
 
 const init_section_name = switch (builtin.target.os.tag) {
     .linux => ".init_array",
-    .macos => "__DATA,__mod_init_func", // needed to run tests locally on macOS
+    // Note: the injector does not support any OS besides Linux, this case is only here to support running Zig unit
+    // tests directly on Darwin.
+    .macos => "__DATA,__mod_init_func",
     else => {
         error.OsNotSupported;
     },

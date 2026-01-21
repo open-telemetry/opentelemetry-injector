@@ -1,6 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+const builtin = @import("builtin");
 const std = @import("std");
 
 const testing = std.testing;
@@ -19,6 +20,8 @@ const LogLevel = enum(u8) {
 
 var log_level: LogLevel = .Error;
 
+var pid: u32 = 0;
+
 const proc_self_environ_path = "/proc/self/environ";
 
 /// Initializes the log level based on the environment variable OTEL_INJECTOR_LOG_LEVEL, by reading /proc/self/environ
@@ -32,6 +35,16 @@ pub fn initLogLevelFromProcSelfEnviron() !void {
 
 // Note: initLogLevelFromEnvironFile is exposed as pub for testing purposes only.
 pub fn initLogLevelFromEnvironFile(self_environ_path: []const u8) !void {
+    pid = switch (builtin.target.os.tag) {
+        .linux => @intCast(std.os.linux.getpid()),
+        // Note: the injector does not support any OS besides Linux, this case is only here to support running Zig unit
+        // tests directly on Darwin.
+        .macos => @intCast(std.c.getpid()),
+        else => {
+            error.OsNotSupported;
+        },
+    };
+
     var log_level_env_var_value: ?[]const u8 = null;
 
     var environ_file = try std.fs.openFileAbsolute(self_environ_path, .{});
@@ -223,6 +236,5 @@ pub fn printError(comptime fmt: []const u8, args: anytype) void {
 }
 
 fn _printMessage(comptime fmt: []const u8, args: anytype) void {
-    const pid: u32 = @intCast(std.os.linux.getpid());
     std.debug.print(log_prefix ++ "[{d:>7}] " ++ fmt ++ "\n", .{pid} ++ args);
 }

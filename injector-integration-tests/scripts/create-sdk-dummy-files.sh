@@ -3,7 +3,7 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-# Add dummy no-op OTel auto instrumentation agents which actually do nothing but make the file check in the injector
+# Add dummy no-op OTel auto-instrumentation agents which actually do nothing but make the file check in the injector
 # pass, so we can test whether NODE_OPTIONS, JAVA_TOOL_OPTIONS, etc. have been modfied as expected.
 
 mkdir -p /usr/lib/opentelemetry/dotnet/glibc/linux-x64

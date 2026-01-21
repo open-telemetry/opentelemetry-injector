@@ -3,7 +3,7 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-echo "deliberately creating inaccessible OTel auto instrumentation dummy files"
+echo "deliberately creating inaccessible OTel auto-instrumentation dummy files"
 
 # .NET
 mkdir -p /usr/lib/opentelemetry/dotnet/glibc/linux-x64

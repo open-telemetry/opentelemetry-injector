@@ -10,6 +10,7 @@ const libc = @import("libc.zig");
 const jvm = @import("jvm.zig");
 const nodejs = @import("nodejs.zig");
 const print = @import("print.zig");
+const python = @import("python.zig");
 const res_attrs = @import("resource_attributes.zig");
 const types = @import("types.zig");
 const pattern_matcher = @import("patterns_matcher.zig");
@@ -113,6 +114,12 @@ fn initEnviron() callconv(.c) void {
         allocator,
         libc_info.setenv_fn_ptr,
         jvm.java_tool_options_env_var_name,
+        configuration,
+    );
+    modifyEnvironmentVariable(
+        allocator,
+        libc_info.setenv_fn_ptr,
+        python.pythonpath_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
@@ -313,6 +320,12 @@ fn getEnvValue(
         );
     } else if (std.mem.eql(u8, name, nodejs.node_options_env_var_name)) {
         return nodejs.checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+            allocator,
+            original_value,
+            configuration,
+        );
+    } else if (std.mem.eql(u8, name, python.pythonpath_env_var_name)) {
+        return python.checkPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
             allocator,
             original_value,
             configuration,

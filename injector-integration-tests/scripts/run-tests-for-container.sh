@@ -89,7 +89,7 @@ esac
 
 if [[ "$TEST_SET" = "binary-validation.tests" ]]; then
   runtime="-"
-  dockerfile_name="injector-integration-tests/binary/Dockerfile"
+  dockerfile_name="injector-integration-tests/binary-validation/Dockerfile"
   image_name=otel-injector-test-$ARCH-$LIBC-binary-validation
   base_image_run=debian:bookworm-slim
 fi

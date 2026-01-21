@@ -1,5 +1,4 @@
 # shellcheck shell=sh
-# shellcheck disable=SC2059
 
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -9,30 +8,27 @@
 
 # Note: These tests use a dedicated binary validation container with binutils for readelf.
 
-# Test: Verify the injector binary has no weak dynamic symbols.
+# Verify the injector binary has no weak dynamic symbols.
 # Weak symbols can cause issues with symbol resolution and should not be present.
-# shellcheck disable=SC2034
-check_no_weak_dynamic_symbols() {
-  echo "checking injector binary for weak dynamic symbols"
-  injector_binary=/injector/libotelinject.so
+run_test_case \
+  "no weak dynamic symbols" \
+  "app" \
+  "./main.sh check_no_weak_dynamic_symbols" \
+  "test no weak dynamic symbols successful"
 
-  # Use readelf to get dynamic symbols and check for WEAK binding
-  weak_symbols=$(readelf --dyn-syms "$injector_binary" 2>/dev/null | grep -E "WEAK" || true)
+# Verify the injector binary has no global undefined dynamic symbols.
+# Global undefined symbols indicate missing dependencies that should be resolved at link time.
+run_test_case \
+  "no global undefined dynamic symbols" \
+  "app" \
+  "./main.sh check_no_global_undefined_symbols" \
+  "test no global undefined dynamic symbols successful"
 
-  if [ -n "$weak_symbols" ]; then
-    printf "${RED}test \"no weak dynamic symbols\" failed:${NC}\n"
-    echo "The injector binary contains weak dynamic symbols, which is not allowed."
-    echo "Weak symbols found:"
-    echo "$weak_symbols"
-    echo "--- end of output"
-    exit_code=1
-  else
-    printf "${GREEN}test \"no weak dynamic symbols\" successful${NC}\n"
-    if [ "${VERBOSE:-}" = "true" ]; then
-      echo "No weak dynamic symbols found in the injector binary."
-      echo "--- end of output"
-    fi
-  fi
-}
-
-check_no_weak_dynamic_symbols
+# Verify the injector binary has exactly one dynamic symbol entry (the compulsory null symbol).
+# Every ELF file must have a null symbol as the first entry in .dynsym. This test ensures
+# no other dynamic symbols are exposed, which is required for a fully static injector binary.
+run_test_case \
+  "dynsym golden signature" \
+  "app" \
+  "./main.sh check_dynsym_golden_signature" \
+  "test dynsym golden signature successful"

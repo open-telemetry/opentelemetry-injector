@@ -160,6 +160,27 @@ for arch in "${all_architectures[@]}"; do
       continue
     fi
   fi
+
+  # Run binary validation tests once per architecture.
+  # These tests validate ELF binary properties using readelf.
+  echo
+  echo ----------------------------------------
+  echo "running binary validation tests on $arch"
+  echo ----------------------------------------
+  set +e
+  ARCH="$arch" injector-integration-tests/scripts/run-binary-tests.sh
+  binary_validation_exit_code=$?
+  set -e
+  if [ $binary_validation_exit_code != 0 ]; then
+    printf "${RED}binary validation tests for %s failed (see above for details)${NC}\n" "$arch"
+    global_exit_code=1
+    summary="$summary\n$arch/binary-validation:\t${RED}failed${NC}"
+  else
+    printf "${GREEN}binary validation tests for %s were successful${NC}\n" "$arch"
+    summary="$summary\n$arch/binary-validation:\t${GREEN}ok${NC}"
+  fi
+  echo ----------------------------------------
+
   for libc_flavor in "${all_libc_flavors[@]}"; do
     if [[ -n "${libc_flavors[0]}" ]]; then
       if [[ $(echo "${libc_flavors[@]}" | grep -o "$libc_flavor" | wc -w) -eq 0 ]]; then

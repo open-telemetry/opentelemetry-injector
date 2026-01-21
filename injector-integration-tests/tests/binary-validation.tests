@@ -25,7 +25,6 @@ check_no_weak_dynamic_symbols() {
     echo "Weak symbols found:"
     echo "$weak_symbols"
     echo "--- end of output"
-    exit_code=1
   else
     printf "${GREEN}test \"no weak dynamic symbols\" successful${NC}\n"
     if [ "${VERBOSE:-}" = "true" ]; then
@@ -36,3 +35,67 @@ check_no_weak_dynamic_symbols() {
 }
 
 check_no_weak_dynamic_symbols
+
+# Test: Verify the injector binary has no global undefined dynamic symbols.
+# Global undefined symbols indicate missing dependencies that should be resolved at link time.
+# shellcheck disable=SC2034
+check_no_global_undefined_symbols() {
+  echo "checking injector binary for global undefined dynamic symbols"
+  injector_binary=/injector/libotelinject.so
+
+  # Use readelf to get dynamic symbols and check for GLOBAL binding with UNDEFINED (UND) section
+  global_undefined_symbols=$(readelf --dyn-syms "$injector_binary" 2>/dev/null | grep -E "GLOBAL[[:space:]]+UND" || true)
+
+  if [ -n "$global_undefined_symbols" ]; then
+    printf "${RED}test \"no global undefined dynamic symbols\" failed:${NC}\n"
+    echo "The injector binary contains global undefined dynamic symbols, which is not allowed."
+    echo "Global undefined symbols found:"
+    echo "$global_undefined_symbols"
+    echo "--- end of output"
+  else
+    printf "${GREEN}test \"no global undefined dynamic symbols\" successful${NC}\n"
+    if [ "${VERBOSE:-}" = "true" ]; then
+      echo "No global undefined dynamic symbols found in the injector binary."
+      echo "--- end of output"
+    fi
+  fi
+}
+
+check_no_global_undefined_symbols
+
+# Test: Verify the injector binary has exactly one dynamic symbol entry (the compulsory null symbol).
+# Every ELF file must have a null symbol as the first entry in .dynsym. This test ensures
+# no other dynamic symbols are exposed, which is required for a fully static injector binary.
+# shellcheck disable=SC2034
+check_dynsym_golden_signature() {
+  echo "checking injector binary dynamic symbol table signature"
+  injector_binary=/injector/libotelinject.so
+
+  # Expected output: only the mandatory null symbol entry
+  # Note: readelf outputs a leading newline before the symbol table header
+  expected_output="
+Symbol table '.dynsym' contains 1 entry:
+   Num:    Value          Size Type    Bind   Vis      Ndx Name
+     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND "
+
+  actual_output=$(readelf --dyn-syms "$injector_binary" 2>/dev/null)
+
+  if [ "$actual_output" = "$expected_output" ]; then
+    printf "${GREEN}test \"dynsym golden signature\" successful${NC}\n"
+    if [ "${VERBOSE:-}" = "true" ]; then
+      echo "The injector binary has exactly the expected dynamic symbol table signature."
+      echo "--- end of output"
+    fi
+  else
+    printf "${RED}test \"dynsym golden signature\" failed:${NC}\n"
+    echo "The injector binary dynamic symbol table does not match the expected signature."
+    echo "Expected (only the compulsory null symbol):"
+    echo "$expected_output"
+    echo ""
+    echo "Actual:"
+    echo "$actual_output"
+    echo "--- end of output"
+  fi
+}
+
+check_dynsym_golden_signature

@@ -50,4 +50,6 @@ sudo fpm -s dir -t rpm -n "$PKG_NAME" -v "$VERSION" -f -p "$OUTPUT_DIR" \
     --config-files "$CONFIG_DIR_INSTALL_PATH" \
     "$buildroot/"=/
 
-rpm -qpli "${OUTPUT_DIR}/${PKG_NAME}-${VERSION}-1.${ARCH}.rpm"
+if [[ "${LIST_PACKAGE_CONTENTS_AFTER_BUILD:-}" == "true" ]]; then
+  rpm -qpli "${OUTPUT_DIR}/${PKG_NAME}-${VERSION}-1.${ARCH}.rpm"
+fi

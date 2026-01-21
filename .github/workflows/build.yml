@@ -21,7 +21,7 @@ jobs:
       - name: Check out the codebase.
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
-      - uses: mlugg/setup-zig@e7d1537c378b83b8049f65dda471d87a2f7b2df2 # v2.2.0
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
 
       - name: lint source code
         run: |

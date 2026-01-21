@@ -70,10 +70,11 @@ download_nodejs_agent() {
     pushd "$(dirname "$dest")"
     mkdir -p "nodejs"
     pushd "nodejs"
-    npm pack "@opentelemetry/auto-instrumentations-node@${tag#v}"
-    mv ./*.tgz otel-js.tgz
-    npm install --global=false otel-js.tgz
-    rm otel-js.tgz
+    export NPM_CONFIG_UPDATE_NOTIFIER=false
+    npm --loglevel=warn pack "@opentelemetry/auto-instrumentations-node@${tag#v}"
+    mv ./*.tgz opentelemetry-auto-instrumentations-node.tgz
+    npm --loglevel=warn --no-fund install --global=false opentelemetry-auto-instrumentations-node.tgz
+    rm opentelemetry-auto-instrumentations-node.tgz
     popd
     popd
 }
@@ -113,7 +114,7 @@ download_and_unzip_dotnet_agent_for_libc_flavor() {
 
     echo "Extracting $pkg to $destination_folder_for_libc_flavor ..."
     mkdir -p "$destination_folder_for_libc_flavor"
-    unzip -d "$destination_folder_for_libc_flavor" "/tmp/$pkg"
+    unzip -qd "$destination_folder_for_libc_flavor" "/tmp/$pkg"
     rm -f "/tmp/$pkg"
 }
 
@@ -128,24 +129,24 @@ setup_files_and_permissions() {
     nodejs_agent_release="$(tail -n 1 <"$NODEJS_AGENT_RELEASE_PATH")"
     dotnet_agent_release="$(tail -n 1 <"$DOTNET_AGENT_RELEASE_PATH")"
 
-    mkdir -p "$buildroot/$(dirname $libotelinject_INSTALL_PATH)"
-    cp -f "$libotelinject" "$buildroot/$libotelinject_INSTALL_PATH"
-    sudo chmod 755 "$buildroot/$libotelinject_INSTALL_PATH"
+    mkdir -p "${buildroot}$(dirname $libotelinject_INSTALL_PATH)"
+    cp -f "$libotelinject" "${buildroot}$libotelinject_INSTALL_PATH"
+    sudo chmod 755 "${buildroot}$libotelinject_INSTALL_PATH"
 
-    download_java_agent "$java_agent_release" "${buildroot}/${JAVA_AGENT_INSTALL_PATH}"
-    sudo chmod 755 "$buildroot/$JAVA_AGENT_INSTALL_PATH"
+    download_java_agent "$java_agent_release" "${buildroot}${JAVA_AGENT_INSTALL_PATH}"
+    sudo chmod 755 "${buildroot}$JAVA_AGENT_INSTALL_PATH"
 
-    download_nodejs_agent "$nodejs_agent_release" "${buildroot}/${NODEJS_AGENT_INSTALL_PATH}"
-    sudo chmod -R 755 "$buildroot/$NODEJS_AGENT_INSTALL_DIR"
+    download_nodejs_agent "$nodejs_agent_release" "${buildroot}${NODEJS_AGENT_INSTALL_PATH}"
+    sudo chmod -R 755 "${buildroot}$NODEJS_AGENT_INSTALL_DIR"
 
-    download_dotnet_agent "$dotnet_agent_release" "${buildroot}/${DOTNET_AGENT_INSTALL_DIR}"
-    sudo chmod -R 755 "$buildroot/$DOTNET_AGENT_INSTALL_DIR"
+    download_dotnet_agent "$dotnet_agent_release" "${buildroot}${DOTNET_AGENT_INSTALL_DIR}"
+    sudo chmod -R 755 "${buildroot}$DOTNET_AGENT_INSTALL_DIR"
 
-    mkdir -p  "$buildroot/$CONFIG_DIR_INSTALL_PATH"
-    cp -rf "$CONFIG_DIR_REPO_PATH"/* "$buildroot/$CONFIG_DIR_INSTALL_PATH"/
-    sudo chmod -R 755 "$buildroot/$CONFIG_DIR_INSTALL_PATH"
+    mkdir -p  "${buildroot}$CONFIG_DIR_INSTALL_PATH"
+    cp -rf "$CONFIG_DIR_REPO_PATH"/* "${buildroot}$CONFIG_DIR_INSTALL_PATH"/
+    sudo chmod -R 755 "${buildroot}$CONFIG_DIR_INSTALL_PATH"
 
-    mkdir -p "$buildroot/$INSTALL_DIR"
+    mkdir -p "${buildroot}$INSTALL_DIR"
 
     sudo chown -R root:root "$buildroot"
 }

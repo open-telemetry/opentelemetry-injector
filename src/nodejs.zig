@@ -35,7 +35,7 @@ fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
     nodejs_auto_instrumentation_agent_path: []u8,
 ) ?[:0]u8 {
     if (nodejs_auto_instrumentation_agent_path.len == 0) {
-        print.printInfo("Skipping the injection of the Node.js OpenTelemetry auto instrumentation because it has been explicitly disabled.", .{});
+        print.printInfo("Skipping the injection of the Node.js OpenTelemetry auto-instrumentation because it has been explicitly disabled.", .{});
         return null;
     }
 
@@ -43,7 +43,7 @@ fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
     // that does not exist or cannot be opened will crash the Node.js process
     // with an 'ERR_MODULE_NOT_FOUND' error.
     std.fs.cwd().access(nodejs_auto_instrumentation_agent_path, .{}) catch |err| {
-        print.printError("Skipping the injection of the Node.js OpenTelemetry auto instrumentation in \"{s}\" because of an issue accessing the Node.js module at \"{s}\": {}", .{ node_options_env_var_name, nodejs_auto_instrumentation_agent_path, err });
+        print.printError("Skipping the injection of the Node.js OpenTelemetry auto-instrumentation in \"{s}\" because of an issue accessing the Node.js module at \"{s}\": {}", .{ node_options_env_var_name, nodejs_auto_instrumentation_agent_path, err });
         return null;
     };
 
@@ -59,7 +59,7 @@ fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
     );
 }
 
-test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: should return null if the Node.js OTel auto instrumentation agent cannot be accessed (no other NODE_OPTIONS are present)" {
+test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: should return null if the Node.js OTel auto-instrumentation agent cannot be accessed (no other NODE_OPTIONS are present)" {
     const path = try std.fmt.allocPrint(testing.allocator, "/invalid/path", .{});
     defer testing.allocator.free(path);
     const modified_node_options_value =
@@ -71,7 +71,7 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
     try test_util.expectWithMessage(modified_node_options_value == null, "modified_node_options_value == null");
 }
 
-test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: should return null if the Node.js OTel auto instrumentation agent cannot be accessed (other NODE_OPTIONS are present)" {
+test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: should return null if the Node.js OTel auto-instrumentation agent cannot be accessed (other NODE_OPTIONS are present)" {
     const path = try std.fmt.allocPrint(testing.allocator, "/invalid/path", .{});
     defer testing.allocator.free(path);
     const modified_node_options_value =

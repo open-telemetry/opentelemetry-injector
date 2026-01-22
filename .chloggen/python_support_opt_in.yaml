@@ -10,6 +10,4 @@ subtext: |
   PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX.
   Be aware that it is not always safe to inject the existing zero-code instrumentation for Python due to possible
   dependency conflicts (protobuf etc.)
-
->>>>>>> 84a79cb (fixup initial)
 change_logs: [user]

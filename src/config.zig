@@ -15,17 +15,17 @@ const max_line_length = 8192;
 const empty_string = @constCast("");
 const otel_env_var_prefix = "OTEL_";
 
-const dotnet_path_key = "dotnet_auto_instrumentation_agent_path_prefix";
+const dotnet_path_prefix_key = "dotnet_auto_instrumentation_agent_path_prefix";
 const jvm_path_key = "jvm_auto_instrumentation_agent_path";
 const nodejs_path_key = "nodejs_auto_instrumentation_agent_path";
-const python_path_key = "python_auto_instrumentation_agent_path";
+const python_path_prefix_key = "python_auto_instrumentation_agent_path_prefix";
 
 const all_agents_env_path_key = "all_auto_instrumentation_agents_env_path";
 
-const dotnet_path_env_var = "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
-const jvm_path_env_var = "JVM_AUTO_INSTRUMENTATION_AGENT_PATH";
-const nodejs_path_env_var = "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
-const python_path_env_var = "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH";
+const dotnet_agent_path_prefix_env_var = "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
+const jvm_agent_path_env_var = "JVM_AUTO_INSTRUMENTATION_AGENT_PATH";
+const nodejs_agent_path_env_var = "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
+const python_agent_path_prefix_env_var = "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
 
 /// Configuration options for choosing what to instrument or exclude from instrumentation
 const include_paths_key = "include_paths";
@@ -44,7 +44,7 @@ pub const InjectorConfiguration = struct {
     dotnet_auto_instrumentation_agent_path_prefix: []u8,
     jvm_auto_instrumentation_agent_path: []u8,
     nodejs_auto_instrumentation_agent_path: []u8,
-    python_auto_instrumentation_agent_path: []u8,
+    python_auto_instrumentation_agent_path_prefix: []u8,
     all_auto_instrumentation_agents_env_path: []u8,
     all_auto_instrumentation_agents_env_vars: std.StringHashMap([]u8),
     include_paths: [][]const u8,
@@ -56,7 +56,7 @@ pub const InjectorConfiguration = struct {
         allocator.free(self.dotnet_auto_instrumentation_agent_path_prefix);
         allocator.free(self.jvm_auto_instrumentation_agent_path);
         allocator.free(self.nodejs_auto_instrumentation_agent_path);
-        allocator.free(self.python_auto_instrumentation_agent_path);
+        allocator.free(self.python_auto_instrumentation_agent_path_prefix);
         allocator.free(self.all_auto_instrumentation_agents_env_path);
         var it = self.all_auto_instrumentation_agents_env_vars.iterator();
         while (it.next()) |entry| {
@@ -118,7 +118,7 @@ fn createEmptyConfiguration(allocator: std.mem.Allocator) InjectorConfiguration 
         .dotnet_auto_instrumentation_agent_path_prefix = "",
         .jvm_auto_instrumentation_agent_path = "",
         .nodejs_auto_instrumentation_agent_path = "",
-        .python_auto_instrumentation_agent_path = "",
+        .python_auto_instrumentation_agent_path_prefix = "",
         .all_auto_instrumentation_agents_env_path = "",
         .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(allocator),
         .include_paths = &.{},
@@ -177,7 +177,7 @@ test "readConfigurationFromPath: file does not exist, no environment variables" 
     );
     try testing.expectEqualStrings(
         default_python_auto_instrumentation_agent_path,
-        configuration.python_auto_instrumentation_agent_path,
+        configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
         default_all_auto_instrumentation_agents_env_path,
@@ -197,7 +197,7 @@ test "readConfigurationFromPath: file does not exist, environment variables are 
         "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/dotnet",
         "JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/jvm",
         "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/nodejs",
-        "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/python",
+        "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/python",
         "OTEL_INJECTOR_INCLUDE_PATHS=/path/from/env/var/include1,/path/from/env/var/include2",
         "OTEL_INJECTOR_EXCLUDE_PATHS=/path/from/env/var/exclude1,/path/from/env/var/exclude2",
         "OTEL_INJECTOR_INCLUDE_WITH_ARGUMENTS=--from-env-var-include1,--from-env-var-include2",
@@ -222,7 +222,7 @@ test "readConfigurationFromPath: file does not exist, environment variables are 
     );
     try testing.expectEqualStrings(
         "/path/from/env/var/python",
-        configuration.python_auto_instrumentation_agent_path,
+        configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
         default_all_auto_instrumentation_agents_env_path,
@@ -271,7 +271,7 @@ test "readConfigurationFromPath: all configuration values from file, no environm
     );
     try testing.expectEqualStrings(
         "/custom/path/to/python",
-        configuration.python_auto_instrumentation_agent_path,
+        configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
         "/custom/path/to/auto_instrumentation_env.conf",
@@ -308,7 +308,7 @@ test "readConfigurationFromPath: override some configuration values from file wi
     const original_environ = try test_util.setStdCEnviron(&[5][]const u8{
         "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/dotnet",
         "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/nodejs",
-        "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH=",
+        "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=",
         "OTEL_INJECTOR_INCLUDE_PATHS=/path/from/env/var/include1,/path/from/env/var/include2",
         "OTEL_INJECTOR_EXCLUDE_WITH_ARGUMENTS=--from-env-var-exclude1,--from-env-var-exclude2",
     });
@@ -331,7 +331,7 @@ test "readConfigurationFromPath: override some configuration values from file wi
     );
     try testing.expectEqualStrings(
         "",
-        configuration.python_auto_instrumentation_agent_path,
+        configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
         "/custom/path/to/auto_instrumentation_env.conf",
@@ -360,7 +360,7 @@ fn createDefaultConfiguration(arena_allocator: std.mem.Allocator) std.mem.Alloca
         .dotnet_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_dotnet_auto_instrumentation_agent_path_prefix}),
         .jvm_auto_instrumentation_agent_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_jvm_auto_instrumentation_agent_path}),
         .nodejs_auto_instrumentation_agent_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_nodejs_auto_instrumentation_agent_path}),
-        .python_auto_instrumentation_agent_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_python_auto_instrumentation_agent_path}),
+        .python_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_python_auto_instrumentation_agent_path}),
         .all_auto_instrumentation_agents_env_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_all_auto_instrumentation_agents_env_path}),
         .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(arena_allocator),
         .include_paths = &.{},
@@ -382,14 +382,14 @@ fn applyCommaSeparatedPatternsOption(arena_allocator: std.mem.Allocator, setting
 }
 
 fn applyKeyValueToGeneralOptions(arena_allocator: std.mem.Allocator, key: []const u8, value: []u8, _cfg_file_path: []const u8, _configuration: *InjectorConfiguration) void {
-    if (std.mem.eql(u8, key, dotnet_path_key)) {
+    if (std.mem.eql(u8, key, dotnet_path_prefix_key)) {
         _configuration.dotnet_auto_instrumentation_agent_path_prefix = value;
     } else if (std.mem.eql(u8, key, jvm_path_key)) {
         _configuration.jvm_auto_instrumentation_agent_path = value;
     } else if (std.mem.eql(u8, key, nodejs_path_key)) {
         _configuration.nodejs_auto_instrumentation_agent_path = value;
-    } else if (std.mem.eql(u8, key, python_path_key)) {
-        _configuration.python_auto_instrumentation_agent_path = value;
+    } else if (std.mem.eql(u8, key, python_path_prefix_key)) {
+        _configuration.python_auto_instrumentation_agent_path_prefix = value;
     } else if (std.mem.eql(u8, key, all_agents_env_path_key)) {
         _configuration.all_auto_instrumentation_agents_env_path = value;
     } else if (std.mem.eql(u8, key, include_paths_key)) {
@@ -505,10 +505,10 @@ fn copyToPermanentlyAllocatedHeap(
             "{s}",
             .{preliminary_configuration.nodejs_auto_instrumentation_agent_path},
         ),
-        .python_auto_instrumentation_agent_path = try std.fmt.allocPrint(
+        .python_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(
             allocator,
             "{s}",
-            .{preliminary_configuration.python_auto_instrumentation_agent_path},
+            .{preliminary_configuration.python_auto_instrumentation_agent_path_prefix},
         ),
         .all_auto_instrumentation_agents_env_path = try std.fmt.allocPrint(
             allocator,
@@ -568,7 +568,7 @@ test "readConfigurationFile: file does not exist" {
     );
     try testing.expectEqualStrings(
         default_python_auto_instrumentation_agent_path,
-        configuration.python_auto_instrumentation_agent_path,
+        configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
         default_all_auto_instrumentation_agents_env_path,
@@ -609,7 +609,7 @@ test "readConfigurationFile: empty file" {
     );
     try testing.expectEqualStrings(
         default_python_auto_instrumentation_agent_path,
-        configuration.python_auto_instrumentation_agent_path,
+        configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
         default_all_auto_instrumentation_agents_env_path,
@@ -650,7 +650,7 @@ test "readConfigurationFile: all configuration values" {
     );
     try testing.expectEqualStrings(
         "/custom/path/to/python",
-        configuration.python_auto_instrumentation_agent_path,
+        configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
         "/custom/path/to/auto_instrumentation_env.conf",
@@ -704,7 +704,7 @@ test "readConfigurationFile: all configuration values plus whitespace and commen
     );
     try testing.expectEqualStrings(
         default_python_auto_instrumentation_agent_path,
-        configuration.python_auto_instrumentation_agent_path,
+        configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
         "/custom/path/to/auto_instrumentation_env.conf",
@@ -948,7 +948,7 @@ test "parseLine: invalid line (line too long)" {
 }
 
 fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configuration: *InjectorConfiguration) void {
-    if (std.posix.getenv(dotnet_path_env_var)) |value| {
+    if (std.posix.getenv(dotnet_agent_path_prefix_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         const dotnet_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
@@ -956,7 +956,7 @@ fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configur
         };
         configuration.dotnet_auto_instrumentation_agent_path_prefix = dotnet_value;
     }
-    if (std.posix.getenv(jvm_path_env_var)) |value| {
+    if (std.posix.getenv(jvm_agent_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         const jvm_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
@@ -964,7 +964,7 @@ fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configur
         };
         configuration.jvm_auto_instrumentation_agent_path = jvm_value;
     }
-    if (std.posix.getenv(nodejs_path_env_var)) |value| {
+    if (std.posix.getenv(nodejs_agent_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         const nodejs_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
@@ -972,13 +972,13 @@ fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configur
         };
         configuration.nodejs_auto_instrumentation_agent_path = nodejs_value;
     }
-    if (std.posix.getenv(python_path_env_var)) |value| {
+    if (std.posix.getenv(python_agent_path_prefix_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         const python_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
             return;
         };
-        configuration.python_auto_instrumentation_agent_path = python_value;
+        configuration.python_auto_instrumentation_agent_path_prefix = python_value;
     }
     if (std.posix.getenv(include_paths_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
@@ -1053,7 +1053,7 @@ test "readConfigurationFromEnvironment: empty environment values" {
     );
     try testing.expectEqualStrings(
         default_python_auto_instrumentation_agent_path,
-        configuration.python_auto_instrumentation_agent_path,
+        configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
         default_all_auto_instrumentation_agents_env_path,
@@ -1076,7 +1076,7 @@ test "readConfigurationFromEnvironment: all values" {
         "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/dotnet",
         "JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/jvm",
         "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/nodejs",
-        "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/python",
+        "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/python",
         "OTEL_INJECTOR_INCLUDE_PATHS=/path/from/env/var/include1,/path/from/env/var/include2",
         "OTEL_INJECTOR_EXCLUDE_PATHS=/path/from/env/var/exclude1,/path/from/env/var/exclude2",
         "OTEL_INJECTOR_INCLUDE_WITH_ARGUMENTS=--from-env-var-include1,--from-env-var-include2",
@@ -1101,7 +1101,7 @@ test "readConfigurationFromEnvironment: all values" {
     );
     try testing.expectEqualStrings(
         "/path/from/env/var/python",
-        configuration.python_auto_instrumentation_agent_path,
+        configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
         default_all_auto_instrumentation_agents_env_path,

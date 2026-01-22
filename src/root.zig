@@ -60,6 +60,7 @@ fn initEnviron() callconv(.c) void {
         else => "unknown",
     }, libc_info.name });
     dotnet.setLibcFlavor(libc_info.flavor);
+    python.setLibcFlavor(libc_info.flavor);
 
     environ_ptr = libc_info.environ_ptr;
     updateStdOsEnviron() catch |err| {

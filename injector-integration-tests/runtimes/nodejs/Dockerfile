@@ -1,7 +1,7 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-ARG base_image_run="node:22.15.0-bookworm-slim"
+ARG base_image_run="node:24.13.0-bookworm-slim@sha256:bf22df20270b654c4e9da59d8d4a3516cce6ba2852e159b27288d645b7a7eedc"
 FROM ${base_image_run}
 
 ARG injector_binary

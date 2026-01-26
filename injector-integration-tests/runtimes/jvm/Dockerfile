@@ -1,7 +1,7 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-ARG base_image_run="eclipse-temurin:11"
+ARG base_image_run="eclipse-temurin:25@sha256:42fc3fe6804ec612f5ef8a613f8c06d8dd578de6207336077387d4cb32edaa9b"
 FROM ${base_image_run}
 
 ARG injector_binary

@@ -1,7 +1,7 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-ARG base_image_run="golang:1.25.5-trixie"
+ARG base_image_run="golang:1.25.6-trixie@sha256:fb4b74a39c7318d53539ebda43ccd3ecba6e447a78591889c0efc0a7235ea8b3"
 FROM ${base_image_run}
 
 ARG injector_binary

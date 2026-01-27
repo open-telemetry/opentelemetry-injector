@@ -5,6 +5,9 @@
     "helpers:pinGitHubActionDigestsToSemver",
     "schedule:weekly"
   ],
+  "ignorePaths": [
+    "injector-integration-tests/**/Dockerfile*"
+  ],
   "packageRules": [
     {
       "groupName": "all",
@@ -19,7 +22,7 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/(^|\\/).*\\.txt$/",
+        "/(^|\\/).*\\.txt$/"
       ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[a-z-.]+?) depName=(?<depName>[^\\s]+?)(?: (?:packageName)=(?<packageName>[^\\s]+?))?(?: versioning=(?<versioning>[^\\s]+?))?(?: extractVersion=(?<extractVersion>[^\\s]+?))?(?: registryUrl=(?<registryUrl>[^\\s]+?))?\\s+[A-Za-z0-9_]+?_VERSION\\s*:*\\??=\\s*[\"']?(?<currentValue>.+?)[\"']?\\s"

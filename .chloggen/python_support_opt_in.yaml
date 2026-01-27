@@ -1,0 +1,11 @@
+change_type: enhancement
+component: python
+note: Add opt-in support for Python auto-instrumentation
+issues: [216]
+subtext: |
+  Add support for prepending to PYTHONPATH to enable Python auto-instrumentation. For now, auto-instrumentation for
+  Python is off by default and needs to be enabled explicitly by providing a custom otelinject.conf file with
+  python_auto_instrumentation_agent_path set or by setting PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH. This is because it
+  not safe to automatically inject the existing zero-code instrumentation for Python due to possible dependency
+  conflicts (protobuf etc.)
+change_logs: [user]

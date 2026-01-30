@@ -24,6 +24,12 @@ run_test_case \
   "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js --no-deprecation; NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js --no-deprecation" \
   "NODE_OPTIONS=--no-deprecation"
 
+run_test_case \
+  "injects the Node.js auto-instrumentation agent" \
+  "app" \
+  "node index.js verify-auto-instrumentation-agent-has-been-injected" \
+  "otel_injector_nodejs_no_op_agent_has_been_loaded: true"
+
 # For test cases with the "default configuration file" substring in their label, run-tests-within-container.sh
 # will provide a configuration file in the default location (/etc/opentelemetry/otelinject.conf).
 run_test_case \

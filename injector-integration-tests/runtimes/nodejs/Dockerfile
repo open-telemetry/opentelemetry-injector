@@ -20,6 +20,8 @@ RUN mkdir -p /etc/opentelemetry && chmod 777 /etc/opentelemetry
 
 WORKDIR /usr/src/otel/injector/
 
+COPY injector-integration-tests/runtimes/nodejs/no-op-agent no-op-agent
+
 COPY injector-integration-tests/runtimes/nodejs app
 
 COPY injector-integration-tests/scripts/run-tests-within-container.sh scripts/

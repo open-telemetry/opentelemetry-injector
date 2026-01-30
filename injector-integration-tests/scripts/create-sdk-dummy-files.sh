@@ -33,9 +33,11 @@ if [ -f no-op-agent/no-op-agent.jar ]; then
 fi
 
 # Node.js
-# An empty file works fine as a no-op Node.js module.
-mkdir -p /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src
-touch /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
+# Copy the Node.js no-op agent.
+if [ -f no-op-agent/index.js ]; then
+  mkdir -p /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src
+  cp no-op-agent/index.js /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
+fi
 
 # Provide instrumentation files also in three more locations, for testing configuration via
 # /etc/opentelemetry/otelinject.conf/, OTEL_INJECTOR_CONFIG_FILE, and via environment variables

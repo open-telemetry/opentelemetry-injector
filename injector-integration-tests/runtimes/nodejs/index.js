@@ -12,6 +12,15 @@ function echoEnvVar(envVarName) {
   }
 }
 
+function echoGlobalProperty(name) {
+  const value = global[name];
+  if (!value) {
+    process.stdout.write(`${name}: -`);
+  } else {
+    process.stdout.write(`${name}: ${value}`);
+  }
+}
+
 function main() {
   const command = process.argv[2];
   if (!command) {
@@ -33,6 +42,9 @@ function main() {
       echoEnvVar('NODE_OPTIONS');
       process.stdout.write('; ');
       echoEnvVar('NODE_OPTIONS');
+      break;
+    case 'verify-auto-instrumentation-agent-has-been-injected':
+      echoGlobalProperty('otel_injector_nodejs_no_op_agent_has_been_loaded');
       break;
     case 'otel-resource-attributes':
       echoEnvVar('OTEL_RESOURCE_ATTRIBUTES');

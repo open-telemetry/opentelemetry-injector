@@ -20,8 +20,14 @@ class App
         }
 
         switch (command) {
+            case "coreclr-profiler-path":
+               EchoEnvVar("CORECLR_PROFILER_PATH");
+               break;
             case "verify-startup-hook-has-been-injected":
                 EchoEnvVar("otel_injector_dotnet_no_op_startup_hook_has_been_loaded");
+                break;
+            case "otel-resource-attributes":
+                EchoEnvVar("OTEL_RESOURCE_ATTRIBUTES");
                 break;
             case "custom-env-var":
                 EchoEnvVar(args[1]);

@@ -43,6 +43,9 @@ fi
 if [[ "$TEST_SET" = "no-environ-symbol.tests" ]]; then
   runtime="no-environ-symbol"
 fi
+if [[ "$TEST_SET" = "python.tests" ]]; then
+  runtime="python"
+fi
 
 # We also use the Node.js test app for non-runtime specific tests (e.g. injector-integration-tests/tests/default.tests
 # etc.), so this is the default Dockerfile.
@@ -73,6 +76,13 @@ case "$runtime" in
     base_image_run=node:22.15.0-bookworm-slim
     if [[ "$LIBC" = "musl" ]]; then
       base_image_run=node:22.15.0-alpine3.21
+    fi
+    ;;
+  "python")
+    dockerfile_name="injector-integration-tests/runtimes/python/Dockerfile"
+    base_image_run=python:3.14-slim-bookworm
+    if [[ "$LIBC" = "musl" ]]; then
+      base_image_run=python:3.14-alpine3.23
     fi
     ;;
   "no-environ-symbol")
@@ -135,6 +145,7 @@ docker run $docker_run_extra_options \
   --rm \
   --platform "$docker_platform" \
   --env EXPECTED_CPU_ARCHITECTURE="$expected_cpu_architecture" \
+  --env LIBC_FLAVOR="$LIBC" \
   --env TEST_SET="$TEST_SET" \
   --env TEST_CASES="$TEST_CASES" \
   --env TEST_CASES_CONTAINING="$TEST_CASES_CONTAINING" \

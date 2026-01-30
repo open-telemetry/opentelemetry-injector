@@ -37,6 +37,15 @@ fi
 mkdir -p /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src
 touch /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
 
+# Python
+# Copy the Python no-op agent.
+if [ -f no-op-agent/usercustomize.py ]; then
+  mkdir -p /usr/lib/opentelemetry/python/glibc
+  mkdir -p /usr/lib/opentelemetry/python/musl
+  cp no-op-agent/usercustomize.py /usr/lib/opentelemetry/python/glibc
+  cp no-op-agent/usercustomize.py /usr/lib/opentelemetry/python/musl
+fi
+
 # Provide instrumentation files also in three more locations, for testing configuration via
 # /etc/opentelemetry/otelinject.conf/, OTEL_INJECTOR_CONFIG_FILE, and via environment variables
 # NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH and friends.

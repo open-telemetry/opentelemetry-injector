@@ -39,4 +39,3 @@ run_test_case \
   "app" \
   "./dotnetapp  custom-env-var CUSTOM_ENV_VAR" \
   "CUSTOM_ENV_VAR: -"
-

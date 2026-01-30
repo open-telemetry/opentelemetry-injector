@@ -28,6 +28,7 @@ agents:
 - [Java](https://opentelemetry.io/docs/zero-code/java/)
 - [Node.js](https://opentelemetry.io/docs/zero-code/js/)
 - [.NET](https://opentelemetry.io/docs/zero-code/dotnet/)
+- Python (disabled by default, see [Enabling Auto-Instrumentation for Python](#enabling-auto-instrumentation-for-python))
 
 ## Activation and Configuration
 
@@ -207,6 +208,20 @@ See also:
 * https://opentelemetry.io/docs/specs/semconv/resource/k8s/
 * https://opentelemetry.io/docs/specs/semconv/non-normative/k8s-attributes/
 * https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/#use-pod-fields-as-values-for-environment-variables
+
+### Enabling Auto-Instrumentation for Python
+
+Python auto-instrumentation is currently disabled by default and no default Python auto-instrumentation agent is
+included in the system packages.
+
+Python instrumentation needs to be enabled explicitly by providing a Python auto-instrumentation agent and a
+custom otelinject.conf file with python_auto_instrumentation_agent_path_prefix set or by setting 
+PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX.
+The configured path is expected to contain two directories, `glibc` and `musl`.
+Depending on the libc flavor that the injector detects at startup, either the `glibc` or the `musl` directory will be
+prepended to `PYTHONPATH`, and thus loaded first by the Python interpreter.
+
+Be aware that it is not always safe to inject the additional Python packages due to possible dependency conflicts.
 
 ### Configure the Injector's Logging
 

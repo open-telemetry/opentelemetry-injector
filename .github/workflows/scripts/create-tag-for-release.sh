@@ -11,7 +11,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 COMMIT_MSG=$(git log -1 --pretty=%B)
 
 # Check if commit message matches release pattern and extract version
-if [[ "$COMMIT_MSG" =~ ^docs:\ update\ changelog\ to\ prepare\ release\ (v[0-9]+\.[0-9]+\.[0-9]+.*)$ ]]; then
+if [[ "$COMMIT_MSG" =~ ^docs:\ update\ changelog\ to\ prepare\ release\ (v[0-9]+\.[0-9]+\.[0-9]+.*) .*$ ]]; then
   VERSION="${BASH_REMATCH[1]}"
   echo "Found release commit for version: $VERSION."
 

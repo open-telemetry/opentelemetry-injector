@@ -4,6 +4,10 @@
 
 <!-- next version -->
 
+## v0.0.4
+
+<!-- previous-version -->
+
 ## v0.0.4-20260202
 
 ### 💡 Enhancements 💡

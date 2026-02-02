@@ -69,11 +69,15 @@ pub const InjectorConfiguration = struct {
 
 const ConfigApplier = fn (gpa: std.mem.Allocator, key: []const u8, value: []u8, file_path: []const u8, configuration: *InjectorConfiguration) void;
 
-const default_dotnet_auto_instrumentation_agent_path_prefix = "/usr/lib/opentelemetry/dotnet";
-const default_jvm_auto_instrumentation_agent_path = "/usr/lib/opentelemetry/java/opentelemetry-javaagent.jar";
-const default_nodejs_auto_instrumentation_agent_path = "/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js";
-
+// Agent paths are empty by default; they are enabled by installing conf.d drop-in files from the
+// respective language packages (e.g., opentelemetry-java-autoinstrumentation installs java.conf).
 const default_all_auto_instrumentation_agents_env_path = "/etc/opentelemetry/injector/default_env.conf";
+const default_config_dir_path = "/etc/opentelemetry/injector/conf.d";
+const config_dir_path_env_var = "OTEL_INJECTOR_CONFIG_DIR";
+
+const default_dotnet_auto_instrumentation_agent_path_prefix = "";
+const default_jvm_auto_instrumentation_agent_path = "";
+const default_nodejs_auto_instrumentation_agent_path = "";
 
 var cached_configuration_optional: ?InjectorConfiguration = null;
 
@@ -133,6 +137,7 @@ fn readConfigurationFromPath(allocator: std.mem.Allocator, cfg_file_path: []cons
 
     var preliminary_configuration = try createDefaultConfiguration(arena_allocator);
     readConfigurationFile(arena_allocator, cfg_file_path, &preliminary_configuration);
+    readConfigurationDirectory(arena_allocator, &preliminary_configuration);
     readConfigurationFromEnvironment(arena_allocator, &preliminary_configuration);
     readAllAgentsEnvFile(
         arena_allocator,
@@ -395,6 +400,57 @@ fn readConfigurationFile(arena_allocator: std.mem.Allocator, cfg_file_path: []co
         cfg_file_path,
         applyKeyValueToGeneralOptions,
     );
+}
+
+/// Reads configuration drop-in files from the conf.d directory. Each installed language package
+/// (e.g., opentelemetry-java-autoinstrumentation) places its configuration in this directory.
+/// Files are read in alphabetical order; later files can override earlier ones.
+fn readConfigurationDirectory(arena_allocator: std.mem.Allocator, configuration: *InjectorConfiguration) void {
+    var config_dir_path: []const u8 = default_config_dir_path;
+    if (std.posix.getenv(config_dir_path_env_var)) |value| {
+        config_dir_path = std.mem.trim(u8, value, " \t\r\n");
+        if (config_dir_path.len == 0) {
+            config_dir_path = default_config_dir_path;
+        }
+    }
+
+    print.printDebug("reading configuration drop-in files from {s}.", .{config_dir_path});
+
+    var dir = std.fs.cwd().openDir(config_dir_path, .{ .iterate = true }) catch |err| {
+        print.printDebug(
+            "The configuration directory {s} does not exist or cannot be opened. Error: {t}",
+            .{ config_dir_path, err },
+        );
+        return;
+    };
+    defer dir.close();
+
+    // Collect and sort file names to ensure deterministic ordering
+    var file_names: std.ArrayList([]const u8) = std.ArrayList([]const u8).initCapacity(arena_allocator, 16) catch {
+        print.printDebug("Failed to allocate memory for conf.d file list", .{});
+        return;
+    };
+    var dir_iter = dir.iterate();
+    while (dir_iter.next() catch null) |entry| {
+        if (entry.kind != .file) continue;
+        if (!std.mem.endsWith(u8, entry.name, ".conf")) continue;
+        const name_copy = std.fmt.allocPrint(arena_allocator, "{s}", .{entry.name}) catch continue;
+        file_names.append(arena_allocator, name_copy) catch continue;
+    }
+
+    // Sort alphabetically
+    std.mem.sort([]const u8, file_names.items, {}, struct {
+        fn lessThan(_: void, a: []const u8, b: []const u8) bool {
+            return std.mem.order(u8, a, b) == .lt;
+        }
+    }.lessThan);
+
+    // Read each file
+    for (file_names.items) |file_name| {
+        const full_path = std.fmt.allocPrint(arena_allocator, "{s}/{s}", .{ config_dir_path, file_name }) catch continue;
+        print.printDebug("reading configuration drop-in file: {s}", .{full_path});
+        readConfigurationFile(arena_allocator, full_path, configuration);
+    }
 }
 
 fn applyKeyValueToAllAgentsEnv(_: std.mem.Allocator, key: []const u8, value: []u8, _file_path: []const u8, _configuration: *InjectorConfiguration) void {

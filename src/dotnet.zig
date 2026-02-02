@@ -124,7 +124,7 @@ fn doGetDotnetValues(gpa: std.mem.Allocator, dotnet_path_prefix: []u8) ?DotnetVa
         };
         for (paths_to_check) |p| {
             std.fs.cwd().access(p, .{}) catch |err| {
-                print.printError("Skipping injection of injecting the .NET OpenTelemetry instrumentation because of an issue accessing {s}: {}", .{ p, err });
+                print.printError("Skipping injection of the .NET OpenTelemetry instrumentation because of an issue accessing {s}: {}", .{ p, err });
                 cached_dotnet_values = .{
                     .values = null,
                     // do not try to determine the .NET values again

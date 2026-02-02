@@ -186,10 +186,12 @@ setup_injector_buildroot() {
 
     # Install configuration
     mkdir -p "${buildroot}${INJECTOR_CONFIG_DIR}"
+    mkdir -p "${buildroot}${INJECTOR_CONFIG_DIR}/conf.d"
     cp -f "$COMMON_DIR/injector/otelinject.conf" "${buildroot}${INJECTOR_CONFIG_DIR}/"
     cp -f "$COMMON_DIR/injector/default_env.conf" "${buildroot}${INJECTOR_CONFIG_DIR}/"
     chmod 644 "${buildroot}${INJECTOR_CONFIG_DIR}/otelinject.conf"
     chmod 644 "${buildroot}${INJECTOR_CONFIG_DIR}/default_env.conf"
+    chmod 755 "${buildroot}${INJECTOR_CONFIG_DIR}/conf.d"
 
     # Install man page
     local man_dir="${buildroot}${MAN_DIR}/man8"
@@ -230,6 +232,11 @@ setup_java_buildroot() {
     cp -f "$COMMON_DIR/java/otel-config.yaml" "${buildroot}${JAVA_CONFIG_DIR}/"
     chmod 644 "${buildroot}${JAVA_CONFIG_DIR}/otel-config.yaml"
 
+    # Install injector conf.d drop-in file to enable Java auto-instrumentation
+    mkdir -p "${buildroot}${INJECTOR_CONFIG_DIR}/conf.d"
+    cp -f "$COMMON_DIR/java/injector.conf" "${buildroot}${INJECTOR_CONFIG_DIR}/conf.d/java.conf"
+    chmod 644 "${buildroot}${INJECTOR_CONFIG_DIR}/conf.d/java.conf"
+
     # Install man page
     local man_dir="${buildroot}${MAN_DIR}/man1"
     mkdir -p "$man_dir"
@@ -269,6 +276,11 @@ setup_nodejs_buildroot() {
     cp -f "$COMMON_DIR/nodejs/otel-config.yaml" "${buildroot}${NODEJS_CONFIG_DIR}/"
     chmod 644 "${buildroot}${NODEJS_CONFIG_DIR}/otel-config.yaml"
 
+    # Install injector conf.d drop-in file to enable Node.js auto-instrumentation
+    mkdir -p "${buildroot}${INJECTOR_CONFIG_DIR}/conf.d"
+    cp -f "$COMMON_DIR/nodejs/injector.conf" "${buildroot}${INJECTOR_CONFIG_DIR}/conf.d/nodejs.conf"
+    chmod 644 "${buildroot}${INJECTOR_CONFIG_DIR}/conf.d/nodejs.conf"
+
     # Install man page
     local man_dir="${buildroot}${MAN_DIR}/man1"
     mkdir -p "$man_dir"
@@ -307,6 +319,11 @@ setup_dotnet_buildroot() {
     mkdir -p "${buildroot}${DOTNET_CONFIG_DIR}"
     cp -f "$COMMON_DIR/dotnet/otel-config.yaml" "${buildroot}${DOTNET_CONFIG_DIR}/"
     chmod 644 "${buildroot}${DOTNET_CONFIG_DIR}/otel-config.yaml"
+
+    # Install injector conf.d drop-in file to enable .NET auto-instrumentation
+    mkdir -p "${buildroot}${INJECTOR_CONFIG_DIR}/conf.d"
+    cp -f "$COMMON_DIR/dotnet/injector.conf" "${buildroot}${INJECTOR_CONFIG_DIR}/conf.d/dotnet.conf"
+    chmod 644 "${buildroot}${INJECTOR_CONFIG_DIR}/conf.d/dotnet.conf"
 
     # Install man page
     local man_dir="${buildroot}${MAN_DIR}/man1"

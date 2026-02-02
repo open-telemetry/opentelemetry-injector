@@ -1,0 +1,72 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+run_test_case \
+  "injects PYTHONPATH if it is not present" \
+  "app" \
+  "python app.py pythonpath" \
+  "PYTHONPATH: /usr/lib/opentelemetry/python/${LIBC_FLAVOR}"
+run_test_case \
+  "prepends to PYTHONPATH if it is present" \
+  "app" \
+  "python app.py pythonpath" \
+  "PYTHONPATH: /usr/lib/opentelemetry/python/${LIBC_FLAVOR}:/custom/python/path" \
+  "PYTHONPATH=/custom/python/path"
+
+run_test_case \
+  "injects the Python auto-instrumentation agent" \
+  "app" \
+  "python app.py verify-auto-instrumentation-agent-has-been-injected" \
+  "otel_injector_python_no_op_agent_has_been_loaded: true"
+
+# For test cases with the "default configuration file" substring in their label, run-tests-within-container.sh
+# will provide a configuration file in the default location (/etc/opentelemetry/otelinject.conf).
+run_test_case \
+  "uses PYTHONPATH path from the default configuration file" \
+  "app" \
+  "python app.py pythonpath" \
+  "PYTHONPATH: /path/from/config-file/python/${LIBC_FLAVOR}"
+run_test_case \
+  "the PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX environment variable overrides the PYTHONPATH path from the default configuration file" \
+  "app" \
+  "python app.py pythonpath" \
+  "PYTHONPATH: /path/from/environment-variable/python/${LIBC_FLAVOR}" \
+  "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/environment-variable/python"
+
+run_test_case \
+  "uses PYTHONPATH path from the configuration file at a custom location" \
+  "app" \
+  "python app.py pythonpath" \
+  "PYTHONPATH: /path/from/config-file-custom-location/python/${LIBC_FLAVOR}" \
+  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/otelinject.conf"
+run_test_case \
+  "the PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX environment variable overrides the PYTHONPATH path from the configuration file at a custom location" \
+  "app" \
+  "python app.py pythonpath" \
+  "PYTHONPATH: /path/from/environment-variable/python/${LIBC_FLAVOR}" \
+  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/otelinject.conf PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/environment-variable/python"
+
+run_test_case \
+  "setting PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX to the empty string disables the Python auto-instrumentation" \
+  "app" \
+  "python app.py pythonpath" \
+  "PYTHONPATH: -" \
+  "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX="
+
+run_test_case \
+  "sets k8s.pod.uid and k8s.container.name via OTEL_RESOURCE_ATTRIBUTES" \
+  "app" \
+  "python app.py otel-resource-attributes" \
+  "OTEL_RESOURCE_ATTRIBUTES: k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app"
+
+run_test_case \
+  "OTEL_ custom env var is returned according to the env file provided" \
+  "app" \
+  "python app.py custom-env-var OTEL_SDK_DISABLED" \
+  "OTEL_SDK_DISABLED: true"
+
+run_test_case \
+  "non OTEL_ custom env var is ignored" \
+  "app" \
+  "python app.py custom-env-var CUSTOM_ENV_VAR" \
+  "CUSTOM_ENV_VAR: -"

@@ -75,4 +75,3 @@ run_test_case \
   "app" \
   "node index.js custom-env-var CUSTOM_ENV_VAR" \
   "CUSTOM_ENV_VAR: -"
-

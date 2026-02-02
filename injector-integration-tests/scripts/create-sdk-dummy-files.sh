@@ -3,7 +3,7 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-# Add dummy no-op OTel auto instrumentation agents which actually do nothing but make the file check in the injector
+# Add dummy no-op OTel auto-instrumentation agents which actually do nothing but make the file check in the injector
 # pass, so we can test whether NODE_OPTIONS, JAVA_TOOL_OPTIONS, etc. have been modfied as expected.
 
 mkdir -p /usr/lib/opentelemetry/dotnet/glibc/linux-x64
@@ -37,6 +37,15 @@ fi
 if [ -f no-op-agent/index.js ]; then
   mkdir -p /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src
   cp no-op-agent/index.js /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
+fi
+
+# Python
+# Copy the Python no-op agent.
+if [ -f no-op-agent/usercustomize.py ]; then
+  mkdir -p /usr/lib/opentelemetry/python/glibc
+  mkdir -p /usr/lib/opentelemetry/python/musl
+  cp no-op-agent/usercustomize.py /usr/lib/opentelemetry/python/glibc
+  cp no-op-agent/usercustomize.py /usr/lib/opentelemetry/python/musl
 fi
 
 # Provide instrumentation files also in three more locations, for testing configuration via

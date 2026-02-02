@@ -17,6 +17,11 @@ if [ -z "${EXPECTED_CPU_ARCHITECTURE:-}" ]; then
   exit 1
 fi
 
+if [ -z "${LIBC_FLAVOR:-}" ]; then
+  echo "LIBC_FLAVOR is not set for $0."
+  exit 1
+fi
+
 arch=$(uname -m)
 arch_exit_code=$?
 if [ $arch_exit_code != 0 ]; then

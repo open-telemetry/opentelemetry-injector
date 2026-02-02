@@ -34,6 +34,6 @@ git push --set-upstream origin "${BRANCH}"
 
 gh pr create --head "$(git branch --show-current)" --title "chore: prepare release ${VERSION}" --body "
 The following commands were run to prepare this release:
-- make chlog-update VERSION=v${VERSION}
+- make chlog-update VERSION=${VERSION}
 "
 

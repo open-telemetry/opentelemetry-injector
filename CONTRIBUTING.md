@@ -23,7 +23,7 @@ version of Zig.
 
 See the page [Zig Learn](https://ziglang.org/learn/) for more information about the language.
 
-### Makefile commaneds
+### Makefile commands
 
 * `make zig-build` to build the injector binary locally on your machine
 * `make watch-zig-build` to continually rebuild the Zig sources on every change (requires [`fd`](https://github.com/sharkdp/fd) and [`entr`](https://github.com/eradman/entr) to be installed)

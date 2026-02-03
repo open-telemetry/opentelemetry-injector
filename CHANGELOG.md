@@ -4,27 +4,6 @@
 
 <!-- next version -->
 
-## v0.0.4
-
-<!-- previous-version -->
-
-## v0.0.4-20260202
-
-### 💡 Enhancements 💡
-
-- `logging`: Adds process id to each log line (#200)
-- `python`: Add opt-in support for Python auto-instrumentation (#216)
-  Add support for prepending to PYTHONPATH to enable Python auto-instrumentation. For now, auto-instrumentation for
-  Python is off by default and no default Python auto-instrumentation agent is included in the system packages.
-  Python auto-instrumentation needs to be enabled explicitly by providing a Python auto-instrumentation agent and a
-  custom otelinject.conf file with python_auto_instrumentation_agent_path_prefix set or by setting
-  PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX.
-  Be aware that it is not always safe to inject the existing zero-code instrumentation for Python due to possible
-  dependency conflicts (protobuf etc.)
-  
-
-<!-- previous-version -->
-
 ## v0.0.3-20260109
 
 ### 🛑 Breaking changes 🛑

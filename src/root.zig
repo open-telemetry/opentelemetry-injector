@@ -9,6 +9,7 @@ const dotnet = @import("dotnet.zig");
 const libc = @import("libc.zig");
 const jvm = @import("jvm.zig");
 const nodejs = @import("nodejs.zig");
+const python = @import("python.zig");
 const print = @import("print.zig");
 const res_attrs = @import("resource_attributes.zig");
 const types = @import("types.zig");
@@ -155,6 +156,12 @@ fn initEnviron() callconv(.c) void {
         allocator,
         libc_info.setenv_fn_ptr,
         dotnet.otel_dotnet_auto_home_env_var_name,
+        configuration,
+    );
+    modifyEnvironmentVariable(
+        allocator,
+        libc_info.setenv_fn_ptr,
+        python.pyton_path_env_var_name,
         configuration,
     );
 
@@ -345,6 +352,8 @@ fn getEnvValue(
         if (dotnet.getDotnetValues(allocator, configuration)) |v| {
             return v.otel_auto_home;
         }
+    } else if (std.mem.eql(u8, name, python.pyton_path_env_var_name)) {
+        return python.getModule(allocator, configuration.python_auto_instrumentation_agent_path, original_value orelse "");
     }
 
     return null;

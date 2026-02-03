@@ -28,6 +28,7 @@ agents:
 - [Java](https://opentelemetry.io/docs/zero-code/java/)
 - [Node.js](https://opentelemetry.io/docs/zero-code/js/)
 - [.NET](https://opentelemetry.io/docs/zero-code/dotnet/)
+- [Python](https://opentelemetry.io/docs/zero-code/python/)
 
 ## Activation and Configuration
 
@@ -50,6 +51,7 @@ This method requires `root` privileges.
    dotnet_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/dotnet
    jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/jvm/javaagent.jar
    nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
+   python_auto_instrumentation_agent_path=/usr/lib/opentelemetry/python/opentelemetry/instrumentation/auto_instrumentation
    ```
 
    You can override the location of the configuration file by setting `OTEL_INJECTOR_CONFIG_FILE`.
@@ -59,12 +61,13 @@ This method requires `root` privileges.
 
    - You want to selectively disable auto-instrumentation for a specific runtime, by setting the respective path
      to an empty string in the configuration file.
-     For example, the following file would leave JVM and Node.js auto-instrumentation active, while disabling .NET
+     For example, the following file would leave JVM, Node.js and Python auto-instrumentation active, while disabling .NET
      auto-instrumentation:
       ```
       dotnet_auto_instrumentation_agent_path_prefix=
       jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/jvm/javaagent.jar
       nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
+      python_auto_instrumentation_agent_path=/usr/lib/opentelemetry/python/opentelemetry/instrumentation/auto_instrumentation
       ```
    - You want to selectively enable (or disable) auto-instrumentation for a subset of programs (services) on your system.
      For example, you may want to only enable instrumentation of services that match a specific executable path pattern, or
@@ -77,6 +80,7 @@ This method requires `root` privileges.
      agent files
    - `JVM_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Java auto-instrumentation agent JAR file
    - `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Node.js auto-instrumentation agent registration file
+   - `PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Python auto-instrumentation agent module
    - `OTEL_INJECTOR_INCLUDE_PATHS`: a comma-separated list of glob patterns to match executable paths
    - `OTEL_INJECTOR_EXCLUDE_PATHS`: a comma-separated list of glob patterns to exclude executable paths
    - `OTEL_INJECTOR_INCLUDE_WITH_ARGUMENTS`: a comma-separated list of glob patterns to match process arguments
@@ -87,6 +91,7 @@ This method requires `root` privileges.
     - `DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=""` to disable .NET auto-instrumentation
     - `JVM_AUTO_INSTRUMENTATION_AGENT_PATH=""` to disable JVM auto-instrumentation
     - `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=""` to disable Node.js auto-instrumentation
+    - `PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH=""` to disable Python auto-instrumentation
 
 3. (Optional) The default env agent configuration file `/etc/opentelemetry/default_auto_instrumentation_env.conf` is empty (use
    `all_auto_instrumentation_agents_env_path` option to specify other path). Environment variables added to this file
@@ -107,6 +112,8 @@ This method requires `root` privileges.
 When providing your own instrumentation files (for example via environment variables like `DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`) the following directory structure is expected:
 - `JVM_AUTO_INSTRUMENTATION_AGENT_PATH`: This path must point to the Java auto-instrumentation agent JAR file `opentelemetry-javaagent.jar`.
 - `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH`: The path to an installation of the npm module `@opentelemetry/auto-instrumentations-node`.
+- `PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH`: The path to an installation of the python package `opentelemetry-distro`.
+`@opentelemetry/auto-instrumentations-python`.
 - `DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: this path must be a directory that contains the following
   subdirectories and files:
    - For `x86_64` systems using `glibc`:
@@ -137,12 +144,14 @@ Check the following for details about the auto-instrumtation agents and further 
 - [Java](https://opentelemetry.io/docs/zero-code/java/agent/configuration/)
 - [Node.js](https://opentelemetry.io/docs/zero-code/js/configuration/)
 - [.NET](https://opentelemetry.io/docs/zero-code/dotnet/configuration/)
+- [Python](https://opentelemetry.io/docs/zero-code/python/configuration/)
 
 ### Environment Modifications
 
 Here is an overview of the modifications that the injector will apply:
 
 * It sets (or appends to) `NODE_OPTIONS` to activate the Node.js instrumentation agent.
+* It sets (or appends to) `PYTHONPATH` to activate the Python instrumentation agent.
 * It adds a `-javaagent` flag to `JAVA_TOOL_OPTIONS` to activate the Java OTel SDK.
 * It sets the required environment variables for activating the OpenTelemetry SDK for .NET:
     * `CORECLR_ENABLE_PROFILING`
@@ -242,6 +251,7 @@ included for instrumentation:
 dotnet_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/dotnet
 jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/jvm/javaagent.jar
 nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
+python_auto_instrumentation_agent_path=/usr/lib/opentelemetry/python/opentelemetry/instrumentation/auto_instrumentation
 
 include_paths=/app/*,/utilities/*
 exclude_paths=/app/system/*
@@ -252,6 +262,7 @@ look at the following example:
 dotnet_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/dotnet
 jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/jvm/javaagent.jar
 nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
+python_auto_instrumentation_agent_path=/usr/lib/opentelemetry/python/opentelemetry/instrumentation/auto_instrumentation
 
 include_paths=/app/*,/utilities/*,*.exe
 exclude_with_arguments=-javaagent:*,*@opentelemetry-js*,-Xmx?m

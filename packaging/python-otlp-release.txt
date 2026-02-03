@@ -1,0 +1,2 @@
+# renovate: datasource=pip depName=opentelemetry-exporter-otlp
+1.39.1

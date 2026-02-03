@@ -33,6 +33,10 @@ DOTNET_OS_NAME="linux"
 DOTNET_AGENT_RELEASE_URL="https://github.com/open-telemetry/$DOTNET_ARTIFACE_BASE_NAME/releases/download"
 DOTNET_AGENT_INSTALL_DIR="${INSTALL_DIR}/dotnet"
 
+PYTHON_AGENT_RELEASE_PATH="${FPM_DIR}/../python-agent-release.txt"
+PYTHON_OTLP_RELEASE_PATH="${FPM_DIR}/../python-otlp-release.txt"
+PYTHON_AGENT_INSTALL_DIR="${INSTALL_DIR}/python"
+
 PREUNINSTALL_PATH="$FPM_DIR/preuninstall.sh"
 
 get_version() {
@@ -77,6 +81,14 @@ download_nodejs_agent() {
     rm opentelemetry-auto-instrumentations-node.tgz
     popd
     popd
+}
+
+download_python_agent() {
+    local agent_tag="$1"
+    local otlp_tag="$2"
+    local dest="$3"
+
+    pip install opentelemetry-distro==${agent_tag} opentelemetry-exporter-otlp==${otlp_tag} --target ${dest}
 }
 
 download_dotnet_agent() {
@@ -125,9 +137,12 @@ setup_files_and_permissions() {
     local java_agent_release
     local nodejs_agent_release
     local dotnet_agent_release
+    local python_agent_release
     java_agent_release="$(tail -n 1 <"$JAVA_AGENT_RELEASE_PATH")"
     nodejs_agent_release="$(tail -n 1 <"$NODEJS_AGENT_RELEASE_PATH")"
     dotnet_agent_release="$(tail -n 1 <"$DOTNET_AGENT_RELEASE_PATH")"
+    python_agent_release="$(tail -n 1 <"$PYTHON_AGENT_RELEASE_PATH")"
+    python_otlp_release="$(tail -n 1 <"$PYTHON_OTLP_RELEASE_PATH")"
 
     mkdir -p "${buildroot}$(dirname $libotelinject_INSTALL_PATH)"
     cp -f "$libotelinject" "${buildroot}$libotelinject_INSTALL_PATH"
@@ -141,6 +156,9 @@ setup_files_and_permissions() {
 
     download_dotnet_agent "$dotnet_agent_release" "${buildroot}${DOTNET_AGENT_INSTALL_DIR}"
     sudo chmod -R 755 "${buildroot}$DOTNET_AGENT_INSTALL_DIR"
+
+    download_python_agent "$python_agent_release" "$python_otlp_release" "${buildroot}${PYTHON_AGENT_INSTALL_DIR}"
+    sudo chmod -R 755 "${buildroot}$PYTHON_AGENT_INSTALL_DIR"
 
     mkdir -p  "${buildroot}$CONFIG_DIR_INSTALL_PATH"
     cp -rf "$CONFIG_DIR_REPO_PATH"/* "${buildroot}$CONFIG_DIR_INSTALL_PATH"/

@@ -1,0 +1,2 @@
+# renovate: datasource=pip depName=opentelemetry-distro
+0.60b1

@@ -139,6 +139,12 @@ if [ "${INTERACTIVE:-}" = "true" ]; then
   fi
 fi
 
+if [ "$LIBC" = "musl" ]; then
+  dotnet_arch="linux-musl-${ARCH/amd64/x64}"
+else
+  dotnet_arch="linux-${ARCH/amd64/x64}"
+fi
+
 set -x
 # shellcheck disable=SC2086
 docker run $docker_run_extra_options \
@@ -146,6 +152,7 @@ docker run $docker_run_extra_options \
   --platform "$docker_platform" \
   --env EXPECTED_CPU_ARCHITECTURE="$expected_cpu_architecture" \
   --env LIBC_FLAVOR="$LIBC" \
+  --env DOTNET_ARCH="$dotnet_arch" \
   --env TEST_SET="$TEST_SET" \
   --env TEST_CASES="$TEST_CASES" \
   --env TEST_CASES_CONTAINING="$TEST_CASES_CONTAINING" \

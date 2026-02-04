@@ -9,10 +9,12 @@ body:
       description: Which component(s) does your feature request concern?
       multiple: true
       options:
+        - injector
         - packaging
         - dotnet
         - java
         - nodejs
+        - python
   - type: textarea
     attributes:
       label: Is your feature request related to a problem? Please describe.

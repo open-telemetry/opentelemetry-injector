@@ -8,10 +8,12 @@ body:
       description: Which component(s) does your issue concern?
       multiple: true
       options:
+        - injector
         - packaging
         - dotnet
         - java
         - nodejs
+        - python
   - type: textarea
     attributes:
       label: Describe the issue you're reporting

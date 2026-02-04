@@ -15,10 +15,12 @@ body:
       description: Which component(s) does your bug report concern?
       multiple: true
       options:
+      - injector
       - packaging
       - dotnet
       - java
       - nodejs
+      - python
   - type: textarea
     attributes:
       label: What happened?

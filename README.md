@@ -103,7 +103,7 @@ This method requires `root` privileges.
 
 4. Reboot the system or restart the applications/services for any changes to take effect. The `libotelinject.so` shared
    object library will then be preloaded for all subsequent processes and inject the environment variables from the
-   `/etc/opentelemetry/otelinject` configuration files for Java and Node.js processes.
+   `/etc/opentelemetry/otelinject.conf` configuration files for the process types you've configured (Java, .Net or Node.js).
 
 When providing your own instrumentation files (for example via environment variables like `DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`) the following directory structure is expected:
 - `JVM_AUTO_INSTRUMENTATION_AGENT_PATH`: This path must point to the Java auto-instrumentation agent JAR file `opentelemetry-javaagent.jar`.
@@ -134,7 +134,7 @@ When providing your own instrumentation files (for example via environment varia
 Note that the defaults provided by the RPM and Debian packages take care of all of that, and it is not necessary to
 edit `/etc/opentelemetry/otelinject.conf` or set any of the above environment variables.
 
-Check the following for details about the auto-instrumtation agents and further configuration options:
+Check the following for details about the auto-instrumentation agents and further configuration options:
 - [Java](https://opentelemetry.io/docs/zero-code/java/agent/configuration/)
 - [Node.js](https://opentelemetry.io/docs/zero-code/js/configuration/)
 - [.NET](https://opentelemetry.io/docs/zero-code/dotnet/configuration/)

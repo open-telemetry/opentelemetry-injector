@@ -1,8 +1,25 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-ARG base_image_run="eclipse-temurin:25@sha256:42fc3fe6804ec612f5ef8a613f8c06d8dd578de6207336077387d4cb32edaa9b"
+ARG base_image_build="maven:3.9-eclipse-temurin-21"
+ARG base_image_run="eclipse-temurin:21-jre"
+
+FROM --platform=$BUILDPLATFORM ${base_image_build} AS build
+
+WORKDIR /usr/src/otel/injector/
+
+COPY injector-integration-tests/runtimes/jvm /usr/src/otel/injector/
+RUN mvn package -B -q
+
+# final stage/image
 FROM ${base_image_run}
+
+RUN mkdir -p /etc/opentelemetry && chmod 777 /etc/opentelemetry
+
+WORKDIR /usr/src/otel/injector/
+
+COPY --from=build /usr/src/otel/injector/no-op-agent/target/no-op-agent.jar no-op-agent/no-op-agent.jar
+COPY --from=build /usr/src/otel/injector/app/target/Main.jar app/Main.jar
 
 ARG injector_binary
 RUN if [ -z "$injector_binary" ]; then \
@@ -15,19 +32,6 @@ RUN if [ -z "$create_sdk_dummy_files_script" ]; then \
       echo "Error: build argument create_sdk_dummy_files_script is required but not set."; \
       exit 1; \
     fi
-
-RUN mkdir -p /etc/opentelemetry && chmod 777 /etc/opentelemetry
-
-WORKDIR /usr/src/otel/injector/
-
-COPY injector-integration-tests/runtimes/jvm/no-op-agent no-op-agent
-RUN cd no-op-agent/src/main/java && javac io/opentelemetry/javaagent/NoOpAgent.java && \
-    jar -c -m manifest.mf -f no-op-agent.jar io/opentelemetry/javaagent/NoOpAgent.class && \
-    cp no-op-agent.jar ../../../
-
-COPY injector-integration-tests/runtimes/jvm app
-RUN cd app && javac Main.java && \
-    jar cfe Main.jar Main Main.class
 
 COPY injector-integration-tests/scripts/run-tests-within-container.sh scripts/
 COPY injector-integration-tests/scripts/create-*.sh scripts/

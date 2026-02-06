@@ -66,10 +66,11 @@ case "$runtime" in
     ;;
   "jvm")
     dockerfile_name="injector-integration-tests/runtimes/jvm/Dockerfile"
-    base_image_run=eclipse-temurin:11
+    base_image_build=maven:3.9-eclipse-temurin-21
+    base_image_run=eclipse-temurin:21-jre
     if [[ "$LIBC" = "musl" ]]; then
-      # Older images of eclipse-temurin:xx-alpine (before 21) are single platform and do not support arm64.
-      base_image_run=eclipse-temurin:21-alpine
+      base_image_build=maven:3.9-eclipse-temurin-21-alpine
+      base_image_run=eclipse-temurin:21-jre-alpine
     fi
     ;;
   "nodejs")

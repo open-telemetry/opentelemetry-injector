@@ -265,3 +265,33 @@ This is because the binary is dynamically linked, hence it is affected by `LD_PR
 any libc, hence the `__environ` symbol cannot be resolved.
 This was a known issue in a previous version of the injector, the current implementation has solved this problem by
 not declaring any direct dependencies on external symbols.
+
+## Why Zig?
+
+Desirable characteristics for the programming language for the injector:
+* No dependency on libc: In particular when using the injector in a container environment, you cannot know ahead of time
+  whether the processes the injector attaches to are based on glibc or musl.
+  Binding the injector itself to a specific libc flavor or version would be problematic, as it would crash processes
+  that bind a different libc.
+* Provide a rich enough set of standard functionality, without depending on a libc.
+  A lot of compiled languages can be built without binding libc, but they then also usually lack basic functions, like
+  string comparisons etc. and you end up re-implementing these basics.
+* Manual memory management: The injector needs to introduce as little overhead as possible to the system and the
+  processes it attaches to, in terms of memory, CPU usage, and startup time.
+  Manual memory management ensures the injector code is very deliberate about the memory it allocates.
+  Not relying on garbage collection also works in favor of avoiding accidental CPU usage overhead.
+
+Zig has combination of characteristics that make it a good match for the items listed above:
+* It does not bind a libc flavor, but still provides a rich standard library.
+* It does not have automatic memory management, but relies on manual memory management instead.
+
+Let's compare this to some other programming languages that might be used for the injector:
+* The preference for manual memory management rules out Go.
+* Rust is also brought up fairly often, but it binds libc by default.
+  `#![no_std]` is available, but that also removes access to basic functionality (printing, working with strings).
+* Traditionally, similar technology has been written in C++ or plain C.
+  This is possible, but again, without binding to libc, you would have to rewrite a lot of basic functionality.
+  Also, Zig avoids a lot of the footguns that C code can introduce, that is, code written in Zig is probably usually
+  safer than C.
+* Zig also supposedly compiles fairly [fast](https://mitchellh.com/writing/zig-builds-getting-faster), making it
+  pleasant to work with (that said, the injector code base is quite small, so compiler perfomance is not very crucial).

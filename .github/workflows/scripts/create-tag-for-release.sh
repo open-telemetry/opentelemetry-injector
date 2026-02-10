@@ -17,8 +17,9 @@ if [[ "$COMMIT_MSG" =~ ^docs:\ update\ changelog\ to\ prepare\ release\ (v[0-9]+
 
   # Create and push tag
   echo "Creating tag for version $VERSION."
-  git config user.name opentelemetrybot
-  git config user.email 107717825+opentelemetrybot@users.noreply.github.com
+  # See https://github.com/open-telemetry/community/blob/9eaa934620638a2f5537d3d74372b389098a8f5e/assets.md#otelbot
+  git config user.name otelbot
+  git config user.email 197425009+otelbot@users.noreply.github.com
   git tag "$VERSION"
   git push origin "$VERSION"
   echo "Successfully created and pushed tag: $VERSION."

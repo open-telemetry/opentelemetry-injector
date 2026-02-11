@@ -45,3 +45,10 @@ run_test_case \
   "app" \
   "java -jar Main.jar custom-env-var CUSTOM_ENV_VAR" \
   "CUSTOM_ENV_VAR: -"
+
+run_test_case \
+  "setting OTEL_INJECTOR_DISABLED to true string disables the JVM auto-instrumentation" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: -" \
+  "OTEL_INJECTOR_DISABLED=true"

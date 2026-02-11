@@ -5,3 +5,4 @@ so/
 dist/
 
 .tools/
+.vscode/settings.json

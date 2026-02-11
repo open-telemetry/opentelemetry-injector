@@ -40,6 +40,9 @@ const exclude_args_key = "exclude_with_arguments";
 const include_args_env_var = "OTEL_INJECTOR_INCLUDE_WITH_ARGUMENTS";
 const exclude_args_env_var = "OTEL_INJECTOR_EXCLUDE_WITH_ARGUMENTS";
 
+/// Configuration options to disable all or parts of the injector
+const disable_injector_env_var = "OTEL_INJECTOR_DISABLED";
+
 pub const InjectorConfiguration = struct {
     dotnet_auto_instrumentation_agent_path_prefix: []u8,
     jvm_auto_instrumentation_agent_path: []u8,
@@ -51,6 +54,7 @@ pub const InjectorConfiguration = struct {
     exclude_paths: [][]const u8,
     include_args: [][]const u8,
     exclude_args: [][]const u8,
+    disabled: bool,
 
     pub fn deinit(self: *InjectorConfiguration, allocator: std.mem.Allocator) void {
         allocator.free(self.dotnet_auto_instrumentation_agent_path_prefix);
@@ -99,6 +103,16 @@ pub fn readConfiguration(allocator: std.mem.Allocator) InjectorConfiguration {
         return cached_configuration;
     }
 
+    if (injectorDisabled()) {
+        var empty_config = createEmptyConfiguration(allocator);
+        empty_config.disabled = true;
+        cached_configuration_optional = empty_config;
+
+        print.printInfo("Injector has been explicitly disabled, no environment variables will be modified.", .{});
+
+        return empty_config;
+    }
+
     var config_file_path: []const u8 = default_config_file_path;
     if (std.posix.getenv(config_file_path_env_var)) |value| {
         config_file_path = std.mem.trim(u8, value, " \t\r\n");
@@ -125,6 +139,7 @@ fn createEmptyConfiguration(allocator: std.mem.Allocator) InjectorConfiguration 
         .exclude_paths = &.{},
         .include_args = &.{},
         .exclude_args = &.{},
+        .disabled = false,
     };
 }
 
@@ -152,6 +167,132 @@ fn readConfigurationFromPath(allocator: std.mem.Allocator, cfg_file_path: []cons
         try copyToPermanentlyAllocatedHeap(allocator, preliminary_configuration);
     cached_configuration_optional = final_configuration;
     return final_configuration;
+}
+
+test "readConfiguration: should cache configuration and return same instance on subsequent calls" {
+    const allocator = testing.allocator;
+    defer {
+        if (cached_configuration_optional) |*config| {
+            config.deinit(allocator);
+        }
+        cached_configuration_optional = null;
+    }
+
+    const original_environ = try test_util.clearStdCEnviron();
+    defer test_util.resetStdCEnviron(original_environ);
+
+    const config1 = readConfiguration(allocator);
+    const config2 = readConfiguration(allocator);
+
+    // Compare the pointer values directly to ensure the caching worked
+    try testing.expectEqual(@intFromPtr(config1.dotnet_auto_instrumentation_agent_path_prefix.ptr), @intFromPtr(config2.dotnet_auto_instrumentation_agent_path_prefix.ptr));
+    try testing.expectEqual(@intFromPtr(config1.jvm_auto_instrumentation_agent_path.ptr), @intFromPtr(config2.jvm_auto_instrumentation_agent_path.ptr));
+}
+
+test "readConfiguration: should respect OTEL_INJECTOR_CONFIG_FILE environment variable" {
+    const allocator = testing.allocator;
+    defer {
+        if (cached_configuration_optional) |*config| {
+            config.deinit(allocator);
+        }
+        cached_configuration_optional = null;
+    }
+
+    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    defer allocator.free(cwd_path);
+    const absolute_path_to_config_file =
+        try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/all_values.conf" });
+    defer allocator.free(absolute_path_to_config_file);
+
+    const env_string = try std.fmt.allocPrint(allocator, "{s}={s}", .{ config_file_path_env_var, absolute_path_to_config_file });
+    defer allocator.free(env_string);
+
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{env_string});
+    defer test_util.resetStdCEnviron(original_environ);
+
+    const configuration = readConfiguration(allocator);
+
+    try testing.expectEqualStrings(
+        "/custom/path/to/dotnet/instrumentation",
+        configuration.dotnet_auto_instrumentation_agent_path_prefix,
+    );
+    try testing.expectEqualStrings(
+        "/custom/path/to/jvm/javaagent.jar",
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+}
+
+test "readConfiguration: should return empty config when OTEL_INJECTOR_DISABLED is set to 'true' values" {
+    const allocator = testing.allocator;
+
+    const true_values = [_][]const u8{ "true", "TRUE", "True", "1", "t", "T" };
+
+    for (true_values) |value| {
+        defer {
+            if (cached_configuration_optional) |*config| {
+                config.deinit(allocator);
+            }
+            cached_configuration_optional = null;
+        }
+
+        const env_string = try std.fmt.allocPrint(allocator, "{s}={s}", .{ disable_injector_env_var, value });
+        defer allocator.free(env_string);
+
+        const original_environ = try test_util.setStdCEnviron(&[1][]const u8{env_string});
+        defer test_util.resetStdCEnviron(original_environ);
+
+        const configuration = readConfiguration(allocator);
+
+        try testing.expectEqualStrings("", configuration.dotnet_auto_instrumentation_agent_path_prefix);
+        try testing.expectEqualStrings("", configuration.jvm_auto_instrumentation_agent_path);
+        try testing.expectEqualStrings("", configuration.nodejs_auto_instrumentation_agent_path);
+        try testing.expectEqualStrings("", configuration.python_auto_instrumentation_agent_path_prefix);
+        try testing.expectEqualStrings("", configuration.all_auto_instrumentation_agents_env_path);
+        try testing.expectEqual(0, configuration.include_paths.len);
+        try testing.expectEqual(0, configuration.exclude_paths.len);
+    }
+}
+
+test "readConfiguration: should not disable when OTEL_INJECTOR_DISABLED is set to 'false' values" {
+    const allocator = testing.allocator;
+
+    const false_values = [_][]const u8{ "", "false", "False", "On", "0" };
+
+    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    defer allocator.free(cwd_path);
+    const absolute_path_to_config_file =
+        try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/all_values.conf" });
+    defer allocator.free(absolute_path_to_config_file);
+
+    const path_env_string = try std.fmt.allocPrint(allocator, "{s}={s}", .{ config_file_path_env_var, absolute_path_to_config_file });
+    defer allocator.free(path_env_string);
+
+    for (false_values) |value| {
+        defer {
+            if (cached_configuration_optional) |*config| {
+                config.deinit(allocator);
+            }
+            cached_configuration_optional = null;
+        }
+
+        const env_string = try std.fmt.allocPrint(allocator, "{s}={s}", .{ disable_injector_env_var, value });
+        defer allocator.free(env_string);
+
+        const original_environ = try test_util.setStdCEnviron(&[2][]const u8{ path_env_string, env_string });
+        defer test_util.resetStdCEnviron(original_environ);
+
+        const configuration = readConfiguration(allocator);
+
+        // Should use defaults, not empty config
+        try testing.expectEqualStrings(
+            "/custom/path/to/dotnet/instrumentation",
+            configuration.dotnet_auto_instrumentation_agent_path_prefix,
+        );
+        try testing.expectEqualStrings(
+            "/custom/path/to/jvm/javaagent.jar",
+            configuration.jvm_auto_instrumentation_agent_path,
+        );
+    }
 }
 
 test "readConfigurationFromPath: file does not exist, no environment variables" {
@@ -367,6 +508,7 @@ fn createDefaultConfiguration(arena_allocator: std.mem.Allocator) std.mem.Alloca
         .exclude_paths = &.{},
         .include_args = &.{},
         .exclude_args = &.{},
+        .disabled = false,
     };
 }
 
@@ -523,6 +665,7 @@ fn copyToPermanentlyAllocatedHeap(
         .exclude_paths = try copyStringArray(allocator, preliminary_configuration.exclude_paths),
         .include_args = try copyStringArray(allocator, preliminary_configuration.include_args),
         .exclude_args = try copyStringArray(allocator, preliminary_configuration.exclude_args),
+        .disabled = false,
     };
 }
 
@@ -1146,4 +1289,66 @@ fn deinitStringArray(allocator: std.mem.Allocator, array: [][]const u8) void {
         allocator.free(item);
     }
     allocator.free(array);
+}
+
+inline fn parseBooleanValue(value: []const u8) bool {
+    return std.ascii.eqlIgnoreCase(value, "true") or
+        std.ascii.eqlIgnoreCase(value, "t") or
+        std.mem.eql(u8, value, "1");
+}
+
+test "parseBooleanValue: correctly identifies true and false values" {
+    const true_values = [_][]const u8{ "true", "True", "TRUE", "t", "T", "1" };
+    const false_values = [_][]const u8{ "false", "False", "FALSE", "f", "F", "0", "", "random", "yes", "no", "ON" };
+
+    for (true_values) |value| {
+        try testing.expect(parseBooleanValue(value));
+    }
+
+    for (false_values) |value| {
+        try testing.expect(!parseBooleanValue(value));
+    }
+}
+
+fn injectorDisabled() bool {
+    if (std.posix.getenv(disable_injector_env_var)) |value| {
+        return parseBooleanValue(value);
+    }
+
+    return false;
+}
+
+test "injectorDisabled: returns correct value based on environment variable" {
+    const allocator = testing.allocator;
+
+    // Test when environment variable is not set
+    {
+        const original_environ = try test_util.clearStdCEnviron();
+        defer test_util.resetStdCEnviron(original_environ);
+        try testing.expect(!injectorDisabled());
+    }
+
+    // Test true values
+    const true_values = [_][]const u8{ "true", "TRUE", "t", "T", "1" };
+    for (true_values) |value| {
+        const env_string = try std.fmt.allocPrint(allocator, "{s}={s}", .{ disable_injector_env_var, value });
+        defer allocator.free(env_string);
+
+        const original_environ = try test_util.setStdCEnviron(&[1][]const u8{env_string});
+        defer test_util.resetStdCEnviron(original_environ);
+
+        try testing.expect(injectorDisabled());
+    }
+
+    // Test false values
+    const false_values = [_][]const u8{ "false", "FALSE", "0", "", "random" };
+    for (false_values) |value| {
+        const env_string = try std.fmt.allocPrint(allocator, "{s}={s}", .{ disable_injector_env_var, value });
+        defer allocator.free(env_string);
+
+        const original_environ = try test_util.setStdCEnviron(&[1][]const u8{env_string});
+        defer test_util.resetStdCEnviron(original_environ);
+
+        try testing.expect(!injectorDisabled());
+    }
 }

@@ -304,7 +304,15 @@ include_paths=/utilities/*
 include_paths=*.exe
 ```
 
-### Design
+### Disabling the injector completely for specific workloads
+
+The injector can be installed globally on the host in [`/etc/ld.so.preload`](https://man7.org/linux/man-pages/man8/ld.so.8.html#FILES)
+or for all workloads in a Kubernetes cluster/namespace. Therefore, we provide an option for you to disable the 
+injector for a specific program launch or workload by setting the environment variable `OTEL_INJECTOR_DISABLED=true`.
+When `OTEL_INJECTOR_DISABLED` is set to `true`, no environment variables will be modified by the injector.
+
+
+## Design
 
 This is a short summary of how the injector works internally:
 1. Find out which libc the process binds, if any. This is usually either glibc or musl.

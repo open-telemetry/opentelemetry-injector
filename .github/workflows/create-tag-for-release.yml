@@ -22,15 +22,17 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 2
-
-      - name: Create tag for release
-        env:
-          # We are deliberately not using the default secrets.GITHUB_TOKEN here, since pull requests from that token do
-          # not trigger subsequent workflows, see
+          # We are deliberately not using the default secrets.GITHUB_TOKEN here, since events from that token do not
+          # trigger subsequent workflows, see
           # https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow#triggering-a-workflow-from-a-workflow.
           # I.e., creating and pushing the tag would not trigger the workflow .github/workflows/build.yml. We do need to
           # trigger the workflow for the tag we are creating here though, as the job publish-stable from build.yaml
           # actually creates the release and uploads the assets.
           # See https://github.com/open-telemetry/community/blob/9eaa934620638a2f5537d3d74372b389098a8f5e/assets.md#otelbot.
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          #
+          # Providing the token to the checkout action will result in the token being used in all subsequent git
+          # operations, in particular for creating the tag in .github/workflows/scripts/create-tag-for-release.sh.
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Create tag for release
         run: .github/workflows/scripts/create-tag-for-release.sh

@@ -196,6 +196,11 @@ fn updateStdOsEnviron() !void {
 }
 
 fn evaluateAllowDeny(allocator: std.mem.Allocator, configuration: config.InjectorConfiguration) bool {
+    if (configuration.disabled) {
+        // Skip injection if it has been disabled
+        return false;
+    }
+
     const exe_path = getExecutablePath(allocator) catch {
         // Skip allow-deny evaluation if getting the executable path has failed. The error has already been logged in
         // getExecutablePath.

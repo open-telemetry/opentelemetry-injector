@@ -75,3 +75,10 @@ run_test_case \
   "app" \
   "node index.js custom-env-var CUSTOM_ENV_VAR" \
   "CUSTOM_ENV_VAR: -"
+
+run_test_case \
+  "setting OTEL_INJECTOR_DISABLED to true string disables the Node.js auto-instrumentation" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: -" \
+  "OTEL_INJECTOR_DISABLED=TRUE"

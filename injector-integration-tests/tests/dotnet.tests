@@ -85,3 +85,10 @@ run_test_case \
   "app" \
   "./dotnetapp  custom-env-var CUSTOM_ENV_VAR" \
   "CUSTOM_ENV_VAR: -"
+
+run_test_case \
+  "setting OTEL_INJECTOR_DISABLED to true string disables setting CORECLR_PROFILER_PATH" \
+  "app" \
+  "./dotnetapp coreclr-profiler-path" \
+  "CORECLR_PROFILER_PATH: -" \
+  "OTEL_INJECTOR_DISABLED=1"

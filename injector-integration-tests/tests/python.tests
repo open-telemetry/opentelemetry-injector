@@ -70,3 +70,10 @@ run_test_case \
   "app" \
   "python app.py custom-env-var CUSTOM_ENV_VAR" \
   "CUSTOM_ENV_VAR: -"
+
+run_test_case \
+  "setting OTEL_INJECTOR_DISABLED to true empty string disables the Python auto-instrumentation" \
+  "app" \
+  "python app.py pythonpath" \
+  "PYTHONPATH: -" \
+  "OTEL_INJECTOR_DISABLED=T"

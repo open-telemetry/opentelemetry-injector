@@ -1,0 +1,9 @@
+{
+    "zig.testArgs": [
+        "test",
+        "-lc",
+        "--test-filter",
+        "${filter}",
+        "${path}"
+    ]
+}

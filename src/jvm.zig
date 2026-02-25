@@ -26,6 +26,7 @@ pub fn checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
         gpa,
         original_value_optional,
         configuration.jvm_auto_instrumentation_agent_path,
+        configuration.jvm_instrumentation_disabled,
     );
 }
 
@@ -33,8 +34,9 @@ fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
     gpa: std.mem.Allocator,
     original_value_optional: ?[:0]const u8,
     jvm_auto_instrumentation_agent_path: []u8,
+    jvm_instrumentation_disabled: bool,
 ) ?[:0]u8 {
-    if (jvm_auto_instrumentation_agent_path.len == 0) {
+    if (jvm_instrumentation_disabled or jvm_auto_instrumentation_agent_path.len == 0) {
         print.printInfo("Skipping the injection of the OpenTelemetry Java agent in \"JAVA_TOOL_OPTIONS\" because it has been explicitly disabled.", .{});
         return null;
     }
@@ -58,6 +60,32 @@ fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
     );
 }
 
+test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return null if jvm_instrumentation_disabled is true" {
+    const path = try std.fmt.allocPrint(testing.allocator, "/some/valid/path", .{});
+    defer testing.allocator.free(path);
+    const modified_java_tool_options =
+        doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+            testing.allocator,
+            null,
+            path,
+            true,
+        );
+    try test_util.expectWithMessage(modified_java_tool_options == null, "modified_java_tool_options == null");
+}
+
+test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return null if jvm_auto_instrumentation_agent_path the empty string" {
+    const path = try std.fmt.allocPrint(testing.allocator, "", .{});
+    defer testing.allocator.free(path);
+    const modified_java_tool_options =
+        doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+            testing.allocator,
+            null,
+            path,
+            false,
+        );
+    try test_util.expectWithMessage(modified_java_tool_options == null, "modified_java_tool_options == null");
+}
+
 test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return null if the Java agent cannot be accessed (original value not set)" {
     const path = try std.fmt.allocPrint(testing.allocator, "/invalid/path", .{});
     defer testing.allocator.free(path);
@@ -66,6 +94,7 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return n
             testing.allocator,
             null,
             path,
+            false,
         );
     try test_util.expectWithMessage(modified_java_tool_options == null, "modified_java_tool_options == null");
 }
@@ -78,6 +107,7 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return n
             testing.allocator,
             "original value",
             path,
+            false,
         );
     try test_util.expectWithMessage(modified_java_tool_options == null, "modified_java_tool_options == null");
 }

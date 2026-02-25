@@ -28,6 +28,18 @@ run_test_case \
   "JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/environment-variable/jvm/javaagent.jar"
 
 run_test_case \
+  "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=jvm disables the JVM auto-instrumentation" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: -" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=jvm"
+run_test_case \
+  "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=* disables the JVM auto-instrumentation" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: -" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=*"
+run_test_case \
   "setting JVM_AUTO_INSTRUMENTATION_AGENT_PATH to the empty string disables the JVM auto-instrumentation" \
   "app" \
   "java -jar Main.jar verify-javaagent-has-been-injected" \

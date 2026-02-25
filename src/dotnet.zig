@@ -77,11 +77,11 @@ pub fn getDotnetValues(
     gpa: std.mem.Allocator,
     configuration: config.InjectorConfiguration,
 ) ?DotnetValues {
-    return doGetDotnetValues(gpa, configuration.dotnet_auto_instrumentation_agent_path_prefix);
+    return doGetDotnetValues(gpa, configuration.dotnet_auto_instrumentation_agent_path_prefix, configuration.dotnet_instrumentation_disabled);
 }
 
-fn doGetDotnetValues(gpa: std.mem.Allocator, dotnet_path_prefix: []u8) ?DotnetValues {
-    if (dotnet_path_prefix.len == 0) {
+fn doGetDotnetValues(gpa: std.mem.Allocator, dotnet_path_prefix: []u8, dotnet_instrumentation_disabled: bool) ?DotnetValues {
+    if (dotnet_instrumentation_disabled or dotnet_path_prefix.len == 0) {
         print.printInfo("Skipping the injection of the .NET OpenTelemetry instrumentation because it has been explicitly disabled.", .{});
         return null;
     }
@@ -155,7 +155,33 @@ test "doGetDotnetValues: should return null value if the libc flavor has not bee
     defer allocator.free(path);
 
     libc_flavor = null;
-    const dotnet_values = doGetDotnetValues(allocator, path);
+    const dotnet_values = doGetDotnetValues(allocator, path, false);
+    try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
+}
+
+test "doGetDotnetValues: should return null value if dotnet_instrumentation_disabled is true" {
+    const allocator = testing.allocator;
+    _resetState();
+    defer _resetState();
+
+    const path = try std.fmt.allocPrint(allocator, "/some/valid/path", .{});
+    defer allocator.free(path);
+
+    libc_flavor = .GNU;
+    const dotnet_values = doGetDotnetValues(allocator, path, true);
+    try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
+}
+
+test "doGetDotnetValues: should return null value if dotnet_path_prefix is the empty string" {
+    const allocator = testing.allocator;
+    _resetState();
+    defer _resetState();
+
+    const path = try std.fmt.allocPrint(allocator, "", .{});
+    defer allocator.free(path);
+
+    libc_flavor = .GNU;
+    const dotnet_values = doGetDotnetValues(allocator, path, false);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
 
@@ -168,7 +194,7 @@ test "doGetDotnetValues: should return null value if the profiler path cannot be
     defer allocator.free(path);
 
     libc_flavor = .GNU;
-    const dotnet_values = doGetDotnetValues(allocator, path);
+    const dotnet_values = doGetDotnetValues(allocator, path, false);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
 

@@ -47,6 +47,18 @@ run_test_case \
   "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/otelinject.conf PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/environment-variable/python"
 
 run_test_case \
+  "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=python disables the Python auto-instrumentation" \
+  "app" \
+  "python app.py pythonpath" \
+  "PYTHONPATH: -" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=python"
+run_test_case \
+  "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=* disables the Python auto-instrumentation" \
+  "app" \
+  "python app.py pythonpath" \
+  "PYTHONPATH: -" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=*"
+run_test_case \
   "setting PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX to the empty string disables the Python auto-instrumentation" \
   "app" \
   "python app.py pythonpath" \
@@ -72,7 +84,7 @@ run_test_case \
   "CUSTOM_ENV_VAR: -"
 
 run_test_case \
-  "setting OTEL_INJECTOR_DISABLED to true empty string disables the Python auto-instrumentation" \
+  "setting OTEL_INJECTOR_DISABLED to true string disables the Python auto-instrumentation" \
   "app" \
   "python app.py pythonpath" \
   "PYTHONPATH: -" \

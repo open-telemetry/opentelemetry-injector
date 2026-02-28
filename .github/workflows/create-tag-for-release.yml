@@ -13,10 +13,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
-        id: app-token
+        id: otelbot-token
         with:
-          app-id: ${{ vars.OTELBOT_APP_ID }}
-          private-key: ${{ secrets.OTELBOT_PRIVATE_KEY }}
+          app-id: ${{ vars.OTELBOT_INJECTOR_APP_ID }}
+          private-key: ${{ secrets.OTELBOT_INJECTOR_PRIVATE_KEY }}
 
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -32,7 +32,7 @@ jobs:
           #
           # Providing the token to the checkout action will result in the token being used in all subsequent git
           # operations, in particular for creating the tag in .github/workflows/scripts/create-tag-for-release.sh.
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ steps.otelbot-token.outputs.token }}
 
       - name: Create tag for release
         run: .github/workflows/scripts/create-tag-for-release.sh

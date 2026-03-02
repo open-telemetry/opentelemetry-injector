@@ -4,6 +4,15 @@
 
 <!-- next version -->
 
+## v0.2.0
+
+### 💡 Enhancements 💡
+
+- `injection`: Add option to completely disable the injector with an environment variable (#240)
+  When OTEL_INJECTOR_DISABLED is set to "true" no environment variables will be set by the injector
+
+<!-- previous-version -->
+
 ## v0.1.0
 
 ### 💡 Enhancements 💡

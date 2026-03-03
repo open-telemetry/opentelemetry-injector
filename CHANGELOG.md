@@ -4,6 +4,15 @@
 
 <!-- next version -->
 
+## v0.3.0
+
+### 💡 Enhancements 💡
+
+- `injection`: Add option to disable auto-instrumentation for specific runtimes or all runtimes (#240)
+  When the config file option `auto_instrumentation_disabled` or the environment variable `OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED` is set to `*`, auto-instrumentation for all runtimes will be disabled. When set to a comma-separated list of runtimes, auto-instrumentation for the listed runtimes will be disabled. In contrast to `OTEL_INJECTOR_DISABLED=true` which disables the injector wholesale, injection of additional resource attributes via `OTEL_RESOURCE_ATTRIBUTES` still happens when `auto_instrumentation_disabled` or `OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED` are used.
+
+<!-- previous-version -->
+
 ## v0.2.0
 
 ### 💡 Enhancements 💡

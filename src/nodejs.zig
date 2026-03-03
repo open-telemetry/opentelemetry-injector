@@ -26,6 +26,7 @@ pub fn checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
         gpa,
         original_value_optional,
         configuration.nodejs_auto_instrumentation_agent_path,
+        configuration.nodejs_instrumentation_disabled,
     );
 }
 
@@ -33,8 +34,9 @@ fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
     gpa: std.mem.Allocator,
     original_value_optional: ?[:0]const u8,
     nodejs_auto_instrumentation_agent_path: []u8,
+    nodejs_instrumentation_disabled: bool,
 ) ?[:0]u8 {
-    if (nodejs_auto_instrumentation_agent_path.len == 0) {
+    if (nodejs_instrumentation_disabled or nodejs_auto_instrumentation_agent_path.len == 0) {
         print.printInfo("Skipping the injection of the Node.js OpenTelemetry auto-instrumentation because it has been explicitly disabled.", .{});
         return null;
     }
@@ -59,6 +61,32 @@ fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
     );
 }
 
+test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: should return null if nodejs_instrumentation_disabled is true" {
+    const path = try std.fmt.allocPrint(testing.allocator, "/some/valid/path", .{});
+    defer testing.allocator.free(path);
+    const modified_node_options_value =
+        doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+            testing.allocator,
+            null,
+            path,
+            true,
+        );
+    try test_util.expectWithMessage(modified_node_options_value == null, "modified_node_options_value == null");
+}
+
+test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: should return null if nodejs_auto_instrumentation_agent_path is the empty string" {
+    const path = try std.fmt.allocPrint(testing.allocator, "", .{});
+    defer testing.allocator.free(path);
+    const modified_node_options_value =
+        doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+            testing.allocator,
+            null,
+            path,
+            false,
+        );
+    try test_util.expectWithMessage(modified_node_options_value == null, "modified_node_options_value == null");
+}
+
 test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: should return null if the Node.js OTel auto-instrumentation agent cannot be accessed (no other NODE_OPTIONS are present)" {
     const path = try std.fmt.allocPrint(testing.allocator, "/invalid/path", .{});
     defer testing.allocator.free(path);
@@ -67,6 +95,7 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
             testing.allocator,
             null,
             path,
+            false,
         );
     try test_util.expectWithMessage(modified_node_options_value == null, "modified_node_options_value == null");
 }
@@ -79,6 +108,7 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
             testing.allocator,
             "--abort-on-uncaught-exception"[0.. :0],
             path,
+            false,
         );
     try test_util.expectWithMessage(modified_node_options_value == null, "modified_node_options_value == null");
 }

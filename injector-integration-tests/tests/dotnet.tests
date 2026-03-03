@@ -35,6 +35,18 @@ run_test_case \
   "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/otelinject.conf DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/environment-variable/dotnet"
 
 run_test_case \
+  "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=dotnet disables setting CORECLR_PROFILER_PATH" \
+  "app" \
+  "./dotnetapp coreclr-profiler-path" \
+  "CORECLR_PROFILER_PATH: -" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=dotnet"
+run_test_case \
+  "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=* disables setting CORECLR_PROFILER_PATH" \
+  "app" \
+  "./dotnetapp coreclr-profiler-path" \
+  "CORECLR_PROFILER_PATH: -" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=*"
+run_test_case \
   "setting DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX to the empty string disables setting CORECLR_PROFILER_PATH" \
   "app" \
   "./dotnetapp coreclr-profiler-path" \
@@ -67,6 +79,18 @@ run_test_case \
   "otel_injector_dotnet_no_op_startup_hook_has_been_loaded: true" \
   "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/environment-variable/dotnet"
 
+run_test_case \
+  "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=dotnet will result in the .NET auto-instrumentation not being loaded" \
+  "app" \
+  "./dotnetapp verify-startup-hook-has-been-injected" \
+  "otel_injector_dotnet_no_op_startup_hook_has_been_loaded: -" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=dotnet"
+run_test_case \
+  "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=* will result in the .NET auto-instrumentation not being loaded" \
+  "app" \
+  "./dotnetapp verify-startup-hook-has-been-injected" \
+  "otel_injector_dotnet_no_op_startup_hook_has_been_loaded: -" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=*"
 run_test_case \
   "setting DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX to the empty string will result in the .NET auto-instrumentation not being loaded" \
   "app" \

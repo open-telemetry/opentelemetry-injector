@@ -58,22 +58,16 @@ This method requires `root` privileges.
    You may want to modify this file for a couple of reasons:
    - You want to provide your own instrumentation files.
 
-   - You want to selectively disable auto-instrumentation for a specific runtime, by setting the respective path
-     to an empty string in the configuration file.
-     For example, the following file would leave JVM and Node.js auto-instrumentation active, while disabling .NET
-     auto-instrumentation:
-      ```
-      dotnet_auto_instrumentation_agent_path_prefix=
-      jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/jvm/javaagent.jar
-      nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
-      ```
+   - You want to selectively disable auto-instrumentation, either for all runtimes or for a subset of runtimes.
+     See
+     [Disabling auto-instrumentation for all runtimes or specific runtimes](#disabling-auto-instrumentation-for-all-runtimes-or-specific-runtimes)
+     for more information.
    - You want to selectively enable (or disable) auto-instrumentation for a subset of programs (services) on your system.
      For example, you may want to only enable instrumentation of services that match a specific executable path pattern, or
      to programs that do not contain certain arguments on the command line.
      See [details on configuring the program inclusion and exclusion criteria](#details-on-configuring-the-program-inclusion-and-exclusion-criteria) for more information.
 
    The values set in the configuration file can be overridden with environment variables.
-   (This should usually not be necessary.)
    - `DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the .NET auto-instrumentation
      agent files
    - `JVM_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Java auto-instrumentation agent JAR file
@@ -82,15 +76,12 @@ This method requires `root` privileges.
    - `OTEL_INJECTOR_EXCLUDE_PATHS`: a comma-separated list of glob patterns to exclude executable paths
    - `OTEL_INJECTOR_INCLUDE_WITH_ARGUMENTS`: a comma-separated list of glob patterns to match process arguments
    - `OTEL_INJECTOR_EXCLUDE_WITH_ARGUMENTS`: a comma-separated list of glob patterns to exclude process arguments
-
-   These aforementioned environment variables can also be used to selectively disable auto-instrumentation for a
-   specific runtime, by setting the respective variable to an empty string, that is, set:
-    - `DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=""` to disable .NET auto-instrumentation
-    - `JVM_AUTO_INSTRUMENTATION_AGENT_PATH=""` to disable JVM auto-instrumentation
-    - `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=""` to disable Node.js auto-instrumentation
+   - `OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED`: either `*` to disable all auto-instrumentation for all runtimes,
+     or a comma-separated list of runtimes for which to disable auto-instrumentation, see
+     [Disabling auto-instrumentation for all runtimes or specific runtimes](#disabling-auto-instrumentation-for-all-runtimes-or-specific-runtimes)
 
 3. (Optional) The default env agent configuration file `/etc/opentelemetry/default_auto_instrumentation_env.conf` is empty (use
-   `all_auto_instrumentation_agents_env_path` option to specify other path). Environment variables added to this file
+   `all_auto_instrumentation_agents_env_path` option to specify a different path). Environment variables added to this file
    will be passed to all agents' environments. **NOTE**: environment variables which do not start with `OTEL_` are
    ignored.
 
@@ -303,6 +294,33 @@ include_paths=/app/*
 include_paths=/utilities/*
 include_paths=*.exe
 ```
+
+### Disabling auto-instrumentation for all runtimes or specific runtimes
+
+To disable auto-instrumentation for all runtimes, set `auto_instrumentation_disabled=*` in the configuration file,
+or set `OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=*` as an environment variable.
+To selectively disable auto-instrumentation for one or more specific runtimes, set `auto_instrumentation_disabled`
+or `OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED` to a comma-separated list of runtime names.
+Valid runtime names are:
+- `dotnet`
+- `jvm`
+- `nodejs`
+- `python`
+
+The injector will log a warning for unknown runtime names in the comma-separated list.
+
+For example, the following configuration file would leave JVM and Node.js auto-instrumentation active, while disabling
+.NET and Python auto-instrumentation:
+```
+jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/jvm/javaagent.jar
+nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
+auto_instrumentation_disabled=dotnet,python
+```
+
+Note that the injector might still add additional resource attributes to applications, by adding or extending
+`OTEL_RESOURCE_ATTRIBUTES`, even when auto-instrumentation is disabled.
+See [Disabling the injector completely for specific workloads](#disabling-the-injector-completely-for-specific-workloads)
+for an option that also disables this part.
 
 ### Disabling the injector completely for specific workloads
 

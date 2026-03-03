@@ -58,6 +58,18 @@ run_test_case \
   "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/otelinject.conf NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/environment-variable/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js"
 
 run_test_case \
+  "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=nodejs disables the Node.js auto-instrumentation" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: -" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=nodejs"
+run_test_case \
+  "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=* disables the Node.js auto-instrumentation" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: -" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=*"
+run_test_case \
   "setting NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH to the empty string disables the Node.js auto-instrumentation" \
   "app" \
   "node index.js node-options" \

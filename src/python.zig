@@ -32,6 +32,7 @@ pub fn checkPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
         gpa,
         original_value_optional,
         configuration.python_auto_instrumentation_agent_path_prefix,
+        configuration.python_instrumentation_disabled,
     );
 }
 
@@ -39,8 +40,9 @@ fn doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
     gpa: std.mem.Allocator,
     original_value_optional: ?[:0]const u8,
     python_auto_instrumentation_agent_path_prefix: []u8,
+    python_instrumentation_disabled: bool,
 ) ?[:0]u8 {
-    if (python_auto_instrumentation_agent_path_prefix.len == 0) {
+    if (python_instrumentation_disabled or python_auto_instrumentation_agent_path_prefix.len == 0) {
         print.printInfo("Skipping the injection of the Python OpenTelemetry auto-instrumentation because it has been explicitly disabled.", .{});
         return null;
     }
@@ -99,6 +101,7 @@ test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should
             allocator,
             null,
             path_prefix,
+            false,
         );
     try test_util.expectWithMessage(modified_pythonpath_value == null, "modified_pythonpath_value == null");
 }
@@ -117,6 +120,45 @@ test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should
             allocator,
             null,
             path_prefix,
+            false,
+        );
+    try test_util.expectWithMessage(modified_pythonpath_value == null, "modified_pythonpath_value == null");
+}
+
+test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should return null if python_instrumentation_disabled is true" {
+    const allocator = testing.allocator;
+    _resetState();
+    defer _resetState();
+
+    const path_prefix = try std.fmt.allocPrint(allocator, "/some/valid/path", .{});
+    defer allocator.free(path_prefix);
+
+    libc_flavor = .GNU;
+    const modified_pythonpath_value =
+        doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
+            allocator,
+            null,
+            path_prefix,
+            true,
+        );
+    try test_util.expectWithMessage(modified_pythonpath_value == null, "modified_pythonpath_value == null");
+}
+
+test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should return null if python_auto_instrumentation_agent_path_prefix is the empty string" {
+    const allocator = testing.allocator;
+    _resetState();
+    defer _resetState();
+
+    const path_prefix = try std.fmt.allocPrint(allocator, "", .{});
+    defer allocator.free(path_prefix);
+
+    libc_flavor = .GNU;
+    const modified_pythonpath_value =
+        doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
+            allocator,
+            null,
+            path_prefix,
+            false,
         );
     try test_util.expectWithMessage(modified_pythonpath_value == null, "modified_pythonpath_value == null");
 }
@@ -135,6 +177,7 @@ test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should
             allocator,
             null,
             path_prefix,
+            false,
         );
     try test_util.expectWithMessage(modified_pythonpath_value == null, "modified_pythonpath_value == null");
 }
@@ -153,6 +196,7 @@ test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should
             allocator,
             "/another/path"[0.. :0],
             path_prefix,
+            false,
         );
     try test_util.expectWithMessage(modified_pythonpath_value == null, "modified_pythonpath_value == null");
 }

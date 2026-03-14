@@ -93,4 +93,4 @@ run_test_case \
   "app" \
   "node index.js node-options" \
   "NODE_OPTIONS: -" \
-  "OTEL_INJECTOR_DISABLED=TRUE"
+  "OTEL_INJECTOR_DISABLED=TRUE OTEL_INJECTOR_LOG_LEVEL=info"

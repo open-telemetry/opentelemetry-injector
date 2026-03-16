@@ -131,22 +131,22 @@ setup_files_and_permissions() {
 
     mkdir -p "${buildroot}$(dirname $libotelinject_INSTALL_PATH)"
     cp -f "$libotelinject" "${buildroot}$libotelinject_INSTALL_PATH"
-    sudo chmod 755 "${buildroot}$libotelinject_INSTALL_PATH"
+    chmod 755 "${buildroot}$libotelinject_INSTALL_PATH"
 
     download_java_agent "$java_agent_release" "${buildroot}${JAVA_AGENT_INSTALL_PATH}"
-    sudo chmod 755 "${buildroot}$JAVA_AGENT_INSTALL_PATH"
+    chmod 755 "${buildroot}$JAVA_AGENT_INSTALL_PATH"
 
     download_nodejs_agent "$nodejs_agent_release" "${buildroot}${NODEJS_AGENT_INSTALL_PATH}"
-    sudo chmod -R 755 "${buildroot}$NODEJS_AGENT_INSTALL_DIR"
+    chmod -R 755 "${buildroot}$NODEJS_AGENT_INSTALL_DIR"
 
     download_dotnet_agent "$dotnet_agent_release" "${buildroot}${DOTNET_AGENT_INSTALL_DIR}"
-    sudo chmod -R 755 "${buildroot}$DOTNET_AGENT_INSTALL_DIR"
+    chmod -R 755 "${buildroot}$DOTNET_AGENT_INSTALL_DIR"
 
     mkdir -p  "${buildroot}$CONFIG_DIR_INSTALL_PATH"
     cp -rf "$CONFIG_DIR_REPO_PATH"/* "${buildroot}$CONFIG_DIR_INSTALL_PATH"/
-    sudo chmod -R 755 "${buildroot}$CONFIG_DIR_INSTALL_PATH"
+    chmod -R 755 "${buildroot}$CONFIG_DIR_INSTALL_PATH"
 
     mkdir -p "${buildroot}$INSTALL_DIR"
 
-    sudo chown -R root:root "$buildroot"
+    chown -R root:root "$buildroot"
 }

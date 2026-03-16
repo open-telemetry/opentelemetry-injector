@@ -4,7 +4,7 @@ GEM
     arr-pm (0.0.12)
     backports (3.25.3)
     cabin (0.9.1)
-    clamp (1.4.0)
+    clamp (1.5.1)
     dotenv (3.2.0)
     fpm (1.17.0)
       arr-pm (~> 0.0.11)

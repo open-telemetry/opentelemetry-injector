@@ -10,6 +10,8 @@ const libc = @import("libc.zig");
 const jvm = @import("jvm.zig");
 const nodejs = @import("nodejs.zig");
 const print = @import("print.zig");
+const proc_self_environ_values = @import("proc_self_environ_values.zig");
+const proc_self_environ_parser = @import("proc_self_environ_parser.zig");
 const python = @import("python.zig");
 const res_attrs = @import("resource_attributes.zig");
 const types = @import("types.zig");
@@ -39,11 +41,19 @@ const InjectorError = error{
 fn initEnviron() callconv(.c) void {
     const allocator = std.heap.page_allocator;
 
-    print.initLogLevelFromProcSelfEnviron() catch |err| {
+    proc_self_environ_parser.initFromProcSelfEnviron() catch |err| {
         // If we fail to read the log level, we continue processing, using the default log level.
         print.printError("failed to read log level from environment: {}", .{err});
         print.printError("using default log level {}", .{print.getLogLevel()});
     };
+
+    if (proc_self_environ_values.getOtelInjectorDisabled()) {
+        print.printInfo(
+            "Injector has been explicitly disabled via {s}, no environment variables will be modified.",
+            .{proc_self_environ_parser.otel_injector_disabled_env_var_name},
+        );
+        return;
+    }
 
     const libc_info = libc.getLibCInfo(allocator) catch |err| {
         if (err == error.UnknownLibCFlavor) {
@@ -196,11 +206,6 @@ fn updateStdOsEnviron() !void {
 }
 
 fn evaluateAllowDeny(allocator: std.mem.Allocator, configuration: config.InjectorConfiguration) bool {
-    if (configuration.disabled) {
-        // Skip injection if it has been disabled
-        return false;
-    }
-
     const exe_path = getExecutablePath(allocator) catch {
         // Skip allow-deny evaluation if getting the executable path has failed. The error has already been logged in
         // getExecutablePath.

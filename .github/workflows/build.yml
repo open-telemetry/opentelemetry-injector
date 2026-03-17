@@ -89,11 +89,11 @@ jobs:
       matrix:
         SYS_PACKAGE: [ "deb", "rpm" ]
         lang: [ "java", "nodejs", "dotnet" ]
-        arch: [ "amd64", "arm64" ]
+        ARCH: [ "amd64", "arm64" ]
         exclude:
           - lang: "dotnet"
-            arch: "arm64"
-    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+            ARCH: "arm64"
+    runs-on: ${{ matrix.ARCH == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     steps:
       - name: Check out the codebase.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -114,8 +114,8 @@ jobs:
           name: opentelemetry-injector-${{ matrix.ARCH }}-${{ matrix.SYS_PACKAGE }}
           path: ./instrumentation/dist
 
-      - name: Run packaging integration tests for ${{ matrix.SYS_PACKAGE }}/${{ matrix.lang }}/${{ matrix.arch }}
-        run: make packaging-integration-test-${{ matrix.SYS_PACKAGE }}-${{ matrix.lang }} ARCH=${{ matrix.arch }}
+      - name: Run packaging integration tests for ${{ matrix.SYS_PACKAGE }}/${{ matrix.lang }}/${{ matrix.ARCH }}
+        run: make packaging-integration-test-${{ matrix.SYS_PACKAGE }}-${{ matrix.lang }} ARCH=${{ matrix.ARCH }}
 
   publish-stable:
     runs-on: ubuntu-24.04

@@ -4,6 +4,19 @@
 
 <!-- next version -->
 
+## v0.4.0
+
+### 💡 Enhancements 💡
+
+- `injection`: Read `OTEL_INJECTOR_DISABLED` before detecting the libc flavor (#268)
+  Read the environment variable `OTEL_INJECTOR_DISABLED` earlier, before
+  attempting to detect the libc flavor. The advantage is that
+  `OTEL_INJECTOR_DISABLED` can now be used as an escape hatch if the libc
+  detection code causes issues.
+  
+
+<!-- previous-version -->
+
 ## v0.3.0
 
 ### 💡 Enhancements 💡

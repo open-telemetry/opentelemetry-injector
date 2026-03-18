@@ -7,7 +7,7 @@ ARG tomcat_download_url
 ENV LANG=C.UTF-8
 
 RUN dnf -y update && \
-    dnf -y install java-21-openjdk wget && \
+    dnf -y install java-25-openjdk wget && \
     dnf clean all
 
 ADD ${tomcat_download_url} apache-tomcat.tar.gz

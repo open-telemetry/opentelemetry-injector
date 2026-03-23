@@ -8,7 +8,7 @@ RUN dotnet build "DotNetTestApp.csproj" -c Release -o /app/build
 FROM build AS publish
 RUN dotnet publish "DotNetTestApp.csproj" -c Release -o /app/publish
 
-FROM debian:12@sha256:0a5bf4ecacfc050bad0131c8e1401063fd1e8343a418723f6dbd3cd13a7b9e33 AS final
+FROM debian:12@sha256:bc960ef50e6feed90686c593361df158517556ed1d2d98e5d1df3724024e0f49 AS final
 
 ARG ARCH=amd64
 ARG RPM_ARCH=x86_64

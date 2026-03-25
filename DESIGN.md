@@ -5,7 +5,7 @@ used via the environment variable [`LD_PRELOAD`](https://man7.org/linux/man-page
 [`/etc/ld.so.preload`](https://man7.org/linux/man-pages/man8/ld.so.8.html#FILES) file, or similar mechanisms to inject
 environment variables into processes at startup.
 
-See [README.me](README.md) for a general purpose overview.
+See [README.md](README.md) for a general purpose overview.
 This document focusses on the technical design and the design constraints leading to the approach taken by this project.
 
 In the remainder of this document `LD_PRELOAD` and `/etc/ld.so.preload` are used interchangeably.
@@ -119,9 +119,9 @@ For environment variables that the injector does not care about, it returns the 
 In fact, this strategy would get us 99% of the way, and it has been used in previous incarnations of the OpenTelemetry injector.
 
 To make this work, the injector needs to be able to read the process environment on its own, since it cannot rely
-on libc functionality to get the enviroment.
+on libc functionality to get the environment.
 (And it obviously needs to know the environment to be able to return the original values for environment variables it
-does not want to modifiy and also for appending to the ones it needs to modify, if they are already set.)
+does not want to modify and also for appending to the ones it needs to modify, if they are already set.)
 One way of doing that is to declare a dependency on the `__environ` symbol (e.g. `extern char **__environ`), which is a
 pointer to the in-memory storage of the environment.
 Again, this will crash [binaries](#dynamically-linked-libc-free-binaries) that are subject to dynamic linking but do not
@@ -132,7 +132,7 @@ Another way of getting the environment would be to read the file `/proc/self/env
 variables as a null-separated list of `KEY=VALUE` strings.
 This would solve the problem of the missing `__environ` symbol at startup.
 
-Unfortunately, there are still isssues with the approach to export `getenv`:
+Unfortunately, there are still issues with the approach to export `getenv`:
 
 * Most importantly, a lot of runtimes do not use `getenv` consistently to read environment variables.
   Instead, they declare a dependency on the `__environ` symbol (or one of its aliases like `_environ` or `environ`)

@@ -13,6 +13,18 @@
       "groupName": "all",
       "matchUpdateTypes": ["minor", "major", "patch"],
       "schedule": ["before 8am on Monday"]
+    },
+    {
+      "groupName": "Dockerfile",
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["minor", "major", "patch", "digest"],
+      "schedule": ["before 8am on Monday"]
+    },
+    {
+      "groupName": "GitHub Actions",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "major", "patch", "digest"],
+      "schedule": ["before 8am on Monday"]
     }
   ],
   "labels": [

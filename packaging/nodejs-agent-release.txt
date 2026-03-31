@@ -1,2 +1,2 @@
-# renovate: datasource=npm depName=opentelemetry/auto-instrumentations-node
+# renovate: datasource=npm depName=@opentelemetry/auto-instrumentations-node
 v0.59.0

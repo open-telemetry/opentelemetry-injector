@@ -4,6 +4,19 @@
 
 <!-- next version -->
 
+## v0.5.0
+
+### 💡 Enhancements 💡
+
+- update all auto-instrumentation agents:
+    | Package | Change |
+    |---------|--------|
+    | [@opentelemetry/auto-instrumentations-node](https://redirect.github.com/open-telemetry/opentelemetry-js-contrib/tree/main/packages/auto-instrumentations-node#readme) ([source](https://redirect.github.com/open-telemetry/opentelemetry-js-contrib/tree/HEAD/packages/auto-instrumentations-node)) | `v0.59.0` → `0.72.0` |
+    | [open-telemetry/opentelemetry-dotnet-instrumentation](https://redirect.github.com/open-telemetry/opentelemetry-dotnet-instrumentation) | `v1.11.0` → `v1.14.1` |
+    | [open-telemetry/opentelemetry-java-instrumentation](https://redirect.github.com/open-telemetry/opentelemetry-java-instrumentation) | `v2.16.0` → `v2.26.1` |
+
+<!-- previous-version -->
+
 ## v0.4.0
 
 ### 💡 Enhancements 💡

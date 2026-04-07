@@ -1,25 +1,32 @@
-# The directory that stores individual changelog entries.
-# Each entry is stored in a dedicated yaml file.
-# - 'chloggen new' will copy the 'template_yaml' to this directory as a new entry file.
-# - 'chloggen validate' will validate that all entry files are valid.
-# - 'chloggen update' will read and delete all entry files in this directory, and update 'changelog_md'.
-# Specify as relative path from root of repo.
-# (Optional) Default: .chloggen
-entries_dir: .chloggen
+# Use this changelog template to create an entry for release notes.
 
-# This file is used as the input for individual changelog entries.
-# Specify as relative path from root of repo.
-# (Optional) Default: .chloggen/TEMPLATE.yaml
-template_yaml: .chloggen/TEMPLATE.yaml
+# One of 'breaking', 'deprecation', 'new_component', 'enhancement', 'bug_fix'
+change_type: breaking
 
-summary_template: .chloggen/summary.tmpl
+# The name of the component, or a single word describing the area of concern, (e.g. filelogreceiver)
+component: config
 
-# The CHANGELOG file or files to which 'chloggen update' will write new entries
-# (Optional) Default filename: CHANGELOG.md
-change_logs:
-  user: CHANGELOG.md
+# A brief description of the change.  Surround your text with quotes ("") if it needs to start with a backtick (`).
+note: use a directory structure with multiple files as config source
 
-# The default change_log or change_logs to which an entry should be added.
-# If 'change_logs' is specified in this file, and no value is specified for 'default_change_logs',
-# then 'change_logs' MUST be specified in every entry file.
-default_change_logs: [user]
+# Mandatory: One or more tracking issues related to the change. You can use the PR number here if no issue exists.
+issues: [291]
+
+# (Optional) One or more lines of additional information to render under the primary note.
+# These lines will be padded with 2 spaces and then inserted directly into the document.
+# Use pipe (|) for multiline entries.
+subtext: |
+  The configuration now moves under `/etc/opentelemetry/injector/`, with the main configuration file as
+  `/etc/opentelemetry/injector/otelinject.conf`, merging with files under `/etc/opentelemetry/injector/conf.d`.
+  
+  The environment variable configuration file also moves from `/etc/opentelemetry/default_auto_instrumentation_env.conf` to
+  `/etc/opentelemetry/injector/default_env.conf`.
+
+# If your change doesn't affect end users or the exported elements of any package,
+# you should instead start your pull request title with "chore" or use the "Skip Changelog" label.
+# Optional: The change log or logs in which this entry should be included.
+# e.g. '[user]' or '[user, api]'
+# Include 'user' if the change is relevant to end users.
+# Include 'api' if there is a change to a library API.
+# Default: '[user]'
+change_logs: []

@@ -26,9 +26,9 @@ trap stop SIGINT
 
 call &
 
-# If the Express process is instrumented successfully, we should see a log report:
-# InstrumentationScope @opentelemetry/instrumentation-net in the collector's log output.
-expected_log_line="@opentelemetry/instrumentation-net"
+# If the Node.js app is instrumented successfully, we should see a log report:
+# InstrumentationScope @opentelemetry/instrumentation-http in the collector's log output.
+expected_log_line="@opentelemetry/instrumentation-http"
 
 otelcol-contrib --config /etc/otelcol-contrib/config.yaml &> output.log &
 until (( count++ >= 5 ));

@@ -10,3 +10,15 @@ run_test_case \
   "./noenviron" \
   "The environment variable \"NO_ENVIRON_TEST_VAR\" had the value: \"some-value\"." \
   "NO_ENVIRON_TEST_VAR=some-value"
+
+# Verify that a process filtered out by include_paths produces no injector output on stderr.
+# The noenviron binary is a Go PIE binary with no libc — exactly the kind of process that
+# previously triggered "failed to identify libc" warnings before allow/deny filtering was
+# moved ahead of libc detection.
+run_test_case \
+  "include paths filter: filtered process produces no injector stderr output" \
+  "app" \
+  "./noenviron" \
+  "The environment variable \"NO_ENVIRON_TEST_VAR\" is not set." \
+  "" \
+  ""

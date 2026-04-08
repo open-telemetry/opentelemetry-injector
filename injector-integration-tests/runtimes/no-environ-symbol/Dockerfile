@@ -28,6 +28,7 @@ COPY injector-integration-tests/scripts/run-tests-within-container.sh scripts/
 COPY injector-integration-tests/scripts/create-*.sh scripts/
 COPY injector-integration-tests/tests/*.tests tests/
 COPY injector-integration-tests/common/otelinject.conf otelinject.conf
+COPY injector-integration-tests/common/otelinject.exclude-noenviron.conf otelinject.exclude-noenviron.conf
 COPY injector-integration-tests/common/otelinject.custom-location.conf /custom/config/path/otelinject.conf
 COPY injector-integration-tests/common/default_auto_instrumentation_env.conf default_auto_instrumentation_env.conf
 

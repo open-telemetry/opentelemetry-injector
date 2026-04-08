@@ -56,6 +56,8 @@ fi
 #   code is zero and the app's output matches this string
 # - env_vars (optional): Set additional environment variables like NODE_OPTIONS or OTEL_RESOURCE_ATTRIBUTES when running
 #   the test
+# - expected_stderr (optional): If provided, the test will also assert that the process's stderr output matches this
+#   value exactly. If not provided, stderr is not checked.
 # shellcheck disable=SC2317
 run_test_case() {
   test_case_label=$1
@@ -63,6 +65,13 @@ run_test_case() {
   test_app_command=$3
   expected=$4
   env_vars=${5:-}
+  if [ $# -ge 6 ]; then
+    check_stderr=true
+    expected_stderr=$6
+  else
+    check_stderr=false
+    expected_stderr=""
+  fi
 
   if [ -n "${TEST_CASES:-}" ]; then
     # Only run test case if there is an _exact match_ for the test case label in the comma-separated list $TEST_CASES.
@@ -111,6 +120,14 @@ run_test_case() {
   fi
 
   set +e
+  match=$(expr "$test_case_label" : ".*include paths filter.*")
+  set -e
+  if [ "$match" -gt 0 ]; then
+    echo "providing include paths filter configuration file at /etc/opentelemetry/otelinject.conf for test case \"$test_case_label\""
+    cp otelinject.exclude-noenviron.conf /etc/opentelemetry/otelinject.conf
+  fi
+
+  set +e
   match=$(expr "$test_case_label" : ".*env file.*")
   set -e
   if [ "$match" -gt 0 ]; then
@@ -136,8 +153,17 @@ run_test_case() {
   fi
   full_command=" $full_command $test_app_command"
   set +e
-  test_output=$(eval "$full_command")
-  test_exit_code=$?
+  if [ "$check_stderr" = "true" ]; then
+    stderr_file=$(mktemp)
+    test_output=$(eval "$full_command" 2>"$stderr_file")
+    test_exit_code=$?
+    test_stderr=$(cat "$stderr_file")
+    rm -f "$stderr_file"
+  else
+    test_output=$(eval "$full_command")
+    test_exit_code=$?
+    test_stderr=""
+  fi
   cd "$home_directory"
   set -e
   if [ $test_exit_code != 0 ]; then
@@ -152,6 +178,13 @@ run_test_case() {
     echo "test command: $full_command"
     echo "expected: $expected"
     echo "actual:   $test_output"
+    echo "--- end of output"
+    exit_code=1
+  elif [ "$check_stderr" = "true" ] && [ "$test_stderr" != "$expected_stderr" ]; then
+    printf "${RED}test \"%s\" failed (stderr mismatch):${NC}\n" "$test_case_label"
+    echo "test command: $full_command"
+    echo "expected stderr: $expected_stderr"
+    echo "actual stderr:   $test_stderr"
     echo "--- end of output"
     exit_code=1
   else

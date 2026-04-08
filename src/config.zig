@@ -6,6 +6,7 @@ const std = @import("std");
 const print = @import("print.zig");
 const test_util = @import("test_util.zig");
 const patterns_util = @import("patterns_util.zig");
+const proc_self_environ_parser = @import("proc_self_environ_parser.zig");
 
 const testing = std.testing;
 
@@ -102,20 +103,22 @@ var cached_configuration_optional: ?InjectorConfiguration = null;
 /// After reading the configuration file, the configuration will be merged with values read from environment variables
 /// (DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX, JVM_AUTO_INSTRUMENTATION_AGENT_PATH, etc.). Environment variables
 /// have higher precedence and can override settings from the configuration file.
-pub fn readConfiguration(allocator: std.mem.Allocator) InjectorConfiguration {
+pub fn readConfiguration(allocator: std.mem.Allocator, getenv_fn: proc_self_environ_parser.GetenvFn) InjectorConfiguration {
     if (cached_configuration_optional) |cached_configuration| {
         return cached_configuration;
     }
 
     var config_file_path: []const u8 = default_config_file_path;
-    if (std.posix.getenv(config_file_path_env_var)) |value| {
-        config_file_path = std.mem.trim(u8, value, " \t\r\n");
-        if (config_file_path.len == 0) {
-            config_file_path = default_config_file_path;
+    const env_config_path = getenv_fn(allocator, config_file_path_env_var);
+    defer if (env_config_path) |p| allocator.free(p);
+    if (env_config_path) |value| {
+        const trimmed = std.mem.trim(u8, value, " \t\r\n");
+        if (trimmed.len > 0) {
+            config_file_path = trimmed;
         }
     }
 
-    return readConfigurationFromPath(allocator, config_file_path) catch |err| {
+    return readConfigurationFromPath(allocator, config_file_path, getenv_fn) catch |err| {
         print.printError("Cannot allocate memory while parsing configuration: {t}", .{err});
         return createEmptyConfiguration(allocator);
     };
@@ -140,7 +143,7 @@ fn createEmptyConfiguration(allocator: std.mem.Allocator) InjectorConfiguration 
     };
 }
 
-fn readConfigurationFromPath(allocator: std.mem.Allocator, cfg_file_path: []const u8) std.mem.Allocator.Error!InjectorConfiguration {
+fn readConfigurationFromPath(allocator: std.mem.Allocator, cfg_file_path: []const u8, getenv_fn: proc_self_environ_parser.GetenvFn) std.mem.Allocator.Error!InjectorConfiguration {
     // We create a good amount of intermediate values - keys, values, comma-separated parts of strings, default config
     // values that might or might not be later overwritten, etc. It would tricky and error-prone to release each of
     // them individually at exactly the right time. Instead, we use an arena for all allocations (including the actual
@@ -153,7 +156,7 @@ fn readConfigurationFromPath(allocator: std.mem.Allocator, cfg_file_path: []cons
 
     var preliminary_configuration = try createDefaultConfiguration(arena_allocator);
     readConfigurationFile(arena_allocator, cfg_file_path, &preliminary_configuration);
-    readConfigurationFromEnvironment(arena_allocator, &preliminary_configuration);
+    readConfigurationFromEnvironment(arena_allocator, &preliminary_configuration, getenv_fn);
     readAllAgentsEnvFile(
         arena_allocator,
         preliminary_configuration.all_auto_instrumentation_agents_env_path,
@@ -178,15 +181,15 @@ test "readConfiguration: should cache configuration and return same instance on 
     const original_environ = try test_util.clearStdCEnviron();
     defer test_util.resetStdCEnviron(original_environ);
 
-    const config1 = readConfiguration(allocator);
-    const config2 = readConfiguration(allocator);
+    const config1 = readConfiguration(allocator, proc_self_environ_parser.posixGetenv);
+    const config2 = readConfiguration(allocator, proc_self_environ_parser.posixGetenv);
 
     // Compare the pointer values directly to ensure the caching worked
     try testing.expectEqual(@intFromPtr(config1.dotnet_auto_instrumentation_agent_path_prefix.ptr), @intFromPtr(config2.dotnet_auto_instrumentation_agent_path_prefix.ptr));
     try testing.expectEqual(@intFromPtr(config1.jvm_auto_instrumentation_agent_path.ptr), @intFromPtr(config2.jvm_auto_instrumentation_agent_path.ptr));
 }
 
-test "readConfiguration: should respect OTEL_INJECTOR_CONFIG_FILE environment variable" {
+test "readConfiguration: respects OTEL_INJECTOR_CONFIG_FILE environment variable" {
     const allocator = testing.allocator;
     defer {
         if (cached_configuration_optional) |*config| {
@@ -207,7 +210,33 @@ test "readConfiguration: should respect OTEL_INJECTOR_CONFIG_FILE environment va
     const original_environ = try test_util.setStdCEnviron(&[1][]const u8{env_string});
     defer test_util.resetStdCEnviron(original_environ);
 
-    const configuration = readConfiguration(allocator);
+    const configuration = readConfiguration(allocator, proc_self_environ_parser.posixGetenv);
+    // No separate deinit — cleanup is handled by the defer block above via cached_configuration_optional
+
+    try testing.expectEqualStrings(
+        "/custom/path/to/dotnet/instrumentation",
+        configuration.dotnet_auto_instrumentation_agent_path_prefix,
+    );
+    try testing.expectEqualStrings(
+        "/custom/path/to/jvm/javaagent.jar",
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+}
+
+test "readConfigurationFromPath: loads from the specified path" {
+    const allocator = testing.allocator;
+
+    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    defer allocator.free(cwd_path);
+    const absolute_path_to_config_file =
+        try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/all_values.conf" });
+    defer allocator.free(absolute_path_to_config_file);
+
+    const original_environ = try test_util.clearStdCEnviron();
+    defer test_util.resetStdCEnviron(original_environ);
+
+    var configuration = try readConfigurationFromPath(allocator, absolute_path_to_config_file, proc_self_environ_parser.posixGetenv);
+    defer configuration.deinit(allocator);
 
     try testing.expectEqualStrings(
         "/custom/path/to/dotnet/instrumentation",
@@ -225,7 +254,7 @@ test "readConfigurationFromPath: file does not exist, no environment variables" 
     const original_environ = try test_util.clearStdCEnviron();
     defer test_util.resetStdCEnviron(original_environ);
 
-    var configuration = try readConfigurationFromPath(allocator, @constCast("/does/not/exist"));
+    var configuration = try readConfigurationFromPath(allocator, @constCast("/does/not/exist"), proc_self_environ_parser.posixGetenv);
     defer configuration.deinit(allocator);
 
     try testing.expectEqualStrings(
@@ -274,7 +303,7 @@ test "readConfigurationFromPath: file does not exist, environment variables are 
     });
     defer test_util.resetStdCEnviron(original_environ);
 
-    var configuration = try readConfigurationFromPath(allocator, @constCast("/does/not/exist"));
+    var configuration = try readConfigurationFromPath(allocator, @constCast("/does/not/exist"), proc_self_environ_parser.posixGetenv);
     defer configuration.deinit(allocator);
 
     try testing.expectEqualStrings(
@@ -327,7 +356,7 @@ test "readConfigurationFromPath: all configuration values from file, no environm
     const original_environ = try test_util.clearStdCEnviron();
     defer test_util.resetStdCEnviron(original_environ);
 
-    var configuration = try readConfigurationFromPath(allocator, absolute_path_to_config_file);
+    var configuration = try readConfigurationFromPath(allocator, absolute_path_to_config_file, proc_self_environ_parser.posixGetenv);
     defer configuration.deinit(allocator);
 
     try testing.expectEqualStrings(
@@ -391,7 +420,7 @@ test "readConfigurationFromPath: override some configuration values from file wi
     });
     defer test_util.resetStdCEnviron(original_environ);
 
-    var configuration = try readConfigurationFromPath(allocator, absolute_path_to_config_file);
+    var configuration = try readConfigurationFromPath(allocator, absolute_path_to_config_file, proc_self_environ_parser.posixGetenv);
     defer configuration.deinit(allocator);
 
     try testing.expectEqualStrings(
@@ -1154,8 +1183,8 @@ test "parseLine: invalid line (line too long)" {
     try test_util.expectWithMessage(result == null, "parseLine(invalid line) returns null");
 }
 
-fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configuration: *InjectorConfiguration) void {
-    if (std.posix.getenv(dotnet_agent_path_prefix_env_var)) |value| {
+fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configuration: *InjectorConfiguration, getenv_fn: proc_self_environ_parser.GetenvFn) void {
+    if (getenv_fn(arena_allocator, dotnet_agent_path_prefix_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         const dotnet_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
@@ -1163,7 +1192,7 @@ fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configur
         };
         configuration.dotnet_auto_instrumentation_agent_path_prefix = dotnet_value;
     }
-    if (std.posix.getenv(jvm_agent_path_env_var)) |value| {
+    if (getenv_fn(arena_allocator, jvm_agent_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         const jvm_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
@@ -1171,7 +1200,7 @@ fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configur
         };
         configuration.jvm_auto_instrumentation_agent_path = jvm_value;
     }
-    if (std.posix.getenv(nodejs_agent_path_env_var)) |value| {
+    if (getenv_fn(arena_allocator, nodejs_agent_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         const nodejs_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
@@ -1179,7 +1208,7 @@ fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configur
         };
         configuration.nodejs_auto_instrumentation_agent_path = nodejs_value;
     }
-    if (std.posix.getenv(python_agent_path_prefix_env_var)) |value| {
+    if (getenv_fn(arena_allocator, python_agent_path_prefix_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         const python_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
@@ -1187,11 +1216,11 @@ fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configur
         };
         configuration.python_auto_instrumentation_agent_path_prefix = python_value;
     }
-    if (std.posix.getenv(auto_instrumentation_disabled_env_var)) |value| {
+    if (getenv_fn(arena_allocator, auto_instrumentation_disabled_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         applyAutoInstrumentationDisabledValue(trimmed_value, auto_instrumentation_disabled_env_var, configuration);
     }
-    if (std.posix.getenv(include_paths_env_var)) |value| {
+    if (getenv_fn(arena_allocator, include_paths_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         const include_paths_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
@@ -1202,7 +1231,7 @@ fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configur
             return;
         };
     }
-    if (std.posix.getenv(exclude_paths_env_var)) |value| {
+    if (getenv_fn(arena_allocator, exclude_paths_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         const exclude_paths_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
@@ -1213,7 +1242,7 @@ fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configur
             return;
         };
     }
-    if (std.posix.getenv(include_args_env_var)) |value| {
+    if (getenv_fn(arena_allocator, include_args_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         const include_args_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
@@ -1224,7 +1253,7 @@ fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configur
             return;
         };
     }
-    if (std.posix.getenv(exclude_args_env_var)) |value| {
+    if (getenv_fn(arena_allocator, exclude_args_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         const exclude_args_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
             print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
@@ -1248,7 +1277,7 @@ test "readConfigurationFromEnvironment: empty environment values" {
     defer test_util.resetStdCEnviron(original_environ);
 
     var configuration = try createDefaultConfiguration(arena_allocator);
-    readConfigurationFromEnvironment(arena_allocator, &configuration);
+    readConfigurationFromEnvironment(arena_allocator, &configuration, proc_self_environ_parser.posixGetenv);
 
     try testing.expectEqualStrings(
         default_dotnet_auto_instrumentation_agent_path_prefix,
@@ -1296,7 +1325,7 @@ test "readConfigurationFromEnvironment: all values" {
     defer test_util.resetStdCEnviron(original_environ);
 
     var configuration = try createDefaultConfiguration(arena_allocator);
-    readConfigurationFromEnvironment(arena_allocator, &configuration);
+    readConfigurationFromEnvironment(arena_allocator, &configuration, proc_self_environ_parser.posixGetenv);
 
     try testing.expectEqualStrings(
         "/path/from/env/var/dotnet",
@@ -1345,7 +1374,7 @@ test "readConfigurationFromEnvironment: OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISAB
     defer test_util.resetStdCEnviron(original_environ);
 
     var configuration = try createDefaultConfiguration(arena_allocator);
-    readConfigurationFromEnvironment(arena_allocator, &configuration);
+    readConfigurationFromEnvironment(arena_allocator, &configuration, proc_self_environ_parser.posixGetenv);
 
     try test_util.expectWithMessage(configuration.dotnet_instrumentation_disabled, "configuration.dotnet_instrumentation_disabled");
     try test_util.expectWithMessage(configuration.jvm_instrumentation_disabled, "configuration.jvm_instrumentation_disabled");
@@ -1366,7 +1395,7 @@ test "readConfigurationFromEnvironment: OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISAB
     defer test_util.resetStdCEnviron(original_environ);
 
     var configuration = try createDefaultConfiguration(arena_allocator);
-    readConfigurationFromEnvironment(arena_allocator, &configuration);
+    readConfigurationFromEnvironment(arena_allocator, &configuration, proc_self_environ_parser.posixGetenv);
 
     try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
     try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
@@ -1387,7 +1416,7 @@ test "readConfigurationFromEnvironment: OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISAB
     defer test_util.resetStdCEnviron(original_environ);
 
     var configuration = try createDefaultConfiguration(arena_allocator);
-    readConfigurationFromEnvironment(arena_allocator, &configuration);
+    readConfigurationFromEnvironment(arena_allocator, &configuration, proc_self_environ_parser.posixGetenv);
 
     try test_util.expectWithMessage(configuration.dotnet_instrumentation_disabled, "configuration.dotnet_instrumentation_disabled");
     try test_util.expectWithMessage(configuration.jvm_instrumentation_disabled, "configuration.jvm_instrumentation_disabled");
@@ -1408,7 +1437,7 @@ test "readConfigurationFromEnvironment: OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISAB
     defer test_util.resetStdCEnviron(original_environ);
 
     var configuration = try createDefaultConfiguration(arena_allocator);
-    readConfigurationFromEnvironment(arena_allocator, &configuration);
+    readConfigurationFromEnvironment(arena_allocator, &configuration, proc_self_environ_parser.posixGetenv);
 
     try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
     try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
@@ -1427,7 +1456,7 @@ test "readConfigurationFromEnvironment: if OTEL_INJECTOR_AUTO_INSTRUMENTATION_DI
     defer test_util.resetStdCEnviron(original_environ);
 
     var configuration = try createDefaultConfiguration(arena_allocator);
-    readConfigurationFromEnvironment(arena_allocator, &configuration);
+    readConfigurationFromEnvironment(arena_allocator, &configuration, proc_self_environ_parser.posixGetenv);
 
     try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
     try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");

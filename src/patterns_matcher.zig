@@ -99,8 +99,7 @@ pub fn evaluateDeny(
     exclude_paths: []const []const u8,
     exclude_args: []const []const u8,
 ) bool {
-    return ((exclude_paths.len > 0) and matchesAnyPattern(exe_path, exclude_paths))
-        or ((exclude_args.len > 0) and matchesManyAnyPattern(args, exclude_args));
+    return ((exclude_paths.len > 0) and matchesAnyPattern(exe_path, exclude_paths)) or ((exclude_args.len > 0) and matchesManyAnyPattern(args, exclude_args));
 }
 
 test "matchGlob: exact match" {

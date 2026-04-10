@@ -223,10 +223,8 @@ fn evaluateAllowDeny(allocator: std.mem.Allocator, configuration: config.Injecto
         allocator.free(args);
     }
 
-    var allow = (configuration.include_paths.len == 0) or pattern_matcher.matchesAnyPattern(exe_path, configuration.include_paths);
-    allow = allow or (configuration.include_args.len == 0) or pattern_matcher.matchesManyAnyPattern(args, configuration.include_args);
-    var deny = (configuration.exclude_paths.len > 0) and pattern_matcher.matchesAnyPattern(exe_path, configuration.exclude_paths);
-    deny = deny or ((configuration.exclude_args.len > 0) and pattern_matcher.matchesManyAnyPattern(args, configuration.exclude_args));
+    const allow = pattern_matcher.evaluateAllow(exe_path, args, configuration.include_paths, configuration.include_args);
+    const deny = pattern_matcher.evaluateDeny(exe_path, args, configuration.exclude_paths, configuration.exclude_args);
 
     if (!allow or deny) {
         print.printDebug("executable with path {s} ignored. allow={any}, deny={any}", .{ exe_path, allow, deny });

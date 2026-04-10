@@ -232,16 +232,19 @@ The injector's log message will be written to `stderr` of the process that is be
 
 If you want to selectively enable (or disable) auto-instrumentation for a subset of programs (services) on your system,
 the configuration file provides a couple of settings which can be used alone or in combination to produce
-the desired outcome:
+the desired outcome.
+
+By default, all processes are instrumented. Each non-empty include setting adds a condition that a process
+must satisfy to be instrumented — all such conditions must be met (AND across settings). Within a single
+setting, entries are ORed: any one matching pattern is sufficient to satisfy that setting. Exclusions take
+precedence over inclusions.
+
   - `include_paths` - A comma-separated list of glob patterns to match executable paths.
-    If you do not specify anything here, the injector defaults to instrumenting **all executables**.
   - `exclude_paths` - A comma-separated list of glob patterns to exclude executable paths.
   - `include_with_arguments` - A comma-separated list of glob patterns to match process arguments.
-    If you do not specify anything here, the injector defaults to instrumenting **all executables**.
   - `exclude_with_arguments` - A comma-separated list of glob patterns to exclude process arguments.
 
-If an executable matches both an inclusion and an exclusion criterion, the exclusion takes
-precedence. For example, in the following configuration, all program executables in the
+For example, in the following configuration, all program executables in the
 `/app/system/` directory will not be instrumented, even though the `/app` directory is
 included for instrumentation:
 ```
@@ -263,27 +266,25 @@ include_paths=/app/*,/utilities/*,*.exe
 exclude_with_arguments=-javaagent:*,*@opentelemetry-js*,-Xmx?m
 include_with_arguments=*MyProject*.jar,*app.js
 ```
-In the example above we'll instrument:
-  - any programs that run from the `/app` and `/utilities` directories
-  - any programs that have an `.exe` extension
-  - any programs that have a command line argument containing `MyProject`
-  in the name and ending with the extension `.jar`
-  - any programs that have a program argument ending in `app.js`
-  - however, for all included programs, the injector **will avoid**:
-    - all programs that have a command line argument starting with
-    `-javaagent:`
-    - all programs that have a command line argument that contains `@opentelemetry-js`
-    - all `java` programs that run with a single digit megabytes of maximum memory
+In the example above, both `include_paths` and `include_with_arguments` are configured, so a process
+must satisfy **both** to be instrumented. We'll instrument programs that:
+  - run from the `/app` or `/utilities` directories, or have an `.exe` extension (`include_paths`)
+  - **and** have a command line argument matching `*MyProject*.jar` or ending in `app.js` (`include_with_arguments`)
+  - however, even if both include conditions are met, the injector **will avoid** programs that have:
+    - a command line argument starting with `-javaagent:`
+    - a command line argument containing `@opentelemetry-js`
+    - a maximum memory argument matching `-Xmx?m` (single digit megabytes)
 
 The example above illustrates how we avoid telemetry from unwanted applications or
 injecting auto-instrumentation to programs that are already instrumented. If you have a
 standard way of deploying all of your applications, you can create a default `otelinject.conf`
 file that will ensure you get only the telemetry you want.
 
-The `include_paths`, `exclude_paths`, `include_with_arguments` and `exclude_with_arguments` settings in
-the configuration file are additive. This means that if you define multiple lines of these settings, the resulting
-patterns list will be a union of all of the settings. This allows for easier manipulation of the configuration
-file with automated tools. Essentially, you can list each include or exclude rule on a separate line.
+Multiple lines of the same setting are combined as a union (OR). This means that if you define multiple
+lines of `include_paths`, for example, the resulting patterns list will be a union of all of the lines.
+This allows for easier manipulation of the configuration file with automated tools. Essentially, you can
+list each pattern on a separate line. Note that different settings (e.g. `include_paths` and
+`include_with_arguments`) are ANDed together — a process must satisfy each configured include setting.
 For example, the following two configuration files have an identical outcome:
 ```
 include_paths=/app/*,/utilities/*,*.exe

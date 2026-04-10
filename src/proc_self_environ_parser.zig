@@ -12,15 +12,68 @@ const testing = std.testing;
 
 const proc_self_environ_path = "/proc/self/environ";
 const otel_injector_log_level_env_var_name = "OTEL_INJECTOR_LOG_LEVEL";
-const otel_injector_log_level_environ_prefix = "OTEL_INJECTOR_LOG_LEVEL=";
 pub const otel_injector_disabled_env_var_name = "OTEL_INJECTOR_DISABLED";
-const otel_injector_disabled_env_var_prefix = "OTEL_INJECTOR_DISABLED=";
+
+const max_getenv_entry_length = 8192;
+const max_getenv_buffer_len = max_getenv_entry_length * 2;
+
+/// Function type for reading environment variables, abstracting over reading from
+/// /proc/self/environ (production) vs std.posix.getenv (tests).
+pub const GetenvFn = *const fn (allocator: std.mem.Allocator, name: []const u8) ?[]u8;
+
+/// Looks up an environment variable by reading /proc/self/environ directly,
+/// without depending on libc or std.posix.getenv.
+/// Returns an allocated copy of the value, or null if not found or on error.
+/// Errors are treated the same as a missing variable: if /proc/self/environ is
+/// unreadable, callers that rely on this function (e.g. for OTEL_INJECTOR_CONFIG_FILE)
+/// will silently fall back to their defaults. This is intentional — initFromProcSelfEnviron
+/// runs earlier and will have already surfaced any read failure at a higher log level.
+/// The caller is responsible for freeing the returned slice.
+pub fn getenv(allocator: std.mem.Allocator, name: []const u8) ?[]u8 {
+    return getenvFromFile(allocator, proc_self_environ_path, name) catch null;
+}
+
+/// Wraps std.posix.getenv with the GetenvFn signature for use in tests,
+/// where environment variables are set via setenv()/putenv() rather than
+/// being present in /proc/self/environ.
+pub fn posixGetenv(allocator: std.mem.Allocator, name: []const u8) ?[]u8 {
+    const val = std.posix.getenv(name) orelse return null;
+    return allocator.dupe(u8, val) catch unreachable;
+}
+
+fn getenvFromFile(allocator: std.mem.Allocator, path: []const u8, name: []const u8) !?[]u8 {
+    var environ_file = try std.fs.openFileAbsolute(path, .{});
+    defer environ_file.close();
+    var buf: [max_getenv_buffer_len]u8 = undefined;
+    var reader = environ_file.reader(&buf);
+    while (takeSentinelOrDiscardOverlyLongLine(&reader)) |environ_entry| {
+        if (matchEntry(environ_entry, name)) |value| {
+            return try allocator.dupe(u8, value);
+        }
+    } else |err| switch (err) {
+        error.EndOfStream => {
+            var last_buf: [max_getenv_entry_length]u8 = undefined;
+            const chars = reader.interface.readSliceShort(&last_buf) catch return null;
+            if (matchEntry(last_buf[0..chars], name)) |value| {
+                return try allocator.dupe(u8, value);
+            }
+        },
+        else => return err,
+    }
+    return null;
+}
+
+fn matchEntry(entry: []const u8, name: []const u8) ?[]const u8 {
+    if (entry.len <= name.len) return null;
+    if (!std.mem.startsWith(u8, entry, name)) return null;
+    if (entry[name.len] != '=') return null;
+    return entry[name.len + 1 ..];
+}
 
 /// Initializes a few selected configuration settings (injector disabled, log level) based on environment variables
-/// (OTEL_INJECTOR_DISABLED, OTEL_INJECTOR_LOG_LEVEL), by reading /proc/self/environ line by line. When reading
-/// environment variables later in the injector's life cycle, we will use the pointer to the __environ array after
-/// looking it up via libc.getLibCInfo(), but this pointer is not available during the injector's initialization phase
-/// yet, and we need to know some settings _before_ running libc.getLibCInfo().
+/// (OTEL_INJECTOR_DISABLED, OTEL_INJECTOR_LOG_LEVEL), by reading /proc/self/environ directly. This runs before
+/// libc detection, config file reading, and allow/deny filtering — all of which depend on these settings or must
+/// complete before libc is accessed. The __environ pointer from libc is not yet available at this stage.
 pub fn initFromProcSelfEnviron() !void {
     try initFromEnvironFile(proc_self_environ_path);
 }
@@ -36,58 +89,40 @@ fn initFromEnvironFile(self_environ_path: []const u8) !void {
         },
     });
 
-    var log_level_env_var_value: ?[]const u8 = null;
+    const allocator = std.heap.page_allocator;
 
-    var environ_file = try std.fs.openFileAbsolute(self_environ_path, .{});
-    defer environ_file.close();
-    const max_line_length = 256;
-    const max_buffer_len = max_line_length * 2;
-    var buf: [max_buffer_len]u8 = undefined;
-    var reader = environ_file.reader(&buf);
-    while (takeSentinelOrDiscardOverlyLongLine(&reader)) |environ_entry| {
-        if (environ_entry.len > max_line_length) {
-            continue;
-        }
-        if (std.mem.startsWith(u8, environ_entry, otel_injector_log_level_environ_prefix)) {
-            log_level_env_var_value = environ_entry[otel_injector_log_level_environ_prefix.len..environ_entry.len];
-            continue;
-        }
-        if (std.mem.startsWith(u8, environ_entry, otel_injector_disabled_env_var_prefix)) {
-            const otel_injector_disabled_env_var_value =
-                environ_entry[otel_injector_disabled_env_var_prefix.len..environ_entry.len];
-            proc_self_environ_values.setOtelInjectorDisabled(parseBooleanValue(otel_injector_disabled_env_var_value));
-            continue;
-        }
-    } else |err| switch (err) {
+    const log_level_value = getenvFromFile(allocator, self_environ_path, otel_injector_log_level_env_var_name) catch |err| switch (err) {
         error.ReadFailed => {
             print.printWarn("Failed to read {s}", .{self_environ_path});
             return;
         },
-        // if the file does not end with a 0 byte, we still need to parse the last entry
-        // (realistically this probably will not occur for /proc/self/environ)
-        error.EndOfStream => {
-            var buffer: [max_line_length]u8 = undefined;
-            const chars = reader.interface.readSliceShort(&buffer) catch 0;
-            const environ_entry = buffer[0..chars];
-            if (std.mem.startsWith(u8, environ_entry, otel_injector_log_level_environ_prefix)) {
-                log_level_env_var_value = environ_entry[otel_injector_log_level_environ_prefix.len..chars];
-            }
-        },
+        else => return err,
+    };
+    defer if (log_level_value) |v| allocator.free(v);
+
+    const disabled_value = getenvFromFile(allocator, self_environ_path, otel_injector_disabled_env_var_name) catch |err| switch (err) {
+        error.ReadFailed => null,
+        else => return err,
+    };
+    defer if (disabled_value) |v| allocator.free(v);
+
+    if (disabled_value) |v| {
+        proc_self_environ_values.setOtelInjectorDisabled(parseBooleanValue(v));
     }
 
-    if (log_level_env_var_value) |log_level_value| {
-        if (std.ascii.eqlIgnoreCase("debug", log_level_value)) {
+    if (log_level_value) |log_level| {
+        if (std.ascii.eqlIgnoreCase("debug", log_level)) {
             proc_self_environ_values.setLogLevel(.Debug);
-        } else if (std.ascii.eqlIgnoreCase("info", log_level_value)) {
+        } else if (std.ascii.eqlIgnoreCase("info", log_level)) {
             proc_self_environ_values.setLogLevel(.Info);
-        } else if (std.ascii.eqlIgnoreCase("warn", log_level_value)) {
+        } else if (std.ascii.eqlIgnoreCase("warn", log_level)) {
             proc_self_environ_values.setLogLevel(.Warn);
-        } else if (std.ascii.eqlIgnoreCase("error", log_level_value)) {
+        } else if (std.ascii.eqlIgnoreCase("error", log_level)) {
             proc_self_environ_values.setLogLevel(.Error);
-        } else if (std.ascii.eqlIgnoreCase("none", log_level_value)) {
+        } else if (std.ascii.eqlIgnoreCase("none", log_level)) {
             proc_self_environ_values.setLogLevel(.None);
         } else {
-            print.printError("unknown value for OTEL_INJECTOR_LOG_LEVEL: \"{s}\" -- valid log levels are \"debug\", \"info\", \"warn\", \"error\", \"none\".", .{log_level_value});
+            print.printError("unknown value for OTEL_INJECTOR_LOG_LEVEL: \"{s}\" -- valid log levels are \"debug\", \"info\", \"warn\", \"error\", \"none\".", .{log_level});
         }
     }
     print.printDebug("log level: {}", .{proc_self_environ_values.getLogLevel()});
@@ -293,4 +328,82 @@ test "parseBooleanValue: correctly identifies true and false values" {
     for (false_values) |value| {
         try testing.expect(!parseBooleanValue(value));
     }
+}
+
+fn resolveTestAssetPath(allocator: std.mem.Allocator, relative_path: []const u8) ![]u8 {
+    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    defer allocator.free(cwd_path);
+    return std.fs.path.resolve(allocator, &.{ cwd_path, relative_path });
+}
+
+test "getenvFromFile: variable found at start of file" {
+    const allocator = testing.allocator;
+    const path = try resolveTestAssetPath(allocator, "unit-test-assets/proc-self-environ/environ-log-level-debug");
+    defer allocator.free(path);
+    const value = try getenvFromFile(allocator, path, "ENV_VAR_1");
+    defer if (value) |v| allocator.free(v);
+    try testing.expectEqualStrings("value_1", value.?);
+}
+
+test "getenvFromFile: variable found in middle of file" {
+    const allocator = testing.allocator;
+    const path = try resolveTestAssetPath(allocator, "unit-test-assets/proc-self-environ/environ-log-level-debug");
+    defer allocator.free(path);
+    const value = try getenvFromFile(allocator, path, "OTEL_INJECTOR_LOG_LEVEL");
+    defer if (value) |v| allocator.free(v);
+    try testing.expectEqualStrings("debug", value.?);
+}
+
+test "getenvFromFile: variable found at end of file" {
+    const allocator = testing.allocator;
+    const path = try resolveTestAssetPath(allocator, "unit-test-assets/proc-self-environ/environ-log-level-debug");
+    defer allocator.free(path);
+    const value = try getenvFromFile(allocator, path, "ENV_VAR_2");
+    defer if (value) |v| allocator.free(v);
+    try testing.expectEqualStrings("value_2", value.?);
+}
+
+test "getenvFromFile: variable not found returns null" {
+    const allocator = testing.allocator;
+    const path = try resolveTestAssetPath(allocator, "unit-test-assets/proc-self-environ/environ-log-level-debug");
+    defer allocator.free(path);
+    const value = try getenvFromFile(allocator, path, "DOES_NOT_EXIST");
+    try testing.expectEqual(null, value);
+}
+
+test "getenvFromFile: prefix of variable name does not match" {
+    const allocator = testing.allocator;
+    const path = try resolveTestAssetPath(allocator, "unit-test-assets/proc-self-environ/environ-log-level-debug");
+    defer allocator.free(path);
+    // "ENV_VAR" is a prefix of "ENV_VAR_1" and "ENV_VAR_2" but should not match either
+    const value = try getenvFromFile(allocator, path, "ENV_VAR");
+    try testing.expectEqual(null, value);
+}
+
+test "getenvFromFile: overlong entry is skipped, subsequent entries still found" {
+    const allocator = testing.allocator;
+    var tmp_dir = testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+    {
+        const f = try tmp_dir.dir.createFile("environ", .{});
+        defer f.close();
+        // Write an entry strictly longer than max_getenv_entry_length to trigger StreamTooLong
+        try f.writeAll("OVERLONG_VAR=");
+        const chunk = [_]u8{'x'} ** 64;
+        var written: usize = 0;
+        while (written <= max_getenv_entry_length) {
+            const n = @min(chunk.len, max_getenv_entry_length + 1 - written);
+            try f.writeAll(chunk[0..n]);
+            written += n;
+        }
+        try f.writeAll(&[1]u8{0}); // null terminator
+        try f.writeAll("TARGET_VAR=found_after_overlong");
+        try f.writeAll(&[1]u8{0});
+    }
+    const path = try tmp_dir.dir.realpathAlloc(allocator, "environ");
+    defer allocator.free(path);
+
+    const value = try getenvFromFile(allocator, path, "TARGET_VAR");
+    defer if (value) |v| allocator.free(v);
+    try testing.expectEqualStrings("found_after_overlong", value.?);
 }

@@ -19,7 +19,7 @@ const otel_env_var_prefix = "OTEL_";
 // Agent paths are empty by default; they are enabled by installing conf.d drop-in files from the
 // respective language packages (e.g., opentelemetry-java-autoinstrumentation installs java.conf).
 const default_all_auto_instrumentation_agents_env_path = "/etc/opentelemetry/injector/default_env.conf";
-const default_config_dir_path = "/etc/opentelemetry/injector/conf.d";
+const default_config_dir_path = "/etc/opentelemetry/injector.d";
 const config_dir_path_env_var = "OTEL_INJECTOR_CONFIG_DIR";
 
 const dotnet_path_prefix_key = "dotnet_auto_instrumentation_agent_path_prefix";
@@ -1519,6 +1519,91 @@ test "readConfigurationFromEnvironment: if OTEL_INJECTOR_AUTO_INSTRUMENTATION_DI
     try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
     try test_util.expectWithMessage(!configuration.nodejs_instrumentation_disabled, "!configuration.nodejs_instrumentation_disabled");
     try test_util.expectWithMessage(!configuration.python_instrumentation_disabled, "!configuration.python_instrumentation_disabled");
+}
+
+test "readConfigurationDirectory: directory does not exist" {
+    const allocator = testing.allocator;
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{
+        "OTEL_INJECTOR_CONFIG_DIR=/does/not/exist",
+    });
+    defer test_util.resetStdCEnviron(original_environ);
+
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    readConfigurationDirectory(arena_allocator, &configuration);
+
+    // Configuration should remain at defaults when the directory does not exist.
+    try testing.expectEqualStrings(
+        default_dotnet_auto_instrumentation_agent_path_prefix,
+        configuration.dotnet_auto_instrumentation_agent_path_prefix,
+    );
+    try testing.expectEqualStrings(
+        default_jvm_auto_instrumentation_agent_path,
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        default_nodejs_auto_instrumentation_agent_path,
+        configuration.nodejs_auto_instrumentation_agent_path,
+    );
+}
+
+test "readConfigurationDirectory: reads .conf files in alphabetical order and ignores non-.conf files" {
+    const allocator = testing.allocator;
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{
+        "OTEL_INJECTOR_CONFIG_DIR=unit-test-assets/config/injector.d",
+    });
+    defer test_util.resetStdCEnviron(original_environ);
+
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    readConfigurationDirectory(arena_allocator, &configuration);
+
+    // 01-java.conf sets the JVM path
+    try testing.expectEqualStrings(
+        "/conf.d/path/to/jvm/javaagent.jar",
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+    // 02-nodejs.conf sets the Node.js path
+    try testing.expectEqualStrings(
+        "/conf.d/path/to/nodejs/register.js",
+        configuration.nodejs_auto_instrumentation_agent_path,
+    );
+    // not-a-conf-file.txt should be ignored, so the dotnet path should remain at the default.
+    try testing.expectEqualStrings(
+        default_dotnet_auto_instrumentation_agent_path_prefix,
+        configuration.dotnet_auto_instrumentation_agent_path_prefix,
+    );
+}
+
+test "readConfigurationDirectory: conf.d files override values from the main configuration file" {
+    const allocator = testing.allocator;
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{
+        "OTEL_INJECTOR_CONFIG_DIR=unit-test-assets/config/injector.d",
+    });
+    defer test_util.resetStdCEnviron(original_environ);
+
+    // First set a JVM path from the main config, then apply conf.d which should override it.
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    configuration.jvm_auto_instrumentation_agent_path = @constCast("/original/jvm/path.jar");
+    readConfigurationDirectory(arena_allocator, &configuration);
+
+    try testing.expectEqualStrings(
+        "/conf.d/path/to/jvm/javaagent.jar",
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
 }
 
 fn copyMap(allocator: std.mem.Allocator, source: std.StringHashMap([]u8)) !std.StringHashMap([]u8) {

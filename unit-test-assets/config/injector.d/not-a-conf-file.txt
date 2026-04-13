@@ -1,0 +1,2 @@
+this file should be ignored because it does not have a .conf extension
+dotnet_auto_instrumentation_agent_path_prefix=/should/not/be/read

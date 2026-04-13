@@ -17,7 +17,7 @@ RUN if [ -z "$injector_binary" ]; then \
 # Detect package manager and install accordingly (apt for Debian, apk for Alpine).
 RUN apt-get update && apt-get install -y --no-install-recommends binutils
 
-RUN mkdir -p /etc/opentelemetry && chmod 777 /etc/opentelemetry
+RUN mkdir -p /etc/opentelemetry/injector /etc/opentelemetry/injector.d && chmod -R 777 /etc/opentelemetry
 
 WORKDIR /usr/src/otel/injector/
 

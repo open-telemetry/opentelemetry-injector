@@ -116,3 +116,10 @@ run_test_case \
   "./dotnetapp coreclr-profiler-path" \
   "CORECLR_PROFILER_PATH: -" \
   "OTEL_INJECTOR_DISABLED=1"
+
+run_test_case \
+  "setting OTEL_INJECTOR_INCLUDE_PATHS to a pattern that does not match the binary path disables instrumentation" \
+  "app" \
+  "./dotnetapp coreclr-profiler-path" \
+  "CORECLR_PROFILER_PATH: -" \
+  "OTEL_INJECTOR_INCLUDE_PATHS=*/java"

@@ -55,6 +55,17 @@ fn initEnviron() callconv(.c) void {
         return;
     }
 
+    // Read config and evaluate allow/deny before libc detection, so that filtered-out
+    // processes never attempt libc detection and never emit libc-related warnings.
+    // config.readConfiguration uses proc_self_environ_parser.getenv internally, which
+    // reads /proc/self/environ directly without requiring libc.
+    var configuration = config.readConfiguration(allocator, proc_self_environ_parser.getenv);
+    defer configuration.deinit(allocator);
+
+    if (!evaluateAllowDeny(allocator, configuration)) {
+        return;
+    }
+
     const libc_info = libc.getLibCInfo(allocator) catch |err| {
         if (err == error.UnknownLibCFlavor) {
             print.printError("no libc found: {}", .{err});
@@ -77,13 +88,6 @@ fn initEnviron() callconv(.c) void {
         print.printError("initEnviron(): cannot update std.os.environ: {}; ", .{err});
         return;
     };
-
-    var configuration = config.readConfiguration(allocator);
-    defer configuration.deinit(allocator);
-
-    if (!evaluateAllowDeny(allocator, configuration)) {
-        return;
-    }
 
     const maybe_modified_resource_attributes = res_attrs.getModifiedOtelResourceAttributesValue(
         allocator,

@@ -43,7 +43,7 @@ fpm -s dir -t deb -n "$PKG_NAME" -v "$VERSION" -f -p "$OUTPUT_DIR" \
     --depends sed \
     --depends grep \
     --config-files "$CONFIG_INJECTOR_INSTALL_PATH" \
-    --config-files "$CONFIG_INJECTOR_D_INSTALL_PATH" \
+    --config-files "$CONFIG_CONF_D_INSTALL_PATH" \
     "$buildroot/"=/
 
 echo "Built: ${OUTPUT_DIR}/${PKG_NAME}_${VERSION}_${ARCH}.deb"

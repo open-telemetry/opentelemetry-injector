@@ -10,7 +10,7 @@ const proc_self_environ_parser = @import("proc_self_environ_parser.zig");
 
 const testing = std.testing;
 
-const default_config_file_path = "/etc/opentelemetry/injector/otelinject.conf";
+const default_config_file_path = "/etc/opentelemetry/injector/injector.conf";
 const config_file_path_env_var = "OTEL_INJECTOR_CONFIG_FILE";
 const max_line_length = 8192;
 const empty_string = @constCast("");
@@ -19,7 +19,7 @@ const otel_env_var_prefix = "OTEL_";
 // Agent paths are empty by default; they are enabled by installing conf.d drop-in files from the
 // respective language packages (e.g., opentelemetry-java-autoinstrumentation installs java.conf).
 const default_all_auto_instrumentation_agents_env_path = "/etc/opentelemetry/injector/default_env.conf";
-const default_config_dir_path = "/etc/opentelemetry/injector.d";
+const default_config_dir_path = "/etc/opentelemetry/injector/conf.d";
 const config_dir_path_env_var = "OTEL_INJECTOR_CONFIG_DIR";
 
 const dotnet_path_prefix_key = "dotnet_auto_instrumentation_agent_path_prefix";
@@ -102,7 +102,7 @@ var cached_configuration_optional: ?InjectorConfiguration = null;
 /// read once per process and the result will be cached for subsequent calls.
 ///
 /// The configuration will be read from the path denoted by the environment variable OTEL_INJECTOR_CONFIG_FILE, or from
-/// the default location /etc/opentelemetry/otelinject.conf if this environment variable is unset or empty.
+/// the default location /etc/opentelemetry/injector/injector.conf if this environment variable is unset or empty.
 /// If the file does not exist or cannot be opened, readConfiguration continues with default values.
 ///
 /// After reading the configuration file, the configuration will be merged with values read from environment variables
@@ -1559,7 +1559,7 @@ test "readConfigurationDirectory: reads .conf files in alphabetical order and ig
     const arena_allocator = arena.allocator();
 
     const original_environ = try test_util.setStdCEnviron(&[1][]const u8{
-        "OTEL_INJECTOR_CONFIG_DIR=unit-test-assets/config/injector.d",
+        "OTEL_INJECTOR_CONFIG_DIR=unit-test-assets/config/conf.d",
     });
     defer test_util.resetStdCEnviron(original_environ);
 
@@ -1591,7 +1591,7 @@ test "readConfigurationDirectory: conf.d files override values from the main con
     const arena_allocator = arena.allocator();
 
     const original_environ = try test_util.setStdCEnviron(&[1][]const u8{
-        "OTEL_INJECTOR_CONFIG_DIR=unit-test-assets/config/injector.d",
+        "OTEL_INJECTOR_CONFIG_DIR=unit-test-assets/config/conf.d",
     });
     defer test_util.resetStdCEnviron(original_environ);
 

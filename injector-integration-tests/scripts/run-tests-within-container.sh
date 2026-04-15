@@ -115,11 +115,11 @@ run_test_case() {
   match=$(expr "$test_case_label" : ".*default configuration file.*")
   set -e
   if [ "$match" -gt 0 ]; then
-    echo "providing configuration file at default location /etc/opentelemetry/injector/otelinject.conf for test case \"$test_case_label\""
-    cp otelinject.conf /etc/opentelemetry/injector/otelinject.conf
+    echo "providing configuration file at default location /etc/opentelemetry/injector/injector.conf for test case \"$test_case_label\""
+    cp injector.conf /etc/opentelemetry/injector/injector.conf
     # Remove conf.d drop-in files so the main configuration file is tested in isolation.
     # Note: We use find instead of a glob pattern because the shell runs with noglob.
-    find /etc/opentelemetry/injector.d -name '*.conf' -delete 2>/dev/null || true
+    find /etc/opentelemetry/injector/conf.d -name '*.conf' -delete 2>/dev/null || true
   fi
 
   set +e
@@ -127,7 +127,7 @@ run_test_case() {
   set -e
   if [ "$match" -gt 0 ]; then
     # Remove conf.d drop-in files so the custom configuration file is tested in isolation.
-    find /etc/opentelemetry/injector.d -name '*.conf' -delete 2>/dev/null || true
+    find /etc/opentelemetry/injector/conf.d -name '*.conf' -delete 2>/dev/null || true
   fi
 
   set +e

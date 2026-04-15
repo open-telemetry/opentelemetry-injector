@@ -16,7 +16,7 @@ RUN if [ -z "$create_sdk_dummy_files_script" ]; then \
       exit 1; \
     fi
 
-RUN mkdir -p /etc/opentelemetry/injector /etc/opentelemetry/injector.d && chmod -R 777 /etc/opentelemetry
+RUN mkdir -p /etc/opentelemetry/injector/conf.d && chmod -R 777 /etc/opentelemetry
 
 WORKDIR /usr/src/otel/injector/
 
@@ -27,9 +27,9 @@ COPY injector-integration-tests/runtimes/python app
 COPY injector-integration-tests/scripts/run-tests-within-container.sh scripts/
 COPY injector-integration-tests/scripts/create-*.sh scripts/
 COPY injector-integration-tests/tests/*.tests tests/
-COPY injector-integration-tests/common/injector.d/ /etc/opentelemetry/injector.d/
-COPY injector-integration-tests/common/otelinject.conf otelinject.conf
-COPY injector-integration-tests/common/otelinject.custom-location.conf /custom/config/path/otelinject.conf
+COPY injector-integration-tests/common/conf.d/ /etc/opentelemetry/injector/conf.d/
+COPY injector-integration-tests/common/injector.conf injector.conf
+COPY injector-integration-tests/common/injector.custom-location.conf /custom/config/path/injector.conf
 COPY injector-integration-tests/common/default_auto_instrumentation_env.conf default_auto_instrumentation_env.conf
 
 RUN ${create_sdk_dummy_files_script}

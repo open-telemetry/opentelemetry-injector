@@ -17,7 +17,7 @@ issues: [291]
 # Use pipe (|) for multiline entries.
 subtext: |
   The configuration now moves under `/etc/opentelemetry/injector/`, with the main configuration file as
-  `/etc/opentelemetry/injector/otelinject.conf`, merging with files under `/etc/opentelemetry/injector.d`.
+  `/etc/opentelemetry/injector/injector.conf`, merging with drop-in files under `/etc/opentelemetry/injector/conf.d/`.
 
   The environment variable configuration file also moves from `/etc/opentelemetry/default_auto_instrumentation_env.conf` to
   `/etc/opentelemetry/injector/default_env.conf`.

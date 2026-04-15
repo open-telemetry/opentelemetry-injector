@@ -49,7 +49,7 @@ if [ -f no-op-agent/usercustomize.py ]; then
 fi
 
 # Provide instrumentation files also in three more locations, for testing configuration via
-# /etc/opentelemetry/otelinject.conf/, OTEL_INJECTOR_CONFIG_FILE, and via environment variables
+# /etc/opentelemetry/injector/injector.conf, OTEL_INJECTOR_CONFIG_FILE, and via environment variables
 # NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH and friends.
 mkdir -p /path/from
 cp -R /usr/lib/opentelemetry /path/from/config-file

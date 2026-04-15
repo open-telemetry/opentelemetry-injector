@@ -8,7 +8,7 @@ run_test_case \
   "CORECLR_PROFILER_PATH: /usr/lib/opentelemetry/dotnet/${LIBC_FLAVOR}/${DOTNET_ARCH}/OpenTelemetry.AutoInstrumentation.Native.so"
 
 # For test cases with the "default configuration file" substring in their label, run-tests-within-container.sh
-# will provide a configuration file in the default location (/etc/opentelemetry/otelinject.conf).
+# will provide a configuration file in the default location (/etc/opentelemetry/injector/injector.conf).
 run_test_case \
   "uses CORECLR_PROFILER_PATH path from the default configuration file" \
   "app" \
@@ -26,13 +26,13 @@ run_test_case \
   "app" \
   "./dotnetapp coreclr-profiler-path" \
   "CORECLR_PROFILER_PATH: /path/from/config-file-custom-location/dotnet/${LIBC_FLAVOR}/${DOTNET_ARCH}/OpenTelemetry.AutoInstrumentation.Native.so" \
-  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/otelinject.conf"
+  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/injector.conf"
 run_test_case \
   "the DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX environment variable overrides the path prefix from the configuration file at a custom location" \
   "app" \
   "./dotnetapp coreclr-profiler-path" \
   "CORECLR_PROFILER_PATH: /path/from/environment-variable/dotnet/${LIBC_FLAVOR}/${DOTNET_ARCH}/OpenTelemetry.AutoInstrumentation.Native.so" \
-  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/otelinject.conf DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/environment-variable/dotnet"
+  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/injector.conf DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/environment-variable/dotnet"
 
 run_test_case \
   "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=dotnet disables setting CORECLR_PROFILER_PATH" \
@@ -66,7 +66,7 @@ run_test_case \
   "otel_injector_dotnet_no_op_startup_hook_has_been_loaded: true"
 
 # For test cases with the "default configuration file" substring in their label, run-tests-within-container.sh
-# will provide a configuration file in the expected location (/etc/opentelemetry/otelinject.conf).
+# will provide a configuration file in the expected location (/etc/opentelemetry/injector/injector.conf).
 run_test_case \
   "uses the .NET profiler path from the default configuration file" \
   "app" \

@@ -20,7 +20,7 @@ run_test_case \
   "otel_injector_python_no_op_agent_has_been_loaded: true"
 
 # For test cases with the "default configuration file" substring in their label, run-tests-within-container.sh
-# will provide a configuration file in the default location (/etc/opentelemetry/otelinject.conf).
+# will provide a configuration file in the default location (/etc/opentelemetry/injector/injector.conf).
 run_test_case \
   "uses PYTHONPATH path from the default configuration file" \
   "app" \
@@ -38,13 +38,13 @@ run_test_case \
   "app" \
   "python app.py pythonpath" \
   "PYTHONPATH: /path/from/config-file-custom-location/python/${LIBC_FLAVOR}" \
-  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/otelinject.conf"
+  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/injector.conf"
 run_test_case \
   "the PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX environment variable overrides the PYTHONPATH path from the configuration file at a custom location" \
   "app" \
   "python app.py pythonpath" \
   "PYTHONPATH: /path/from/environment-variable/python/${LIBC_FLAVOR}" \
-  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/otelinject.conf PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/environment-variable/python"
+  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/injector.conf PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/environment-variable/python"
 
 run_test_case \
   "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=python disables the Python auto-instrumentation" \

@@ -19,7 +19,7 @@ libotelinject_INSTALL_PATH="${INSTALL_DIR}/libotelinject.so"
 CONFIG_DIR_REPO_PATH="${FPM_DIR}/etc/opentelemetry"
 CONFIG_DIR_INSTALL_PATH="/etc/opentelemetry"
 CONFIG_INJECTOR_INSTALL_PATH="${CONFIG_DIR_INSTALL_PATH}/injector"
-CONFIG_INJECTOR_D_INSTALL_PATH="${CONFIG_DIR_INSTALL_PATH}/injector.d"
+CONFIG_CONF_D_INSTALL_PATH="${CONFIG_INJECTOR_INSTALL_PATH}/conf.d"
 
 JAVA_AGENT_RELEASE_PATH="${FPM_DIR}/../java-agent-release.txt"
 JAVA_AGENT_RELEASE_URL="https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases"
@@ -145,9 +145,8 @@ setup_files_and_permissions() {
     chmod -R 755 "${buildroot}$DOTNET_AGENT_INSTALL_DIR"
 
     mkdir -p  "${buildroot}${CONFIG_INJECTOR_INSTALL_PATH}"
-    mkdir -p  "${buildroot}${CONFIG_INJECTOR_D_INSTALL_PATH}"
+    mkdir -p  "${buildroot}${CONFIG_CONF_D_INSTALL_PATH}"
     cp -rf "$CONFIG_DIR_REPO_PATH"/injector/* "${buildroot}${CONFIG_INJECTOR_INSTALL_PATH}/"
-    cp -rf "$CONFIG_DIR_REPO_PATH"/injector.d/* "${buildroot}${CONFIG_INJECTOR_D_INSTALL_PATH}/"
     chmod -R 755 "${buildroot}${CONFIG_DIR_INSTALL_PATH}"
 
     mkdir -p "${buildroot}$INSTALL_DIR"

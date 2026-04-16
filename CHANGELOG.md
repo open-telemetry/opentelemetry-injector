@@ -4,6 +4,28 @@
 
 <!-- next version -->
 
+## v0.7.0
+
+### 🛑 Breaking changes 🛑
+
+- `config`: use a directory structure with multiple files as config source (#291)
+  Breaking change: The in-code defaults for the auto-instrumentation agent paths are now empty. Paths must be provided
+  via external configuration. Users who use the injector binary directly, but do not use the system packages published
+  by this project, and who also have previously relied on the default auto-instrumentation agent paths must now explicitly
+  configure the agent paths.
+  This can be done either via the main configuration file (default: `/etc/opentelemetry/injector/injector.conf`), or
+  conf.d-style files in the configuration directory (i.e. files under `/etc/opentelemetry/injector.d`), or via
+  environment variables.
+  
+  The configuration now moves under `/etc/opentelemetry/injector/`, with the main configuration file as
+  `/etc/opentelemetry/injector/injector.conf`, merging with drop-in files under `/etc/opentelemetry/injector/conf.d/`.
+  
+  The environment variable configuration file also moves from `/etc/opentelemetry/default_auto_instrumentation_env.conf` to
+  `/etc/opentelemetry/injector/default_env.conf`.
+  
+
+<!-- previous-version -->
+
 ## v0.6.0
 
 ### 🧰 Bug fixes 🧰

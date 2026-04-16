@@ -33,7 +33,6 @@ const LibCError = error{
     CannotFindAtBase,
     CannotFindElfDynamicSymbolTableOffset,
     CannotFindElfDynamicSymbolTableSize,
-    CannotFindDlSymSymbol,
     CannotFindEnvironSymbol,
     CannotFindLibcMemoryRange,
     CannotFindSetenvSymbol,
@@ -992,8 +991,10 @@ test "pathLooksLikeSharedObject" {
     try test_util.expectWithMessage(!pathLooksLikeSharedObject("/some/path/libotelinject_arm64.so"), "!pathLooksLikeSharedObject(\"/some/path/libotelinject_arm64.so\")");
 }
 
-/// Reads the given memory range via elf.ElfDynLib.open and tries to lookup the dlsym function via elf.ElfDynLib#lookup.
-/// If that succeeds, proceeds to try to lookup the setenv function and the __environ symbol using dlsym.
+/// Reads the given memory range via elf.ElfDynLib.open and tries to look up setenv and __environ.
+/// Preferred path: find dlsym in the ELF and use it with handle=null (RTLD_DEFAULT) to resolve symbols across all
+/// loaded libraries. Fallback path for glibc < 2.34: dlsym lives in libdl.so, not libc.so, so if it is not found,
+/// look up setenv and __environ directly from the ELF symbol table instead.
 fn tryToFindSymbolsInMemoryRange(
     libc_name_and_flavor: LibCNameAndFlavor,
     start: usize,
@@ -1062,7 +1063,7 @@ fn mockFindSymbolsInMemoryRange(
             .setenv_fn_ptr = @ptrFromInt(end),
         };
     }
-    return error.CannotFindDlSymSymbol;
+    return error.CannotFindSetenvSymbol;
 }
 
 fn takeSentinelOrDiscardOverlyLongLine(reader: *std.fs.File.Reader) ![]u8 {

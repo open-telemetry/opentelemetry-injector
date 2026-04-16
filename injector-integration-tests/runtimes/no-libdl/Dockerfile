@@ -6,8 +6,7 @@
 # app is a plain C binary compiled without -ldl, so libdl.so never appears in
 # /proc/self/maps. This combination reproduces the libc-detection failure seen
 # on RHEL 8 and similar pre-glibc-2.34 systems when a binary does not link libdl.
-# TODO: pin to a specific digest once the test is green.
-ARG base_image_run="debian:bullseye-slim"
+ARG base_image_run="debian:bullseye-slim@sha256:0083feb8da4f624e3a0245e7752af2517d4b81d8b8db50c725644672a132a31b"
 FROM ${base_image_run}
 
 ARG injector_binary

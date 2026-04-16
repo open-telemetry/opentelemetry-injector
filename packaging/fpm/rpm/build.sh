@@ -50,7 +50,8 @@ fpm -s dir -t rpm -n "$PKG_NAME" -v "$VERSION" -f -p "$OUTPUT_DIR" \
     --before-remove "$PREUNINSTALL_PATH" \
     --depends sed \
     --depends grep \
-    --config-files "$CONFIG_DIR_INSTALL_PATH" \
+    --config-files "$CONFIG_INJECTOR_INSTALL_PATH" \
+    --config-files "$CONFIG_CONF_D_INSTALL_PATH" \
     "$buildroot/"=/
 
 if [[ "${LIST_PACKAGE_CONTENTS_AFTER_BUILD:-}" == "true" ]]; then

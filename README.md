@@ -45,7 +45,7 @@ This method requires `root` privileges.
    ```
    LD_PRELOAD=/usr/lib/opentelemetry/libotelinject.so node myapp.js
    ```
-2. The default configuration file `/etc/opentelemetry/otelinject.conf` includes the required settings, i.e. the paths to
+2. The default configuration file `/etc/opentelemetry/injector/injector.conf` includes the required settings, i.e. the paths to
    the respective auto-instrumentation agents per runtime:
    ```
    dotnet_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/dotnet
@@ -94,7 +94,7 @@ This method requires `root` privileges.
 
 4. Reboot the system or restart the applications/services for any changes to take effect. The `libotelinject.so` shared
    object library will then be preloaded for all subsequent processes and inject the environment variables from the
-   `/etc/opentelemetry/otelinject.conf` configuration files for the process types you've configured (Java, .Net or Node.js).
+   `/etc/opentelemetry/injector/injector.conf` configuration files for the process types you've configured (Java, .Net or Node.js).
 
 When providing your own instrumentation files (for example via environment variables like `DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`) the following directory structure is expected:
 - `JVM_AUTO_INSTRUMENTATION_AGENT_PATH`: This path must point to the Java auto-instrumentation agent JAR file `opentelemetry-javaagent.jar`.
@@ -123,7 +123,7 @@ When providing your own instrumentation files (for example via environment varia
        - `musl/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll`
 
 Note that the defaults provided by the RPM and Debian packages take care of all of that, and it is not necessary to
-edit `/etc/opentelemetry/otelinject.conf` or set any of the above environment variables.
+edit `/etc/opentelemetry/injector/injector.conf` or set any of the above environment variables.
 
 Check the following for details about the auto-instrumentation agents and further configuration options:
 - [Java](https://opentelemetry.io/docs/zero-code/java/agent/configuration/)
@@ -206,7 +206,7 @@ Python auto-instrumentation is currently disabled by default and no default Pyth
 included in the system packages.
 
 Python instrumentation needs to be enabled explicitly by providing a Python auto-instrumentation agent and a
-custom otelinject.conf file with python_auto_instrumentation_agent_path_prefix set or by setting 
+custom injector.conf file with python_auto_instrumentation_agent_path_prefix set or by setting
 PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX.
 The configured path is expected to contain two directories, `glibc` and `musl`.
 Depending on the libc flavor that the injector detects at startup, either the `glibc` or the `musl` directory will be
@@ -277,7 +277,7 @@ must satisfy **both** to be instrumented. We'll instrument programs that:
 
 The example above illustrates how we avoid telemetry from unwanted applications or
 injecting auto-instrumentation to programs that are already instrumented. If you have a
-standard way of deploying all of your applications, you can create a default `otelinject.conf`
+standard way of deploying all of your applications, you can create a default `injector.conf`
 file that will ensure you get only the telemetry you want.
 
 Multiple lines of the same setting are combined as a union (OR). This means that if you define multiple

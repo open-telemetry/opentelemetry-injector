@@ -23,7 +23,7 @@ RUN dotnet publish --no-restore -o /app
 # final stage/image
 FROM ${base_image_run}
 
-RUN mkdir -p /etc/opentelemetry && chmod 777 /etc/opentelemetry
+RUN mkdir -p /etc/opentelemetry/injector/conf.d && chmod -R 777 /etc/opentelemetry
 
 WORKDIR /usr/src/otel/injector/
 COPY --from=build /no-op-startup-hook no-op-startup-hook
@@ -44,8 +44,9 @@ fi
 COPY injector-integration-tests/scripts/run-tests-within-container.sh scripts/
 COPY injector-integration-tests/scripts/create-*.sh scripts/
 COPY injector-integration-tests/tests/*.tests tests/
-COPY injector-integration-tests/common/otelinject.conf otelinject.conf
-COPY injector-integration-tests/common/otelinject.custom-location.conf /custom/config/path/otelinject.conf
+COPY injector-integration-tests/common/conf.d/ /etc/opentelemetry/injector/conf.d/
+COPY injector-integration-tests/common/injector.conf injector.conf
+COPY injector-integration-tests/common/injector.custom-location.conf /custom/config/path/injector.conf
 COPY injector-integration-tests/common/default_auto_instrumentation_env.conf default_auto_instrumentation_env.conf
 
 RUN ${create_sdk_dummy_files_script}

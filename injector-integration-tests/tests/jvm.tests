@@ -14,7 +14,7 @@ run_test_case \
   "JAVA_TOOL_OPTIONS=-Dsome-property=some-value"
 
 # For test cases with the "default configuration file" substring in their label, run-tests-within-container.sh
-# will provide a configuration file in the expected location (/etc/opentelemetry/otelinject.conf).
+# will provide a configuration file in the expected location (/etc/opentelemetry/injector/injector.conf).
 run_test_case \
   "uses the Java agent path from the default configuration file" \
   "app" \

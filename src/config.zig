@@ -10,11 +10,17 @@ const proc_self_environ_parser = @import("proc_self_environ_parser.zig");
 
 const testing = std.testing;
 
-const default_config_file_path = "/etc/opentelemetry/otelinject.conf";
+const default_config_file_path = "/etc/opentelemetry/injector/injector.conf";
 const config_file_path_env_var = "OTEL_INJECTOR_CONFIG_FILE";
 const max_line_length = 8192;
 const empty_string = @constCast("");
 const otel_env_var_prefix = "OTEL_";
+
+// Agent paths are empty by default; they are enabled by installing conf.d drop-in files from the
+// respective language packages (e.g., opentelemetry-java-autoinstrumentation installs java.conf).
+const default_all_auto_instrumentation_agents_env_path = "/etc/opentelemetry/injector/default_env.conf";
+const default_config_dir_path = "/etc/opentelemetry/injector/conf.d";
+const config_dir_path_env_var = "OTEL_INJECTOR_CONFIG_DIR";
 
 const dotnet_path_prefix_key = "dotnet_auto_instrumentation_agent_path_prefix";
 const jvm_path_key = "jvm_auto_instrumentation_agent_path";
@@ -82,14 +88,13 @@ pub const InjectorConfiguration = struct {
 
 const ConfigApplier = fn (gpa: std.mem.Allocator, key: []const u8, value: []u8, file_path: []const u8, configuration: *InjectorConfiguration) void;
 
-const default_dotnet_auto_instrumentation_agent_path_prefix = "/usr/lib/opentelemetry/dotnet";
-const default_jvm_auto_instrumentation_agent_path = "/usr/lib/opentelemetry/jvm/javaagent.jar";
-const default_nodejs_auto_instrumentation_agent_path = "/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js";
+const default_dotnet_auto_instrumentation_agent_path_prefix = "";
+const default_jvm_auto_instrumentation_agent_path = "";
+const default_nodejs_auto_instrumentation_agent_path = "";
+
 // Python auto-instrumentation is opt-in for now, hence the default value for the Python path is the empty string --
 // an empty path effectively disables auto-instrumentation for the runtime in question.
 const default_python_auto_instrumentation_agent_path = "";
-
-const default_all_auto_instrumentation_agents_env_path = "/etc/opentelemetry/default_auto_instrumentation_env.conf";
 
 var cached_configuration_optional: ?InjectorConfiguration = null;
 
@@ -97,7 +102,7 @@ var cached_configuration_optional: ?InjectorConfiguration = null;
 /// read once per process and the result will be cached for subsequent calls.
 ///
 /// The configuration will be read from the path denoted by the environment variable OTEL_INJECTOR_CONFIG_FILE, or from
-/// the default location /etc/opentelemetry/otelinject.conf if this environment variable is unset or empty.
+/// the default location /etc/opentelemetry/injector/injector.conf if this environment variable is unset or empty.
 /// If the file does not exist or cannot be opened, readConfiguration continues with default values.
 ///
 /// After reading the configuration file, the configuration will be merged with values read from environment variables
@@ -156,6 +161,7 @@ fn readConfigurationFromPath(allocator: std.mem.Allocator, cfg_file_path: []cons
 
     var preliminary_configuration = try createDefaultConfiguration(arena_allocator);
     readConfigurationFile(arena_allocator, cfg_file_path, &preliminary_configuration);
+    readConfigurationDirectory(arena_allocator, &preliminary_configuration);
     readConfigurationFromEnvironment(arena_allocator, &preliminary_configuration, getenv_fn);
     readAllAgentsEnvFile(
         arena_allocator,
@@ -576,6 +582,57 @@ fn readConfigurationFile(arena_allocator: std.mem.Allocator, cfg_file_path: []co
         applyKeyValueToGeneralOptions,
     );
     print.printDebug("successfully read configuration file from {s}.", .{cfg_file_path});
+}
+
+/// Reads configuration drop-in files from the conf.d directory. Each installed language package
+/// (e.g., opentelemetry-java-autoinstrumentation) places its configuration in this directory.
+/// Files are read in alphabetical order; later files can override earlier ones.
+fn readConfigurationDirectory(arena_allocator: std.mem.Allocator, configuration: *InjectorConfiguration) void {
+    var config_dir_path: []const u8 = default_config_dir_path;
+    if (std.posix.getenv(config_dir_path_env_var)) |value| {
+        config_dir_path = std.mem.trim(u8, value, " \t\r\n");
+        if (config_dir_path.len == 0) {
+            config_dir_path = default_config_dir_path;
+        }
+    }
+
+    print.printDebug("reading configuration drop-in files from {s}.", .{config_dir_path});
+
+    var dir = std.fs.cwd().openDir(config_dir_path, .{ .iterate = true }) catch |err| {
+        print.printDebug(
+            "The configuration directory {s} does not exist or cannot be opened. Error: {t}",
+            .{ config_dir_path, err },
+        );
+        return;
+    };
+    defer dir.close();
+
+    // Collect and sort file names to ensure deterministic ordering
+    var file_names: std.ArrayList([]const u8) = std.ArrayList([]const u8).initCapacity(arena_allocator, 16) catch {
+        print.printDebug("Failed to allocate memory for conf.d file list", .{});
+        return;
+    };
+    var dir_iter = dir.iterate();
+    while (dir_iter.next() catch null) |entry| {
+        if (entry.kind != .file) continue;
+        if (!std.mem.endsWith(u8, entry.name, ".conf")) continue;
+        const name_copy = std.fmt.allocPrint(arena_allocator, "{s}", .{entry.name}) catch continue;
+        file_names.append(arena_allocator, name_copy) catch continue;
+    }
+
+    // Sort alphabetically
+    std.mem.sort([]const u8, file_names.items, {}, struct {
+        fn lessThan(_: void, a: []const u8, b: []const u8) bool {
+            return std.mem.order(u8, a, b) == .lt;
+        }
+    }.lessThan);
+
+    // Read each file
+    for (file_names.items) |file_name| {
+        const full_path = std.fmt.allocPrint(arena_allocator, "{s}/{s}", .{ config_dir_path, file_name }) catch continue;
+        print.printDebug("reading configuration drop-in file: {s}", .{full_path});
+        readConfigurationFile(arena_allocator, full_path, configuration);
+    }
 }
 
 fn applyKeyValueToAllAgentsEnv(_: std.mem.Allocator, key: []const u8, value: []u8, _file_path: []const u8, _configuration: *InjectorConfiguration) void {
@@ -1462,6 +1519,91 @@ test "readConfigurationFromEnvironment: if OTEL_INJECTOR_AUTO_INSTRUMENTATION_DI
     try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
     try test_util.expectWithMessage(!configuration.nodejs_instrumentation_disabled, "!configuration.nodejs_instrumentation_disabled");
     try test_util.expectWithMessage(!configuration.python_instrumentation_disabled, "!configuration.python_instrumentation_disabled");
+}
+
+test "readConfigurationDirectory: directory does not exist" {
+    const allocator = testing.allocator;
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{
+        "OTEL_INJECTOR_CONFIG_DIR=/does/not/exist",
+    });
+    defer test_util.resetStdCEnviron(original_environ);
+
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    readConfigurationDirectory(arena_allocator, &configuration);
+
+    // Configuration should remain at defaults when the directory does not exist.
+    try testing.expectEqualStrings(
+        default_dotnet_auto_instrumentation_agent_path_prefix,
+        configuration.dotnet_auto_instrumentation_agent_path_prefix,
+    );
+    try testing.expectEqualStrings(
+        default_jvm_auto_instrumentation_agent_path,
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+    try testing.expectEqualStrings(
+        default_nodejs_auto_instrumentation_agent_path,
+        configuration.nodejs_auto_instrumentation_agent_path,
+    );
+}
+
+test "readConfigurationDirectory: reads .conf files in alphabetical order and ignores non-.conf files" {
+    const allocator = testing.allocator;
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{
+        "OTEL_INJECTOR_CONFIG_DIR=unit-test-assets/config/conf.d",
+    });
+    defer test_util.resetStdCEnviron(original_environ);
+
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    readConfigurationDirectory(arena_allocator, &configuration);
+
+    // 01-java.conf sets the JVM path
+    try testing.expectEqualStrings(
+        "/conf.d/path/to/jvm/javaagent.jar",
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+    // 02-nodejs.conf sets the Node.js path
+    try testing.expectEqualStrings(
+        "/conf.d/path/to/nodejs/register.js",
+        configuration.nodejs_auto_instrumentation_agent_path,
+    );
+    // not-a-conf-file.txt should be ignored, so the dotnet path should remain at the default.
+    try testing.expectEqualStrings(
+        default_dotnet_auto_instrumentation_agent_path_prefix,
+        configuration.dotnet_auto_instrumentation_agent_path_prefix,
+    );
+}
+
+test "readConfigurationDirectory: conf.d files override values from the main configuration file" {
+    const allocator = testing.allocator;
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{
+        "OTEL_INJECTOR_CONFIG_DIR=unit-test-assets/config/conf.d",
+    });
+    defer test_util.resetStdCEnviron(original_environ);
+
+    // First set a JVM path from the main config, then apply conf.d which should override it.
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    configuration.jvm_auto_instrumentation_agent_path = @constCast("/original/jvm/path.jar");
+    readConfigurationDirectory(arena_allocator, &configuration);
+
+    try testing.expectEqualStrings(
+        "/conf.d/path/to/jvm/javaagent.jar",
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
 }
 
 fn copyMap(allocator: std.mem.Allocator, source: std.StringHashMap([]u8)) !std.StringHashMap([]u8) {

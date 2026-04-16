@@ -1,0 +1,25 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+# Regression tests for libc detection on glibc < 2.34 systems without libdl.
+#
+# On glibc < 2.34 (e.g. RHEL 8 / glibc 2.28, Debian Bullseye / glibc 2.31),
+# dlsym is exported by libdl.so, not by libc.so itself.  The injector's second
+# pass over /proc/self/maps searches every mapped shared object for dlsym; if
+# the process did not link libdl.so, that search exhausts all candidates and
+# returns CannotFindLibcMemoryRange.
+#
+# These tests use a plain C binary compiled without -ldl, which is the
+# generalisation of the concrete failure observed for /usr/bin/grep on RHEL 8.
+
+# This test is only meaningful on glibc; musl uses a different detection path.
+if [ "${LIBC_FLAVOR:-}" != "glibc" ]; then
+  echo "Skipping no-libdl tests: these tests are glibc-specific (LIBC_FLAVOR=${LIBC_FLAVOR:-unset})"
+  return 0 2>/dev/null || true
+fi
+
+run_test_case \
+  "glibc without libdl: injects OTEL_RESOURCE_ATTRIBUTES" \
+  "app" \
+  "./printenv OTEL_RESOURCE_ATTRIBUTES" \
+  "OTEL_RESOURCE_ATTRIBUTES: k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app"

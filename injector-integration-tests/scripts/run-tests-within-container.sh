@@ -134,8 +134,8 @@ run_test_case() {
   match=$(expr "$test_case_label" : ".*include paths filter.*")
   set -e
   if [ "$match" -gt 0 ]; then
-    echo "providing include paths filter configuration file at /etc/opentelemetry/otelinject.conf for test case \"$test_case_label\""
-    cp otelinject.exclude-noenviron.conf /etc/opentelemetry/otelinject.conf
+    echo "providing include paths filter configuration file at /etc/opentelemetry/injector/injector.conf for test case \"$test_case_label\""
+    cp injector.exclude-noenviron.conf /etc/opentelemetry/injector/injector.conf
   fi
 
   set +e

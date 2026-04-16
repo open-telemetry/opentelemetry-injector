@@ -4,6 +4,15 @@
 
 <!-- next version -->
 
+## v0.6.0
+
+### 🧰 Bug fixes 🧰
+
+- `injector`: Evaluate include/exclude process filters before attempting libc detection, eliminating spurious "failed to identify libc" warnings for filtered-out processes. (#311)
+- `injector`: Fix bug where `include_paths` was ignored when `include_with_arguments` was not configured. Each non-empty include/exclude setting now adds an independent condition (AND across settings, OR within entries). (#312)
+
+<!-- previous-version -->
+
 ## v0.5.0
 
 ### 💡 Enhancements 💡

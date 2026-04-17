@@ -1000,12 +1000,12 @@ fn tryToFindSymbolsInMemoryRange(
     start: usize,
     end: usize,
 ) !types.LibCInfo {
-    const linker = elf.ElfDynLib.open(start, end) catch |err| {
+    const elf_lib = elf.ElfDynLib.open(start, end) catch |err| {
         print.printWarn("cannot open libc mapped range {x}-{x} as ELF library: {}", .{ start, end, err });
         return error.CannotOpenLibc;
     };
 
-    if (linker.lookup(types.DlSymFn, dlsym_function_name)) |dlsym_fn| {
+    if (elf_lib.lookup(types.DlSymFn, dlsym_function_name)) |dlsym_fn| {
         // Preferred path: use dlsym with handle=null (RTLD_DEFAULT) to resolve symbols
         // across all loaded libraries. Available on glibc >= 2.34 (where dlsym is in
         // libc.so itself) and on any binary that links libdl.so.
@@ -1033,9 +1033,9 @@ fn tryToFindSymbolsInMemoryRange(
     // will find them here when it reaches the libc.so range. Libraries that do not
     // export these symbols (libpthread, ld-linux, etc.) return an error and the second
     // pass simply moves on to the next candidate.
-    const setenv_fn_ptr = linker.lookup(types.SetenvFnPtr, setenv_function_name) orelse
+    const setenv_fn_ptr = elf_lib.lookup(types.SetenvFnPtr, setenv_function_name) orelse
         return error.CannotFindSetenvSymbol;
-    const environ_ptr = linker.lookup(types.EnvironPtr, environ_symbol_name) orelse
+    const environ_ptr = elf_lib.lookup(types.EnvironPtr, environ_symbol_name) orelse
         return error.CannotFindEnvironSymbol;
 
     return .{

@@ -33,7 +33,6 @@ const LibCError = error{
     CannotFindAtBase,
     CannotFindElfDynamicSymbolTableOffset,
     CannotFindElfDynamicSymbolTableSize,
-    CannotFindDlSymSymbol,
     CannotFindEnvironSymbol,
     CannotFindLibcMemoryRange,
     CannotFindSetenvSymbol,
@@ -992,29 +991,52 @@ test "pathLooksLikeSharedObject" {
     try test_util.expectWithMessage(!pathLooksLikeSharedObject("/some/path/libotelinject_arm64.so"), "!pathLooksLikeSharedObject(\"/some/path/libotelinject_arm64.so\")");
 }
 
-/// Reads the given memory range via elf.ElfDynLib.open and tries to lookup the dlsym function via elf.ElfDynLib#lookup.
-/// If that succeeds, proceeds to try to lookup the setenv function and the __environ symbol using dlsym.
+/// Reads the given memory range via elf.ElfDynLib.open and tries to look up setenv and __environ.
+/// Preferred path: find dlsym in the ELF and use it with handle=null (RTLD_DEFAULT) to resolve symbols across all
+/// loaded libraries. Fallback path for glibc < 2.34: dlsym lives in libdl.so, not libc.so, so if it is not found,
+/// look up setenv and __environ directly from the ELF symbol table instead.
 fn tryToFindSymbolsInMemoryRange(
     libc_name_and_flavor: LibCNameAndFlavor,
     start: usize,
     end: usize,
 ) !types.LibCInfo {
-    const linker = elf.ElfDynLib.open(start, end) catch |err| {
+    const elf_lib = elf.ElfDynLib.open(start, end) catch |err| {
         print.printWarn("cannot open libc mapped range {x}-{x} as ELF library: {}", .{ start, end, err });
         return error.CannotOpenLibc;
     };
 
-    const dlsym_fn =
-        linker.lookup(types.DlSymFn, dlsym_function_name) orelse return error.CannotFindDlSymSymbol;
+    if (elf_lib.lookup(types.DlSymFn, dlsym_function_name)) |dlsym_fn| {
+        // Preferred path: use dlsym with handle=null (RTLD_DEFAULT) to resolve symbols
+        // across all loaded libraries. Available on glibc >= 2.34 (where dlsym is in
+        // libc.so itself) and on any binary that links libdl.so.
+        const maybe_setenv_fn = dlsym_fn(null, setenv_function_name);
+        const maybe_environ_ptr = dlsym_fn(null, environ_symbol_name);
 
-    // look up the symbols we need from the current program (handle = null)
-    const maybe_setenv_fn = dlsym_fn(null, setenv_function_name);
-    const maybe_environ_ptr = dlsym_fn(null, environ_symbol_name);
+        const setenv_fn_ptr: types.SetenvFnPtr =
+            @ptrCast(@alignCast(maybe_setenv_fn orelse return error.CannotFindSetenvSymbol));
+        const environ_ptr: types.EnvironPtr =
+            @ptrCast(@alignCast(maybe_environ_ptr orelse return error.CannotFindEnvironSymbol));
 
-    const setenv_fn_ptr: types.SetenvFnPtr =
-        @ptrCast(@alignCast(maybe_setenv_fn orelse return error.CannotFindSetenvSymbol));
-    const environ_ptr: types.EnvironPtr =
-        @ptrCast(@alignCast(maybe_environ_ptr orelse return error.CannotFindEnvironSymbol));
+        return .{
+            .flavor = libc_name_and_flavor.flavor,
+            .name = libc_name_and_flavor.name,
+            .environ_ptr = environ_ptr,
+            .setenv_fn_ptr = setenv_fn_ptr,
+        };
+    }
+
+    // Fallback path for glibc < 2.34: on those versions dlsym is exported by libdl.so
+    // rather than libc.so. A binary that does not link libdl.so will not have
+    // libdl.so in its /proc/self/maps, so dlsym is unreachable via the second pass.
+    // Look up setenv and __environ directly from this library's ELF symbol table.
+    // Both symbols are exported by libc.so on all glibc versions, so the second pass
+    // will find them here when it reaches the libc.so range. Libraries that do not
+    // export these symbols (libpthread, ld-linux, etc.) return an error and the second
+    // pass simply moves on to the next candidate.
+    const setenv_fn_ptr = elf_lib.lookup(types.SetenvFnPtr, setenv_function_name) orelse
+        return error.CannotFindSetenvSymbol;
+    const environ_ptr = elf_lib.lookup(types.EnvironPtr, environ_symbol_name) orelse
+        return error.CannotFindEnvironSymbol;
 
     return .{
         .flavor = libc_name_and_flavor.flavor,
@@ -1041,7 +1063,7 @@ fn mockFindSymbolsInMemoryRange(
             .setenv_fn_ptr = @ptrFromInt(end),
         };
     }
-    return error.CannotFindDlSymSymbol;
+    return error.CannotFindSetenvSymbol;
 }
 
 fn takeSentinelOrDiscardOverlyLongLine(reader: *std.fs.File.Reader) ![]u8 {

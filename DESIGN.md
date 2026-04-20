@@ -74,6 +74,11 @@ The approach taken by the OpenTelemetry injector is as follows:
       If this lookup is successful, we can use it to actually call the `dlsym` function (without declaring a direct
       dependency on it).
 * Finally, use `dlsym` to find the location of the `setenv` and the `__environ` symbol.
+  On glibc < 2.34 (e.g. RHEL 8, Debian Bullseye), `dlsym` is provided by `libdl.so` rather than `libc.so` itself.
+  If the binary does not link `libdl.so`, `dlsym` will not be found in the libc memory range.
+  In that case, the injector falls back to looking up `setenv` and `__environ` directly from the ELF symbol table of
+  the libc memory range, which works because both symbols are always exported directly by `libc.so` on all glibc
+  versions.
 * Use the `__environ` symbol to read the existing environment variables for the process.
 * Use `setenv` to set or modify the required environment variables (`NODE_OPTIONS`, `JAVA_TOOL_OPTIONS`,
   `OTEL_RESOURCE_ATTRIBUTES` etc.)
@@ -208,30 +213,14 @@ read via `getenv` by some runtimes, as explained above)?
 That would give us all the benefits of the `getenv` override approach (less environment variable pollution), without any
 of the drawbacks described in the section [export `getenv`](#export-getenv).
 
-There are two issues that make this particular strategy prohibitive:
-
-1. On most modern distributions, the actual libc file (say, `libc.so.6`) contains `getenv`, `setenv` etc. and also
-   `dlsym`.
-   However, on older distributions (Debian bullseye being one example), `dlsym` is actually provided by a separate file.
-   Nearly all of libc's functions are provided by `libc-2.31.so` or similar (which is symlinked as `libc.so.6`), but
-   that file does not contain the symbols `dlsym`, `dlopen` etc. Instead, these symbols are provided by `libdl-2.31.so`.
-   Most interesting binaries will link both, libc and libdl, but of course binaries can also only link libc, if they
-   do not depend on libdl at all.
-   The best thing the injector could do in this case is to stand down.
-   It will not crash the executable, since there is no linking error.
-   But since it wasn't able to find `dlsym`, it can also not lookup `__environ`, hence it has no knowledge of the
-   current environment, hence its `getenv` override will not be able to return any values for any environment variable.
-   Effectively, this would start the executable with an empty environment, which is not acceptable.
-   This could potentially be worked around by looking up `__environ` directly without using `dlsym`, or by falling back
-   to backfilling the environment by reading `/proc/self/environ`.
-   However, the next issue is even more severe.
-2. There can be shared objects that look up environment variables very early in the startup process, even before the
-   injector had a chance to run its initialization code.
-   A prominent example is OpenSSL, which is used by many runtimes and applications.
-   The OpenSSL code, when run on arm64 CPUS, reads `OPENSSL_armcap` (a capabilities bitmaks) before the injector's init
-   code runs, that is, before it even had the chance to find the `__environ pointer` and read the process environment.
-   This would lead to the injector reporting `OPENSSL_armcap=null` to OpenSSL, even if it is actually set.
-   Obviously, this is also not acceptable, hence exporting `getenv` is not a viable approach.
+There is an issue that makes this particular strategy prohibitive:
+there can be shared libraries that look up environment variables very early in the startup process, even before the
+injector had a chance to run its initialization code.
+A prominent example is OpenSSL, which is used by many runtimes and applications.
+The OpenSSL code, when run on arm64 CPUS, reads `OPENSSL_armcap` (a capabilities bitmask) before the injector's init
+code runs, that is, before it even had the chance to find the `__environ` pointer and read the process environment.
+This would lead to the injector reporting `OPENSSL_armcap=null` to OpenSSL, even if it is actually set.
+Obviously, this is also not acceptable, hence exporting `getenv` is not a viable approach.
 
 In the end, avoiding the risk of breaking assumptions about the environment is deemed much more critical than not adding
 irrelevant environment variables to the environment of all processes, which is effectively more an aesthetics concern.

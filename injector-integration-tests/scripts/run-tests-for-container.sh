@@ -46,6 +46,9 @@ fi
 if [[ "$TEST_SET" = "python.tests" ]]; then
   runtime="python"
 fi
+if [[ "$TEST_SET" = "no-libdl.tests" ]]; then
+  runtime="no-libdl"
+fi
 
 # We also use the Node.js test app for non-runtime specific tests (e.g. injector-integration-tests/tests/default.tests
 # etc.), so this is the default Dockerfile.
@@ -91,6 +94,12 @@ case "$runtime" in
     base_image_run=golang:1.25.5-trixie
     # We do not provide a different base image depending on the libc flavor, the point of this test scenario is to test
     # an app that depends on no libc whatsoever, so the test is the same for LIBC=musl and LIBC=glibc.
+    ;;
+  "no-libdl")
+    dockerfile_name="injector-integration-tests/runtimes/no-libdl/Dockerfile"
+    base_image_run=debian:bullseye-slim
+    # We do not provide a different base image depending on the libc flavor: the tests themselves skip for LIBC=musl
+    # because musl uses a different libc-detection path that is not affected by this bug.
     ;;
   *)
     echo "Unknown runtime: $runtime"
@@ -155,8 +164,8 @@ docker run $docker_run_extra_options \
   --env LIBC_FLAVOR="$LIBC" \
   --env DOTNET_ARCH="$dotnet_arch" \
   --env TEST_SET="$TEST_SET" \
-  --env TEST_CASES="$TEST_CASES" \
-  --env TEST_CASES_CONTAINING="$TEST_CASES_CONTAINING" \
+  --env TEST_CASES="${TEST_CASES:-}" \
+  --env TEST_CASES_CONTAINING="${TEST_CASES_CONTAINING:-}" \
   --env VERBOSE="${VERBOSE:-}" \
   "$image_name" \
   $docker_run_extra_arguments

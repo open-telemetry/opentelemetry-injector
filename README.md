@@ -136,7 +136,7 @@ Here is an overview of the modifications that the injector will apply:
 
 * It sets (or appends to) `NODE_OPTIONS` to activate the Node.js instrumentation agent.
 * It adds a `-javaagent` flag to `JAVA_TOOL_OPTIONS` to activate the Java OTel SDK.
-* It sets the required environment variables for activating the OpenTelemetry SDK for .NET:
+* It conditionally sets the required environment variables for activating the OpenTelemetry SDK for .NET:
     * `CORECLR_ENABLE_PROFILING`
     * `CORECLR_PROFILER`
     * `CORECLR_PROFILER_PATH`
@@ -147,6 +147,10 @@ Here is an overview of the modifications that the injector will apply:
     * Note that the injector will not append to existing environment variables but overwrite them unconditionally if
       they are already set.
       In contrast to other runtimes, .NET does not support adding multiple agents.
+    * To reduce the risk of double-instrumentation, the injector inspects the adjacent `*.deps.json` file of the
+      target application when it is available.
+    * The injector stands down if that `.deps.json` file already references `OpenTelemetry*` packages.
+    * If the `.deps.json` file is missing, unreadable, or malformed, the injector proceeds with .NET injection.
 * It inspects specific existing environment variables and populates `OTEL_RESOURCE_ATTRIBUTES` with additional resource
   attributes. These environment variables need to be set externally (for example by a Kubernetes operator with a mutating
   webhook on the pod spec template of the workload). If `OTEL_RESOURCE_ATTRIBUTES` is already set, the additional

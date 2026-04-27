@@ -4,11 +4,12 @@
 const builtin = @import("builtin");
 const std = @import("std");
 
+const args_parser = @import("args_parser.zig");
 const config = @import("config.zig");
 const libc = @import("libc.zig");
 const print = @import("print.zig");
-const types = @import("types.zig");
 const test_util = @import("test_util.zig");
+const types = @import("types.zig");
 
 const testing = std.testing;
 
@@ -33,6 +34,9 @@ pub const DotnetValues = struct {
 const coreclr_enable_profiling_value = "1";
 // See https://opentelemetry.io/docs/zero-code/dotnet/configuration/#net-clr-profiler.
 const coreclr_profiler_value = "{918728DD-259F-4A6A-AC2B-B85E1B658318}";
+const dotnet_host_name = "dotnet";
+const max_dotnet_metadata_file_size = 1024 * 1024;
+const opentelemetry_dependency_prefix = "OpenTelemetry";
 
 pub const CachedDotnetValues = struct {
     values: ?DotnetValues,
@@ -43,6 +47,14 @@ const DotnetError = error{
     UnknownLibCFlavor,
     UnsupportedCpuArchitecture,
     OutOfMemory,
+};
+
+const DotnetMetadataPaths = struct {
+    deps_path: []u8,
+
+    fn freeAll(self: DotnetMetadataPaths, allocator: std.mem.Allocator) void {
+        allocator.free(self.deps_path);
+    }
 };
 
 pub const coreclr_enable_profiling_env_var_name = "CORECLR_ENABLE_PROFILING";
@@ -99,6 +111,14 @@ fn doGetDotnetValues(gpa: std.mem.Allocator, dotnet_path_prefix: []u8, dotnet_in
         return cached_dotnet_values.values;
     }
 
+    if (!shouldInjectDotnet(gpa)) {
+        cached_dotnet_values = .{
+            .values = null,
+            .done = true,
+        };
+        return null;
+    }
+
     if (libc_flavor) |libc_f| {
         const dotnet_values = determineDotnetValues(
             gpa,
@@ -144,6 +164,154 @@ fn doGetDotnetValues(gpa: std.mem.Allocator, dotnet_path_prefix: []u8, dotnet_in
     }
 
     unreachable;
+}
+
+fn shouldInjectDotnet(allocator: std.mem.Allocator) bool {
+    const cmdline_args = args_parser.cmdLineForPID(allocator) catch |err| {
+        print.printDebug("Proceeding with the injection of the .NET OpenTelemetry instrumentation. Could not read the process command line: {}", .{err});
+        return true;
+    };
+    defer {
+        for (cmdline_args) |arg| allocator.free(arg);
+        allocator.free(cmdline_args);
+    }
+
+    const self_exe_path = std.fs.selfExePathAlloc(allocator) catch |err| {
+        print.printDebug("Proceeding with the injection of the .NET OpenTelemetry instrumentation. Could not resolve the executable path: {}", .{err});
+        return true;
+    };
+    defer allocator.free(self_exe_path);
+
+    const maybe_app_path = resolveManagedApplicationPath(allocator, cmdline_args, self_exe_path) catch |err| {
+        print.printDebug("Proceeding with the injection of the .NET OpenTelemetry instrumentation. Could not determine the managed application path: {}", .{err});
+        return true;
+    };
+    const app_path = maybe_app_path orelse {
+        print.printDebug("Proceeding with the injection of the .NET OpenTelemetry instrumentation. The process does not look like a recognized .NET application startup.", .{});
+        return true;
+    };
+    defer allocator.free(app_path);
+
+    const metadata_paths = createDotnetMetadataPaths(allocator, app_path) catch |err| {
+        print.printDebug("Proceeding with the injection of the .NET OpenTelemetry instrumentation. Could not determine the application metadata paths: {}", .{err});
+        return true;
+    };
+    defer metadata_paths.freeAll(allocator);
+
+    const deps_content = readSmallTextFileAlloc(allocator, metadata_paths.deps_path) catch |err| {
+        print.printDebug("Proceeding with the injection of the .NET OpenTelemetry instrumentation. Could not read {s}: {}", .{ metadata_paths.deps_path, err });
+        return true;
+    };
+    defer allocator.free(deps_content);
+
+    if (depsJsonContainsOpenTelemetryDependency(allocator, deps_content)) |contains_opentelemetry| {
+        if (contains_opentelemetry) {
+            print.printInfo("Skipping the injection of the .NET OpenTelemetry instrumentation because {s} already references OpenTelemetry packages.", .{metadata_paths.deps_path});
+            return false;
+        }
+    } else |err| {
+        print.printDebug("Proceeding with the injection of the .NET OpenTelemetry instrumentation. Could not parse {s} safely: {}", .{ metadata_paths.deps_path, err });
+        return true;
+    }
+
+    return true;
+}
+
+fn resolveManagedApplicationPath(
+    allocator: std.mem.Allocator,
+    cmdline_args: []const []const u8,
+    self_exe_path: []const u8,
+) !?[]u8 {
+    if (cmdline_args.len == 0) {
+        return null;
+    }
+
+    if (std.mem.eql(u8, std.fs.path.basename(cmdline_args[0]), dotnet_host_name)) {
+        for (cmdline_args[1..]) |arg| {
+            if (arg.len == 0 or arg[0] == '-') {
+                continue;
+            }
+            if (std.mem.endsWith(u8, arg, ".dll") or std.mem.endsWith(u8, arg, ".exe")) {
+                return try allocator.dupe(u8, arg);
+            }
+        }
+        return null;
+    }
+
+    return try allocator.dupe(u8, self_exe_path);
+}
+
+fn createDotnetMetadataPaths(allocator: std.mem.Allocator, app_path: []const u8) !DotnetMetadataPaths {
+    const app_base_path =
+        if (std.mem.endsWith(u8, app_path, ".dll") or std.mem.endsWith(u8, app_path, ".exe"))
+            app_path[0 .. app_path.len - 4]
+        else
+            app_path;
+
+    return .{
+        .deps_path = try std.fmt.allocPrint(allocator, "{s}.deps.json", .{app_base_path}),
+    };
+}
+
+fn readSmallTextFileAlloc(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    const file =
+        if (std.fs.path.isAbsolute(path))
+            try std.fs.openFileAbsolute(path, .{})
+        else
+            try std.fs.cwd().openFile(path, .{});
+    defer file.close();
+
+    return file.readToEndAlloc(allocator, max_dotnet_metadata_file_size);
+}
+
+fn depsJsonContainsOpenTelemetryDependency(allocator: std.mem.Allocator, content: []const u8) !bool {
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, content, .{});
+    defer parsed.deinit();
+
+    return jsonContainsOpenTelemetryDependency(parsed.value);
+}
+
+fn jsonContainsOpenTelemetryDependency(value: std.json.Value) bool {
+    switch (value) {
+        .object => |object| {
+            var iterator = object.iterator();
+            while (iterator.next()) |entry| {
+                if (jsonObjectKeyLooksLikeOpenTelemetryDependency(entry.key_ptr.*)) {
+                    return true;
+                }
+                if (jsonContainsOpenTelemetryDependency(entry.value_ptr.*)) {
+                    return true;
+                }
+            }
+            return false;
+        },
+        .array => |array| {
+            for (array.items) |item| {
+                if (jsonContainsOpenTelemetryDependency(item)) {
+                    return true;
+                }
+            }
+            return false;
+        },
+        else => return false,
+    }
+}
+
+fn jsonObjectKeyLooksLikeOpenTelemetryDependency(key: []const u8) bool {
+    const dependency_name =
+        if (std.mem.indexOfScalar(u8, key, '/')) |slash_index|
+            key[0..slash_index]
+        else
+            key;
+
+    return std.mem.startsWith(u8, dependency_name, opentelemetry_dependency_prefix);
+}
+
+fn getJsonObject(value: std.json.Value) ?std.json.ObjectMap {
+    return switch (value) {
+        .object => |object| object,
+        else => null,
+    };
 }
 
 test "doGetDotnetValues: should return null value if the libc flavor has not been set" {
@@ -196,6 +364,112 @@ test "doGetDotnetValues: should return null value if the profiler path cannot be
     libc_flavor = .GNU;
     const dotnet_values = doGetDotnetValues(allocator, path, false);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
+}
+
+test "resolveManagedApplicationPath: dotnet host uses managed assembly argument" {
+    const allocator = testing.allocator;
+
+    const cmdline_args = [_][]const u8{
+        "/usr/bin/dotnet",
+        "/app/MyApp.dll",
+        "--urls",
+        "http://localhost:8080",
+    };
+
+    const app_path = (try resolveManagedApplicationPath(allocator, &cmdline_args, "/usr/bin/dotnet")) orelse return error.Unexpected;
+    defer allocator.free(app_path);
+
+    try testing.expectEqualStrings("/app/MyApp.dll", app_path);
+}
+
+test "resolveManagedApplicationPath: direct apphost launch uses executable path" {
+    const allocator = testing.allocator;
+
+    const cmdline_args = [_][]const u8{
+        "/app/MyApp",
+        "--urls",
+        "http://localhost:8080",
+    };
+
+    const app_path = (try resolveManagedApplicationPath(allocator, &cmdline_args, "/app/MyApp")) orelse return error.Unexpected;
+    defer allocator.free(app_path);
+
+    try testing.expectEqualStrings("/app/MyApp", app_path);
+}
+
+test "resolveManagedApplicationPath: dotnet host without managed assembly returns null" {
+    const cmdline_args = [_][]const u8{
+        "/usr/bin/dotnet",
+        "--info",
+    };
+
+    try test_util.expectWithMessage((try resolveManagedApplicationPath(testing.allocator, &cmdline_args, "/usr/bin/dotnet")) == null, "app path should be null");
+}
+
+test "createDotnetMetadataPaths: managed dll path produces deps path" {
+    const allocator = testing.allocator;
+
+    const metadata_paths = try createDotnetMetadataPaths(allocator, "/app/MyApp.dll");
+    defer metadata_paths.freeAll(allocator);
+
+    try testing.expectEqualStrings("/app/MyApp.deps.json", metadata_paths.deps_path);
+}
+
+test "createDotnetMetadataPaths: apphost path produces deps path" {
+    const allocator = testing.allocator;
+
+    const metadata_paths = try createDotnetMetadataPaths(allocator, "/app/MyApp");
+    defer metadata_paths.freeAll(allocator);
+
+    try testing.expectEqualStrings("/app/MyApp.deps.json", metadata_paths.deps_path);
+}
+
+test "depsJsonContainsOpenTelemetryDependency: false when no OpenTelemetry packages are present" {
+    const content =
+        \\{
+        \\  "libraries": {
+        \\    "Newtonsoft.Json/13.0.3": {
+        \\      "type": "package"
+        \\    }
+        \\  }
+        \\}
+    ;
+
+    try test_util.expectWithMessage(!(try depsJsonContainsOpenTelemetryDependency(testing.allocator, content)), "deps should not contain OpenTelemetry");
+}
+
+test "depsJsonContainsOpenTelemetryDependency: true when OpenTelemetry package is present" {
+    const content =
+        \\{
+        \\  "libraries": {
+        \\    "OpenTelemetry/1.11.0": {
+        \\      "type": "package"
+        \\    }
+        \\  }
+        \\}
+    ;
+
+    try test_util.expectWithMessage(try depsJsonContainsOpenTelemetryDependency(testing.allocator, content), "deps should contain OpenTelemetry");
+}
+
+test "depsJsonContainsOpenTelemetryDependency: true when OpenTelemetry target entry is present" {
+    const content =
+        \\{
+        \\  "targets": {
+        \\    ".NETCoreApp,Version=v9.0": {
+        \\      "OpenTelemetry.Extensions.Hosting/1.11.0": {
+        \\        "runtime": {}
+        \\      }
+        \\    }
+        \\  }
+        \\}
+    ;
+
+    try test_util.expectWithMessage(try depsJsonContainsOpenTelemetryDependency(testing.allocator, content), "deps should contain OpenTelemetry");
+}
+
+test "depsJsonContainsOpenTelemetryDependency: rejects malformed json" {
+    try testing.expectError(error.UnexpectedEndOfInput, depsJsonContainsOpenTelemetryDependency(testing.allocator, "{"));
 }
 
 fn determineDotnetValues(

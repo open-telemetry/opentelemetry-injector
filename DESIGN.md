@@ -83,6 +83,11 @@ The approach taken by the OpenTelemetry injector is as follows:
 * Use `setenv` to set or modify the required environment variables (`NODE_OPTIONS`, `JAVA_TOOL_OPTIONS`,
   `OTEL_RESOURCE_ATTRIBUTES` etc.)
 
+For .NET, the injector applies an additional check before setting the profiler
+and startup-hook related environment variables. It resolves the target application and inspects the adjacent
+`*.deps.json` file when available, standing down only when the dependency graph already references
+`OpenTelemetry*` packages. This keeps the injector fail-open while still reducing the risk of double-instrumentation.
+
 If this sounds convoluted, and more complex than it should be, read on!
 The next section outlines which alternative approaches have been considered, and the shortcomings of each of them.
 

@@ -1,0 +1,5 @@
+change_type: bug_fix
+component: injection
+note: Skip .NET auto-instrumentation for applications that already reference OpenTelemetry packages.
+issues: [267]
+change_logs: [user]

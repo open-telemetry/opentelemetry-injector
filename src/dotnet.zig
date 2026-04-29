@@ -65,6 +65,15 @@ pub const dotnet_shared_store_env_var_name = "DOTNET_SHARED_STORE";
 pub const dotnet_startup_hooks_env_var_name = "DOTNET_STARTUP_HOOKS";
 pub const otel_dotnet_auto_home_env_var_name = "OTEL_DOTNET_AUTO_HOME";
 
+const conflicting_dotnet_env_var_names = [_][:0]const u8{
+    coreclr_enable_profiling_env_var_name,
+    coreclr_profiler_env_var_name,
+    coreclr_profiler_path_env_var_name,
+    dotnet_additional_deps_env_var_name,
+    dotnet_shared_store_env_var_name,
+    dotnet_startup_hooks_env_var_name,
+};
+
 // We usually do not cache any values for environment variable modifications (i.e. we do not cache the modified
 // NODE_OPTIONS value or the modified OTEL_RESOURCE_ATTRIBUTES) because we are only called once, on startup via
 // root.zig#initEnviron. For .NET we deviate from this pattern a bit - we calculate all .NET-related environment
@@ -167,6 +176,14 @@ fn doGetDotnetValues(gpa: std.mem.Allocator, dotnet_path_prefix: []u8, dotnet_in
 }
 
 fn shouldInjectDotnet(allocator: std.mem.Allocator) bool {
+    if (findConflictingPreExistingDotnetEnvVar()) |conflicting_env_var_name| {
+        print.printInfo(
+            "Skipping the injection of the .NET OpenTelemetry instrumentation because {s} is already set.",
+            .{conflicting_env_var_name},
+        );
+        return false;
+    }
+
     const cmdline_args = args_parser.cmdLineForPID(allocator) catch |err| {
         print.printDebug("Proceeding with the injection of the .NET OpenTelemetry instrumentation. Could not read the process command line: {}", .{err});
         return true;
@@ -215,6 +232,16 @@ fn shouldInjectDotnet(allocator: std.mem.Allocator) bool {
     }
 
     return true;
+}
+
+fn findConflictingPreExistingDotnetEnvVar() ?[:0]const u8 {
+    for (conflicting_dotnet_env_var_names) |env_var_name| {
+        if (std.posix.getenv(env_var_name) != null) {
+            return env_var_name;
+        }
+    }
+
+    return null;
 }
 
 fn resolveManagedApplicationPath(
@@ -364,6 +391,78 @@ test "doGetDotnetValues: should return null value if the profiler path cannot be
     libc_flavor = .GNU;
     const dotnet_values = doGetDotnetValues(allocator, path, false);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
+}
+
+test "doGetDotnetValues: should return null value if conflicting .NET env var already exists" {
+    const allocator = testing.allocator;
+    _resetState();
+    defer _resetState();
+
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"CORECLR_PROFILER={existing-profiler-guid}"});
+    defer test_util.resetStdCEnviron(original_environ);
+
+    const path = try std.fmt.allocPrintSentinel(allocator, "/some/valid/path", .{}, 0);
+    defer allocator.free(path);
+
+    libc_flavor = .GNU;
+    const dotnet_values = doGetDotnetValues(allocator, path, false);
+    try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
+}
+
+test "findConflictingPreExistingDotnetEnvVar: returns null when no conflicting .NET env var is set" {
+    const original_environ = try test_util.clearStdCEnviron();
+    defer test_util.resetStdCEnviron(original_environ);
+
+    try test_util.expectWithMessage(findConflictingPreExistingDotnetEnvVar() == null, "conflicting env var should be null");
+}
+
+test "findConflictingPreExistingDotnetEnvVar: returns CORECLR_ENABLE_PROFILING when set" {
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"CORECLR_ENABLE_PROFILING=1"});
+    defer test_util.resetStdCEnviron(original_environ);
+
+    try testing.expectEqualStrings(coreclr_enable_profiling_env_var_name, findConflictingPreExistingDotnetEnvVar() orelse return error.Unexpected);
+}
+
+test "findConflictingPreExistingDotnetEnvVar: returns CORECLR_PROFILER when set" {
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"CORECLR_PROFILER={existing-profiler-guid}"});
+    defer test_util.resetStdCEnviron(original_environ);
+
+    try testing.expectEqualStrings(coreclr_profiler_env_var_name, findConflictingPreExistingDotnetEnvVar() orelse return error.Unexpected);
+}
+
+test "findConflictingPreExistingDotnetEnvVar: returns CORECLR_PROFILER_PATH when set" {
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"CORECLR_PROFILER_PATH=/tmp/existing-profiler.so"});
+    defer test_util.resetStdCEnviron(original_environ);
+
+    try testing.expectEqualStrings(coreclr_profiler_path_env_var_name, findConflictingPreExistingDotnetEnvVar() orelse return error.Unexpected);
+}
+
+test "findConflictingPreExistingDotnetEnvVar: returns DOTNET_ADDITIONAL_DEPS when set" {
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"DOTNET_ADDITIONAL_DEPS=/tmp/existing-additional-deps"});
+    defer test_util.resetStdCEnviron(original_environ);
+
+    try testing.expectEqualStrings(dotnet_additional_deps_env_var_name, findConflictingPreExistingDotnetEnvVar() orelse return error.Unexpected);
+}
+
+test "findConflictingPreExistingDotnetEnvVar: returns DOTNET_SHARED_STORE when set" {
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"DOTNET_SHARED_STORE=/tmp/existing-shared-store"});
+    defer test_util.resetStdCEnviron(original_environ);
+
+    try testing.expectEqualStrings(dotnet_shared_store_env_var_name, findConflictingPreExistingDotnetEnvVar() orelse return error.Unexpected);
+}
+
+test "findConflictingPreExistingDotnetEnvVar: returns DOTNET_STARTUP_HOOKS when set" {
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"DOTNET_STARTUP_HOOKS=/tmp/existing-startup-hook.dll"});
+    defer test_util.resetStdCEnviron(original_environ);
+
+    try testing.expectEqualStrings(dotnet_startup_hooks_env_var_name, findConflictingPreExistingDotnetEnvVar() orelse return error.Unexpected);
+}
+
+test "findConflictingPreExistingDotnetEnvVar: ignores OTEL_DOTNET_AUTO_HOME on its own" {
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"OTEL_DOTNET_AUTO_HOME=/tmp/existing-otel-home"});
+    defer test_util.resetStdCEnviron(original_environ);
+
+    try test_util.expectWithMessage(findConflictingPreExistingDotnetEnvVar() == null, "OTEL_DOTNET_AUTO_HOME should not be treated as conflicting");
 }
 
 test "resolveManagedApplicationPath: dotnet host uses managed assembly argument" {

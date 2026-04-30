@@ -52,6 +52,12 @@ run_test_case \
   "./dotnetapp coreclr-profiler-path" \
   "CORECLR_PROFILER_PATH: -" \
   "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX="
+run_test_case \
+  "pre-existing CORECLR_PROFILER_PATH prevents overwriting .NET profiler path" \
+  "app" \
+  "./dotnetapp coreclr-profiler-path" \
+  "CORECLR_PROFILER_PATH: /existing/profiler/path.so" \
+  "CORECLR_PROFILER_PATH=/existing/profiler/path.so"
 
 run_test_case \
   "sets k8s.pod.uid and k8s.container.name via OTEL_RESOURCE_ATTRIBUTES" \
@@ -97,6 +103,12 @@ run_test_case \
   "./dotnetapp verify-startup-hook-has-been-injected" \
   "otel_injector_dotnet_no_op_startup_hook_has_been_loaded: -" \
   "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX="
+run_test_case \
+  "pre-existing DOTNET_SHARED_STORE prevents loading the injector startup hook" \
+  "app" \
+  "./dotnetapp verify-startup-hook-has-been-injected" \
+  "otel_injector_dotnet_no_op_startup_hook_has_been_loaded: -" \
+  "DOTNET_SHARED_STORE=/usr/src/otel/injector/no-op-startup-hook"
 
 run_test_case \
   "OTEL_ custom env var is returned according to the env file provided" \

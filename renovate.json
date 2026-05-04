@@ -25,6 +25,13 @@
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["minor", "major", "patch", "digest"],
       "schedule": ["before 8am on Monday"]
+    },
+    {
+      "matchManagers": ["custom.regex"],
+      "matchFileNames": ["packaging/*.txt"],
+      "groupName": null,
+      "matchUpdateTypes": ["minor", "major", "patch"],
+      "schedule": ["before 8am on Monday"]
     }
   ],
   "labels": [

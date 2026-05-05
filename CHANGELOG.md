@@ -4,6 +4,27 @@
 
 <!-- next version -->
 
+## v0.8.0
+
+### 🧰 Bug fixes 🧰
+
+- `injector`: Do not overwrite existing .NET profiler and startup-hook environment variables when deciding whether to inject .NET auto-instrumentation (#270)
+  If the target process already defines `CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`,
+  `CORECLR_PROFILER_PATH`, `DOTNET_ADDITIONAL_DEPS`, `DOTNET_SHARED_STORE`, or
+  `DOTNET_STARTUP_HOOKS`, the injector now stands down for .NET instead of overwriting those
+  values. `OTEL_DOTNET_AUTO_HOME` alone does not block injection.
+  
+- `injection`: Skip .NET auto-instrumentation for applications that already reference OpenTelemetry packages. (#267)
+- `injector`: Fix libc detection failure on glibc < 2.34 systems (e.g. RHEL 8) for binaries that do not link libdl.so (#311)
+  On glibc < 2.34 (e.g. RHEL 8 / glibc 2.28), `dlsym` is exported by `libdl.so` rather than
+  `libc.so` itself. Binaries that do not link `libdl.so` (such as `grep`, simple C utilities, and
+  many other system programs) would produce a `failed to identify libc` warning and receive no
+  instrumentation. The fix adds a fallback that looks up `setenv` and `__environ` directly from the
+  ELF symbol table when `dlsym` is not found, which succeeds for `libc.so` on all glibc versions.
+  
+
+<!-- previous-version -->
+
 ## v0.7.0
 
 ### 🛑 Breaking changes 🛑

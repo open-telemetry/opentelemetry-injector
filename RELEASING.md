@@ -7,6 +7,7 @@ The pattern for the version should be vX.Y.Z for a regular release, or vX.Y.Z-<a
 The action will trigger the creation of a pull request for review by project approvers ([example](https://github.com/open-telemetry/opentelemetry-injector/pull/112)).
 
 Approvers approve the changelog and merge the PR.
+(The person approving and merging the changelog PR can be the same person who triggered the `prepare-release` action.)
 
 Merging the PR will trigger the workflow `.github/workflows/create-tag-for-release.yml` which will create a tag with the
 version number.

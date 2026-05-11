@@ -17,15 +17,15 @@ pub const DotnetValues = struct {
     coreclr_enable_profiling: [:0]const u8,
     coreclr_profiler: [:0]const u8,
     coreclr_profiler_path: [:0]u8,
-    additional_deps: [:0]u8,
-    shared_store: [:0]u8,
+    additional_deps: ?[:0]u8,
+    shared_store: ?[:0]u8,
     startup_hooks: [:0]u8,
     otel_auto_home: [:0]u8,
 
     pub fn freeAll(self: DotnetValues, allocator: std.mem.Allocator) void {
         allocator.free(self.coreclr_profiler_path);
-        allocator.free(self.additional_deps);
-        allocator.free(self.shared_store);
+        if (self.additional_deps) |ad| allocator.free(ad);
+        if (self.shared_store) |ss| allocator.free(ss);
         allocator.free(self.startup_hooks);
         allocator.free(self.otel_auto_home);
     }
@@ -129,7 +129,7 @@ fn doGetDotnetValues(gpa: std.mem.Allocator, dotnet_path_prefix: []u8, dotnet_in
     }
 
     if (libc_flavor) |libc_f| {
-        const dotnet_values = determineDotnetValues(
+        var dotnet_values = determineDotnetValues(
             gpa,
             dotnet_path_prefix,
             libc_f,
@@ -146,9 +146,7 @@ fn doGetDotnetValues(gpa: std.mem.Allocator, dotnet_path_prefix: []u8, dotnet_in
 
         const paths_to_check = [_][:0]const u8{
             dotnet_values.coreclr_profiler_path,
-            dotnet_values.additional_deps,
             dotnet_values.otel_auto_home,
-            dotnet_values.shared_store,
             dotnet_values.startup_hooks,
         };
         for (paths_to_check) |p| {
@@ -162,6 +160,25 @@ fn doGetDotnetValues(gpa: std.mem.Allocator, dotnet_path_prefix: []u8, dotnet_in
                 // free strings allocated in determineDotnetValues
                 dotnet_values.freeAll(gpa);
                 return null;
+            };
+        }
+
+        // DOTNET_ADDITIONAL_DEPS is optional: only add the env var if the additional deps directory exists, do not skip .NET
+        // injection if it does not exist.
+        if (dotnet_values.additional_deps) |additional_deps_path| {
+            std.fs.cwd().access(additional_deps_path, .{}) catch |err| {
+                print.printDebug("Not setting DOTNET_ADDITIONAL_DEPS because of an issue accessing {s}: {}", .{ additional_deps_path, err });
+                gpa.free(additional_deps_path);
+                dotnet_values.additional_deps = null;
+            };
+        }
+        // DOTNET_SHARED_STORE is optional: only add the env var if the additional deps directory exists, do not skip .NET
+        // injection if it does not exist.
+        if (dotnet_values.shared_store) |shared_store_path| {
+            std.fs.cwd().access(shared_store_path, .{}) catch |err| {
+                print.printDebug("Not setting DOTNET_SHARED_STORE because of an issue accessing {s}: {}", .{ shared_store_path, err });
+                gpa.free(shared_store_path);
+                dotnet_values.shared_store = null;
             };
         }
 
@@ -672,7 +689,7 @@ test "determineDotnetValues: should return values for glibc/x86_64" {
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/glibc/AdditionalDeps",
-        dotnet_values.additional_deps,
+        dotnet_values.additional_deps orelse return error.Unexpected,
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/glibc",
@@ -680,7 +697,7 @@ test "determineDotnetValues: should return values for glibc/x86_64" {
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/glibc/store",
-        dotnet_values.shared_store,
+        dotnet_values.shared_store orelse return error.Unexpected,
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/glibc/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
@@ -717,7 +734,7 @@ test "determineDotnetValues: should return values for glibc/arm64" {
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/glibc/AdditionalDeps",
-        dotnet_values.additional_deps,
+        dotnet_values.additional_deps orelse return error.Unexpected,
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/glibc",
@@ -725,7 +742,7 @@ test "determineDotnetValues: should return values for glibc/arm64" {
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/glibc/store",
-        dotnet_values.shared_store,
+        dotnet_values.shared_store orelse return error.Unexpected,
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/glibc/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
@@ -762,7 +779,7 @@ test "determineDotnetValues: should return values for musl/x86_64" {
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/musl/AdditionalDeps",
-        dotnet_values.additional_deps,
+        dotnet_values.additional_deps orelse return error.Unexpected,
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/musl",
@@ -770,7 +787,7 @@ test "determineDotnetValues: should return values for musl/x86_64" {
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/musl/store",
-        dotnet_values.shared_store,
+        dotnet_values.shared_store orelse return error.Unexpected,
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/musl/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
@@ -807,7 +824,7 @@ test "determineDotnetValues: should return values for musl/arm64" {
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/musl/AdditionalDeps",
-        dotnet_values.additional_deps,
+        dotnet_values.additional_deps orelse return error.Unexpected,
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/musl",
@@ -815,7 +832,7 @@ test "determineDotnetValues: should return values for musl/arm64" {
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/musl/store",
-        dotnet_values.shared_store,
+        dotnet_values.shared_store orelse return error.Unexpected,
     );
     try testing.expectEqualStrings(
         "/usr/lib/opentelemetry/dotnet/musl/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",

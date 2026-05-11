@@ -14,10 +14,6 @@ touch /usr/lib/opentelemetry/dotnet/glibc/linux-x64/OpenTelemetry.AutoInstrument
 touch /usr/lib/opentelemetry/dotnet/glibc/linux-arm64/OpenTelemetry.AutoInstrumentation.Native.so
 touch /usr/lib/opentelemetry/dotnet/musl/linux-musl-x64/OpenTelemetry.AutoInstrumentation.Native.so
 touch /usr/lib/opentelemetry/dotnet/musl/linux-musl-arm64/OpenTelemetry.AutoInstrumentation.Native.so
-mkdir -p /usr/lib/opentelemetry/dotnet/glibc/AdditionalDeps
-mkdir -p /usr/lib/opentelemetry/dotnet/musl/AdditionalDeps
-mkdir -p /usr/lib/opentelemetry/dotnet/glibc/store
-mkdir -p /usr/lib/opentelemetry/dotnet/musl/store
 mkdir -p /usr/lib/opentelemetry/dotnet/glibc/net
 mkdir -p /usr/lib/opentelemetry/dotnet/musl/net
 if [ -d no-op-startup-hook ]; then

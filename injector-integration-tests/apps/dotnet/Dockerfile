@@ -8,16 +8,16 @@ FROM ${base_image_build} AS build
 ARG TARGETARCH
 
 WORKDIR /no-op-startup-hook-source
-COPY injector-integration-tests/runtimes/dotnet/no-op-startup-hook .
+COPY injector-integration-tests/apps/dotnet/no-op-startup-hook .
 RUN dotnet restore
 RUN dotnet publish --no-restore -o /no-op-startup-hook
 
 WORKDIR /source
 # copy csproj and restore as distinct layers
-COPY injector-integration-tests/runtimes/dotnet/app/*.csproj .
+COPY injector-integration-tests/apps/dotnet/app/*.csproj .
 RUN dotnet restore
 # copy and publish app and libraries
-COPY injector-integration-tests/runtimes/dotnet/app/* .
+COPY injector-integration-tests/apps/dotnet/app/* .
 RUN dotnet publish --no-restore -o /app
 
 # final stage/image
@@ -41,14 +41,12 @@ echo "Error: build argument create_sdk_dummy_files_script is required but not se
 exit 1; \
 fi
 
-COPY injector-integration-tests/scripts/run-tests-within-container.sh scripts/
-COPY injector-integration-tests/scripts/create-*.sh scripts/
+COPY injector-integration-tests/scripts/*.sh scripts/
 COPY injector-integration-tests/tests/*.tests tests/
-COPY injector-integration-tests/common/conf.d/ /etc/opentelemetry/injector/conf.d/
-COPY injector-integration-tests/common/injector.conf injector.conf
+COPY injector-integration-tests/common/ common/
 COPY injector-integration-tests/common/injector.custom-location.conf /custom/config/path/injector.conf
-COPY injector-integration-tests/common/default_auto_instrumentation_env.conf default_auto_instrumentation_env.conf
 
+RUN scripts/create-config-file-directory.sh
 RUN ${create_sdk_dummy_files_script}
 
 COPY dist/${injector_binary} /injector/libotelinject.so

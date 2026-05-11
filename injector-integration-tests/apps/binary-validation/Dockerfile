@@ -21,10 +21,11 @@ RUN mkdir -p /etc/opentelemetry/injector/conf.d && chmod -R 777 /etc/opentelemet
 
 WORKDIR /usr/src/otel/injector/
 
-COPY injector-integration-tests/binary-validation app
+COPY injector-integration-tests/apps/binary-validation app
 
-COPY injector-integration-tests/scripts/run-tests-within-container.sh scripts/
+COPY injector-integration-tests/scripts/*.sh scripts/
 COPY injector-integration-tests/tests/*.tests tests/
+COPY injector-integration-tests/common/ common/
 
 COPY dist/${injector_binary} /injector/libotelinject.so
 

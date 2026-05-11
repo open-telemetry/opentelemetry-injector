@@ -23,15 +23,12 @@ RUN mkdir -p /etc/opentelemetry/injector/conf.d && chmod -R 777 /etc/opentelemet
 
 WORKDIR /usr/src/otel/injector
 
-COPY injector-integration-tests/runtimes/no-libdl/app.c .
+COPY injector-integration-tests/apps/no-libdl/app.c .
 RUN mkdir -p app && gcc -o app/printenv app.c && rm app.c
 
-COPY injector-integration-tests/scripts/run-tests-within-container.sh scripts/
-COPY injector-integration-tests/scripts/create-*.sh scripts/
+COPY injector-integration-tests/scripts/*.sh scripts/
 COPY injector-integration-tests/tests/*.tests tests/
-COPY injector-integration-tests/common/injector.conf injector.conf
-COPY injector-integration-tests/common/injector.custom-location.conf /custom/config/path/injector.conf
-COPY injector-integration-tests/common/default_auto_instrumentation_env.conf default_auto_instrumentation_env.conf
+COPY injector-integration-tests/common/ common/
 
 COPY dist/${injector_binary} /injector/libotelinject.so
 

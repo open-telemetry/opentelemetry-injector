@@ -33,33 +33,36 @@ fi
 
 # Note: Runtime-independent test sets like default.tests, sdk-does-not-exist.tests, and sdk-cannot-be-accessed.tests
 # also use Node.js as the runtime for the container under test.
-runtime="nodejs"
+test_app="nodejs"
 if [[ "$TEST_SET" = "dotnet.tests" ]]; then
-  runtime="dotnet"
+  test_app="dotnet"
 fi
 if [[ "$TEST_SET" = "jvm.tests" ]]; then
-  runtime="jvm"
+  test_app="jvm"
 fi
 if [[ "$TEST_SET" = "no-environ-symbol.tests" ]]; then
-  runtime="no-environ-symbol"
+  test_app="no-environ-symbol"
 fi
 if [[ "$TEST_SET" = "python.tests" ]]; then
-  runtime="python"
+  test_app="python"
 fi
 if [[ "$TEST_SET" = "no-libdl.tests" ]]; then
-  runtime="no-libdl"
+  test_app="no-libdl"
+fi
+if [[ "$TEST_SET" = "binary-validation.tests" ]]; then
+  test_app="binary-validation"
 fi
 
 # We also use the Node.js test app for non-runtime specific tests (e.g. injector-integration-tests/tests/default.tests
 # etc.), so this is the default Dockerfile.
-dockerfile_name="injector-integration-tests/runtimes/nodejs/Dockerfile"
-image_name=otel-injector-test-$ARCH-$LIBC-$runtime
+dockerfile_name="injector-integration-tests/apps/nodejs/Dockerfile"
+image_name="otel-injector-test-$ARCH-$LIBC-$test_app"
 
 base_image_run=unknown
 base_image_build=unknown
-case "$runtime" in
+case "$test_app" in
   "dotnet")
-    dockerfile_name="injector-integration-tests/runtimes/dotnet/Dockerfile"
+    dockerfile_name="injector-integration-tests/apps/dotnet/Dockerfile"
     base_image_build=mcr.microsoft.com/dotnet/sdk:9.0-bookworm-slim
     base_image_run=mcr.microsoft.com/dotnet/runtime:9.0-bookworm-slim
     if [[ "$LIBC" = "musl" ]]; then
@@ -68,7 +71,7 @@ case "$runtime" in
     fi
     ;;
   "jvm")
-    dockerfile_name="injector-integration-tests/runtimes/jvm/Dockerfile"
+    dockerfile_name="injector-integration-tests/apps/jvm/Dockerfile"
     base_image_build=maven:3.9-eclipse-temurin-21
     base_image_run=eclipse-temurin:21-jre
     if [[ "$LIBC" = "musl" ]]; then
@@ -83,36 +86,35 @@ case "$runtime" in
     fi
     ;;
   "python")
-    dockerfile_name="injector-integration-tests/runtimes/python/Dockerfile"
+    dockerfile_name="injector-integration-tests/apps/python/Dockerfile"
     base_image_run=python:3.14-slim-bookworm
     if [[ "$LIBC" = "musl" ]]; then
       base_image_run=python:3.14-alpine3.23
     fi
     ;;
   "no-environ-symbol")
-    dockerfile_name="injector-integration-tests/runtimes/no-environ-symbol/Dockerfile"
+    dockerfile_name="injector-integration-tests/apps/no-environ-symbol/Dockerfile"
     base_image_run=golang:1.26.3-trixie
     # We do not provide a different base image depending on the libc flavor, the point of this test scenario is to test
     # an app that depends on no libc whatsoever, so the test is the same for LIBC=musl and LIBC=glibc.
     ;;
   "no-libdl")
-    dockerfile_name="injector-integration-tests/runtimes/no-libdl/Dockerfile"
+    dockerfile_name="injector-integration-tests/apps/no-libdl/Dockerfile"
     base_image_run=debian:bullseye-slim
     # We do not provide a different base image depending on the libc flavor: the tests themselves skip for LIBC=musl
     # because musl uses a different libc-detection path that is not affected by this bug.
     ;;
+  "binary-validation")
+    dockerfile_name="injector-integration-tests/apps/binary-validation/Dockerfile"
+    base_image_run=debian:bookworm-slim
+    ;;
   *)
-    echo "Unknown runtime: $runtime"
+    echo "Unknown test app: $test_app"
     exit 1
     ;;
 esac
 
-if [[ "$TEST_SET" = "binary-validation.tests" ]]; then
-  runtime="-"
-  dockerfile_name="injector-integration-tests/binary-validation/Dockerfile"
-  image_name=otel-injector-test-$ARCH-$LIBC-binary-validation
-  base_image_run=debian:bookworm-slim
-fi
+
 
 create_sdk_dummy_files_script="scripts/create-sdk-dummy-files.sh"
 if [[ "$TEST_SET" = "sdk-does-not-exist.tests" ]]; then

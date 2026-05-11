@@ -1,7 +1,7 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-ARG base_image_run="node:24.13.0-bookworm-slim@sha256:bf22df20270b654c4e9da59d8d4a3516cce6ba2852e159b27288d645b7a7eedc"
+ARG base_image_run="python:3.14-slim-bookworm"
 FROM ${base_image_run}
 
 ARG injector_binary
@@ -20,21 +20,17 @@ RUN mkdir -p /etc/opentelemetry/injector/conf.d && chmod -R 777 /etc/opentelemet
 
 WORKDIR /usr/src/otel/injector/
 
-COPY injector-integration-tests/runtimes/nodejs/no-op-agent no-op-agent
+COPY injector-integration-tests/apps/python/no-op-agent no-op-agent
 
-COPY injector-integration-tests/runtimes/nodejs app
+COPY injector-integration-tests/apps/python app
 
-COPY injector-integration-tests/scripts/run-tests-within-container.sh scripts/
-COPY injector-integration-tests/scripts/create-*.sh scripts/
+COPY injector-integration-tests/scripts/*.sh scripts/
 COPY injector-integration-tests/tests/*.tests tests/
-COPY injector-integration-tests/common/conf.d/ /etc/opentelemetry/injector/conf.d/
-COPY injector-integration-tests/common/injector.conf injector.conf
+COPY injector-integration-tests/common/ common/
 COPY injector-integration-tests/common/injector.custom-location.conf /custom/config/path/injector.conf
-COPY injector-integration-tests/common/default_auto_instrumentation_env.conf default_auto_instrumentation_env.conf
 
 RUN ${create_sdk_dummy_files_script}
 
 COPY dist/${injector_binary} /injector/libotelinject.so
 
-USER node
 CMD ["scripts/run-tests-within-container.sh"]

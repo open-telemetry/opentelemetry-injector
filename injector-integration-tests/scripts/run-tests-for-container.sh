@@ -91,7 +91,7 @@ case "$runtime" in
     ;;
   "no-environ-symbol")
     dockerfile_name="injector-integration-tests/runtimes/no-environ-symbol/Dockerfile"
-    base_image_run=golang:1.25.5-trixie
+    base_image_run=golang:1.26.3-trixie
     # We do not provide a different base image depending on the libc flavor, the point of this test scenario is to test
     # an app that depends on no libc whatsoever, so the test is the same for LIBC=musl and LIBC=glibc.
     ;;

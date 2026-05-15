@@ -357,11 +357,21 @@ fn getEnvValue(
         }
     } else if (std.mem.eql(u8, name, dotnet.dotnet_additional_deps_env_var_name)) {
         if (dotnet.getDotnetValues(allocator, configuration)) |v| {
-            return v.additional_deps;
+            if (v.additional_deps) |ad| {
+                return ad;
+            } else {
+                // No additional_deps available, return null to skip injection of DOTNET_ADDITIONAL_DEPS.
+                return null;
+            }
         }
     } else if (std.mem.eql(u8, name, dotnet.dotnet_shared_store_env_var_name)) {
         if (dotnet.getDotnetValues(allocator, configuration)) |v| {
-            return v.shared_store;
+            if (v.shared_store) |ss| {
+                return ss;
+            } else {
+                // No shared_store available, return null to skip injection of DOTNET_SHARED_STORE.
+                return null;
+            }
         }
     } else if (std.mem.eql(u8, name, dotnet.dotnet_startup_hooks_env_var_name)) {
         if (dotnet.getDotnetValues(allocator, configuration)) |v| {

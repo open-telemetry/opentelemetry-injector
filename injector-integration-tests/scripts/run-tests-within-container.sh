@@ -111,6 +111,16 @@ run_test_case() {
     fi
   fi
 
+  # Ensure each test starts from a clean state.
+  if [ -d /usr/lib/opentelemetry ] && [ -x /usr/lib/opentelemetry ]; then
+    # Only clean up /usr/lib/opentelemetry if it exists and is accessible (which might not be the case for example in the
+    # sdk-cannot-be-accessed.tests test set, where the tree is intentionally chmod-ed to be inaccessible).
+    rm -rf /usr/lib/opentelemetry/dotnet/glibc/AdditionalDeps
+    rm -rf /usr/lib/opentelemetry/dotnet/musl/AdditionalDeps
+    rm -rf /usr/lib/opentelemetry/dotnet/glibc/store
+    rm -rf /usr/lib/opentelemetry/dotnet/musl/store
+  fi
+
   set +e
   match=$(expr "$test_case_label" : ".*default configuration file.*")
   set -e
@@ -147,6 +157,15 @@ run_test_case() {
   else
     echo "providing empty env file at /etc/opentelemetry/injector/default_env.conf for test case \"$test_case_label\""
     touch /etc/opentelemetry/injector/default_env.conf
+  fi
+
+  set +e
+  match1=$(expr "$test_case_label" : ".*the additional deps directory exists.*")
+  match2=$(expr "$test_case_label" : ".*the shared store directory exists.*")
+  set -e
+  if [ "$match1" -gt 0 ] || [ "$match2" -gt 0 ]; then
+    echo "creating .NET additional deps and shared store directories for test case \"$test_case_label\""
+    scripts/create-sdk-dummy-files-dotnet-optional.sh
   fi
 
   cd "$working_dir"

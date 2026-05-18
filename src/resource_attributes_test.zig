@@ -98,13 +98,14 @@ test "getModifiedOtelResourceAttributesValue: no original value (null), several 
 test "getModifiedOtelResourceAttributesValue: no original value (empty string), several new resource attributes" {
     const allocator = testing.allocator;
     res_attrs.setLibcInfo(test_util.testLibcInfo(.GNU));
-    const original_environ = try test_util.setStdCEnviron(&[3][]const u8{
+    const original_environ = try test_util.setStdCEnviron(&[4][]const u8{
+        "OTEL_RESOURCE_ATTRIBUTES=",
         "OTEL_INJECTOR_K8S_NAMESPACE_NAME=namespace",
         "OTEL_INJECTOR_K8S_POD_NAME=pod",
         "OTEL_INJECTOR_K8S_POD_UID=uid",
     });
     defer test_util.resetStdCEnviron(original_environ);
-    const modified_value = try res_attrs.getModifiedOtelResourceAttributesValue(allocator, "") orelse return error.Unexpected;
+    const modified_value = try res_attrs.getModifiedOtelResourceAttributesValue(allocator) orelse return error.Unexpected;
     defer allocator.free(modified_value);
     try testing.expectEqualStrings("k8s.namespace.name=namespace,k8s.pod.name=pod,k8s.pod.uid=uid", modified_value);
 }

@@ -52,6 +52,9 @@ fi
 if [[ "$TEST_SET" = "binary-validation.tests" ]]; then
   test_app="binary-validation"
 fi
+if [[ "$TEST_SET" = "copy-reloc.tests" ]]; then
+  test_app="copy-reloc"
+fi
 
 # We also use the Node.js test app for non-runtime specific tests (e.g. injector-integration-tests/tests/default.tests
 # etc.), so this is the default Dockerfile.
@@ -107,6 +110,13 @@ case "$test_app" in
   "binary-validation")
     dockerfile_name="injector-integration-tests/apps/binary-validation/Dockerfile"
     base_image_run=debian:bookworm-slim
+    ;;
+  "copy-reloc")
+    dockerfile_name="injector-integration-tests/apps/copy-reloc/Dockerfile"
+    # node:16-bullseye-slim provides Debian Bullseye (glibc 2.31, i.e. < 2.34) plus a node binary whose
+    # /usr/local/bin/node carries an R_*_COPY relocation on __environ. We do not provide a musl variant
+    # because the tests themselves skip for LIBC=musl: the bug is in the glibc-specific fallback path.
+    base_image_run=node:16-bullseye-slim
     ;;
   *)
     echo "Unknown test app: $test_app"

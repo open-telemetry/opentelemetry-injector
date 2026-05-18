@@ -1,0 +1,80 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+# Regression tests for COPY relocations on __environ on glibc < 2.34.
+#
+# When the executable contains an R_*_COPY relocation for __environ (e.g.
+# /usr/local/bin/node from node:16-bullseye-slim, but more generally any
+# binary that references `extern char **environ` and is not built as a PIE),
+# ld.so allocates the canonical storage for __environ in the executable's
+# BSS and rewires libc's own GOT entry to point at that copy. Libc's own
+# __environ data slot in libc.so is then never written.
+#
+# On glibc < 2.34, the injector's libc-detection fallback resolves __environ
+# via its own ELF symbol walker rather than via the dynamic linker. That
+# walker returns libc.so's own (unused) slot, which is NULL. The injector
+# therefore sees an empty std.os.environ and any pre-existing value of
+# NODE_OPTIONS, OTEL_RESOURCE_ATTRIBUTES, etc. is invisible to it.
+#
+# Symptoms exercised by the cases below:
+#   * NODE_OPTIONS=--no-deprecation is overwritten to just `--require <path>`
+#     because the NODE_OPTIONS handler unconditionally writes a value when
+#     std.posix.getenv returns null.
+#   * OTEL_RESOURCE_ATTRIBUTES is never injected at all even though the
+#     OTEL_INJECTOR_K8S_* source attributes are exported — the injector
+#     cannot see them, so it has nothing to write.
+#   * A pre-existing OTEL_RESOURCE_ATTRIBUTES=foo=bar is left unmerged for
+#     the same reason.
+#
+# The only case that still succeeds is injecting NODE_OPTIONS when it is
+# not pre-set: the handler writes `--require <path>` unconditionally and
+# does not need to read anything from the environment.
+#
+# These tests use node:16-bullseye-slim, which ships glibc 2.31 and a node
+# binary whose readelf output shows `R_AARCH64_COPY __environ`.
+
+# This bug is glibc-specific: musl uses a different libc-detection path and
+# does not exercise the affected fallback.
+if [ "${LIBC_FLAVOR:-}" != "glibc" ]; then
+  echo "Skipping copy-reloc-environ tests: these tests are glibc-specific (LIBC_FLAVOR=${LIBC_FLAVOR:-unset})"
+  return 0 2>/dev/null || true
+fi
+
+# NODE_OPTIONS injection when no value is pre-set. This case still passes
+# because the handler writes `--require <path>` unconditionally — it does
+# not need to read the environment to compute the new value.
+run_test_case \
+  "copy reloc on __environ: injects NODE_OPTIONS when it is not present" \
+  "app" \
+  "node index.js NODE_OPTIONS" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js"
+
+# OTEL_RESOURCE_ATTRIBUTES injection with no pre-existing value but with
+# the OTEL_INJECTOR_K8S_* source attributes exported. This case fails
+# because all of those reads come back as null, so the handler returns
+# null and setenv is never called.
+run_test_case \
+  "copy reloc on __environ: injects OTEL_RESOURCE_ATTRIBUTES from OTEL_INJECTOR_K8S_* when no pre-existing value" \
+  "app" \
+  "node index.js OTEL_RESOURCE_ATTRIBUTES" \
+  "OTEL_RESOURCE_ATTRIBUTES: k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app"
+
+# Pre-existing NODE_OPTIONS gets clobbered because the handler reads null,
+# falls through to the "original unset" branch, and writes just `--require
+# <path>` — overwriting the real value via libc setenv.
+run_test_case \
+  "copy reloc on __environ: prepends to NODE_OPTIONS preserving pre-existing value" \
+  "app" \
+  "node index.js NODE_OPTIONS" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js --no-deprecation" \
+  "NODE_OPTIONS=--no-deprecation"
+
+# Pre-existing OTEL_RESOURCE_ATTRIBUTES is left unmerged: every relevant
+# getenv (the original value and the OTEL_INJECTOR_K8S_* sources) returns
+# null, so the handler reports no modification and setenv is never called.
+run_test_case \
+  "copy reloc on __environ: merges OTEL_RESOURCE_ATTRIBUTES with pre-existing value" \
+  "app" \
+  "node index.js OTEL_RESOURCE_ATTRIBUTES" \
+  "OTEL_RESOURCE_ATTRIBUTES: foo=bar,k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app" \
+  "OTEL_RESOURCE_ATTRIBUTES=foo=bar"

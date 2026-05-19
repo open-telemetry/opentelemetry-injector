@@ -35,7 +35,7 @@ echo Found test sets: "${all_test_sets[@]}"
 
 test_sets=""
 if [[ -n "${TEST_SETS:-}" ]]; then
-  test_sets=("${TEST_SETS//,/ }")
+  IFS=',' read -ra test_sets <<< "$TEST_SETS"
   echo Only running a subset of test sets: "${test_sets[@]}"
   for test_set_id in "${test_sets[@]}"; do
     test_set_file_name="injector-integration-tests/tests/$test_set_id.tests"

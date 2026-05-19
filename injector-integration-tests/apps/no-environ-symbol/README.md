@@ -8,6 +8,3 @@ Applications with the usual `-ldflags '-extldflags "-static"'` would not be affe
 Nowadays, this is no longer an issue, since the current injector (after PR #166) does not depend on any external symbols
 being present at link time.
 (Instead, it looks up the `dlsym` symbol dynamically at startup, and simply stands down if that symbol is not found.)
-
-Note: Labelling this test scenario as another "runtime" (e.g. on the same level as .NET, JVM, Node.js etc.) is a bit of
-a stretch, but it fits reasonably well into the injector integration test framework.

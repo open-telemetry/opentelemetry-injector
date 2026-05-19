@@ -112,21 +112,14 @@ run_test_case() {
   fi
 
   # Ensure each test starts from a clean state.
-  if [ -d /usr/lib/opentelemetry ] && [ -x /usr/lib/opentelemetry ]; then
-    # Only clean up /usr/lib/opentelemetry if it exists and is accessible (which might not be the case for example in the
-    # sdk-cannot-be-accessed.tests test set, where the tree is intentionally chmod-ed to be inaccessible).
-    rm -rf /usr/lib/opentelemetry/dotnet/glibc/AdditionalDeps
-    rm -rf /usr/lib/opentelemetry/dotnet/musl/AdditionalDeps
-    rm -rf /usr/lib/opentelemetry/dotnet/glibc/store
-    rm -rf /usr/lib/opentelemetry/dotnet/musl/store
-  fi
+  scripts/reset-config-file-directory.sh
 
   set +e
   match=$(expr "$test_case_label" : ".*default configuration file.*")
   set -e
   if [ "$match" -gt 0 ]; then
     echo "providing configuration file at default location /etc/opentelemetry/injector/injector.conf for test case \"$test_case_label\""
-    cp injector.conf /etc/opentelemetry/injector/injector.conf
+    cp common/injector.conf /etc/opentelemetry/injector/injector.conf
     # Remove conf.d drop-in files so the main configuration file is tested in isolation.
     # Note: We use find instead of a glob pattern because the shell runs with noglob.
     find /etc/opentelemetry/injector/conf.d -name '*.conf' -delete 2>/dev/null || true
@@ -153,7 +146,7 @@ run_test_case() {
   set -e
   if [ "$match" -gt 0 ]; then
     echo "providing env file at /etc/opentelemetry/injector/default_env.conf for test case \"$test_case_label\""
-    cp default_auto_instrumentation_env.conf /etc/opentelemetry/injector/default_env.conf
+    cp common/default_env.conf /etc/opentelemetry/injector/default_env.conf
   else
     echo "providing empty env file at /etc/opentelemetry/injector/default_env.conf for test case \"$test_case_label\""
     touch /etc/opentelemetry/injector/default_env.conf

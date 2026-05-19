@@ -7,34 +7,6 @@ run_test_case \
   "./dotnetapp coreclr-profiler-path" \
   "CORECLR_PROFILER_PATH: /usr/lib/opentelemetry/dotnet/${LIBC_FLAVOR}/${DOTNET_ARCH}/OpenTelemetry.AutoInstrumentation.Native.so"
 
-# DOTNET_ADDITIONAL_DEPS and DOTNET_SHARED_STORE are optional. By default these two directories are not created (see
-# scripts/create-sdk-dummy-files.sh), to reflect .NET SDK 1.15 no longer having these directories. However, when they do exist,
-# the associated environment variables are still added. This is due to the comment in
-# https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/tag/v1.15.0-beta.1:
-# > DOTNET_ADDITIONAL_DEPS/DOTNET_SHARED_STORE
-# > These environment variables are no longer required [...]
-# > Removing them is not yet recommended, as re-implementation of this workaround may be necessary for future configurations.
-run_test_case \
-  "does not set DOTNET_ADDITIONAL_DEPS when the additional deps directory does not exist" \
-  "app" \
-  "./dotnetapp custom-env-var DOTNET_ADDITIONAL_DEPS" \
-  "DOTNET_ADDITIONAL_DEPS: -"
-run_test_case \
-  "does not set DOTNET_SHARED_STORE when the shared store directory does not exist" \
-  "app" \
-  "./dotnetapp custom-env-var DOTNET_SHARED_STORE" \
-  "DOTNET_SHARED_STORE: -"
-run_test_case \
-  "sets DOTNET_ADDITIONAL_DEPS when the additional deps directory exists" \
-  "app" \
-  "./dotnetapp custom-env-var DOTNET_ADDITIONAL_DEPS" \
-  "DOTNET_ADDITIONAL_DEPS: /usr/lib/opentelemetry/dotnet/${LIBC_FLAVOR}/AdditionalDeps"
-run_test_case \
-  "sets DOTNET_SHARED_STORE when the shared store directory exists" \
-  "app" \
-   "./dotnetapp custom-env-var DOTNET_SHARED_STORE" \
-  "DOTNET_SHARED_STORE: /usr/lib/opentelemetry/dotnet/${LIBC_FLAVOR}/store"
-
 # For test cases with the "default configuration file" substring in their label, run-tests-within-container.sh
 # will provide a configuration file in the default location (/etc/opentelemetry/injector/injector.conf).
 run_test_case \
@@ -156,3 +128,31 @@ run_test_case \
   "./dotnetapp coreclr-profiler-path" \
   "CORECLR_PROFILER_PATH: -" \
   "OTEL_INJECTOR_DISABLED=1"
+
+# DOTNET_ADDITIONAL_DEPS and DOTNET_SHARED_STORE are optional. By default these two directories are not created (see
+# scripts/create-sdk-dummy-files.sh), to reflect .NET SDK 1.15 no longer having these directories. However, when they do exist,
+# the associated environment variables are still added. This is due to the comment in
+# https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/tag/v1.15.0-beta.1:
+# > DOTNET_ADDITIONAL_DEPS/DOTNET_SHARED_STORE
+# > These environment variables are no longer required [...]
+# > Removing them is not yet recommended, as re-implementation of this workaround may be necessary for future configurations.
+run_test_case \
+  "does not set DOTNET_ADDITIONAL_DEPS when the additional deps directory does not exist" \
+  "app" \
+  "./dotnetapp custom-env-var DOTNET_ADDITIONAL_DEPS" \
+  "DOTNET_ADDITIONAL_DEPS: -"
+run_test_case \
+  "does not set DOTNET_SHARED_STORE when the shared store directory does not exist" \
+  "app" \
+  "./dotnetapp custom-env-var DOTNET_SHARED_STORE" \
+  "DOTNET_SHARED_STORE: -"
+run_test_case \
+  "sets DOTNET_ADDITIONAL_DEPS when the additional deps directory exists" \
+  "app" \
+  "./dotnetapp custom-env-var DOTNET_ADDITIONAL_DEPS" \
+  "DOTNET_ADDITIONAL_DEPS: /usr/lib/opentelemetry/dotnet/${LIBC_FLAVOR}/AdditionalDeps"
+run_test_case \
+  "sets DOTNET_SHARED_STORE when the shared store directory exists" \
+  "app" \
+   "./dotnetapp custom-env-var DOTNET_SHARED_STORE" \
+  "DOTNET_SHARED_STORE: /usr/lib/opentelemetry/dotnet/${LIBC_FLAVOR}/store"

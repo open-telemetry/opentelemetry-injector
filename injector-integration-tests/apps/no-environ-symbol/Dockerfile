@@ -14,24 +14,20 @@ RUN mkdir -p /etc/opentelemetry/injector/conf.d && chmod -R 777 /etc/opentelemet
 
 WORKDIR /usr/src/otel/injector
 
-COPY injector-integration-tests/runtimes/no-environ-symbol/go.mod .
-COPY injector-integration-tests/runtimes/no-environ-symbol/go.sum .
+COPY injector-integration-tests/apps/no-environ-symbol/go.mod .
+COPY injector-integration-tests/apps/no-environ-symbol/go.sum .
 RUN go mod download
-COPY injector-integration-tests/runtimes/no-environ-symbol/main.go .
+COPY injector-integration-tests/apps/no-environ-symbol/main.go .
 
 ARG TARGETOS
 ARG TARGETARCH
 
 RUN GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -v -buildmode=pie -ldflags '-s -w' -o app/noenviron .
 
-COPY injector-integration-tests/scripts/run-tests-within-container.sh scripts/
-COPY injector-integration-tests/scripts/create-*.sh scripts/
+COPY injector-integration-tests/scripts/*.sh scripts/
 COPY injector-integration-tests/tests/*.tests tests/
-COPY injector-integration-tests/common/conf.d/ /etc/opentelemetry/injector/conf.d/
-COPY injector-integration-tests/common/injector.conf injector.conf
+COPY injector-integration-tests/common/ common/
 COPY injector-integration-tests/common/injector.exclude-noenviron.conf injector.exclude-noenviron.conf
-COPY injector-integration-tests/common/injector.custom-location.conf /custom/config/path/injector.conf
-COPY injector-integration-tests/common/default_auto_instrumentation_env.conf default_auto_instrumentation_env.conf
 
 COPY dist/${injector_binary} /injector/libotelinject.so
 

@@ -8,7 +8,7 @@ FROM --platform=$BUILDPLATFORM ${base_image_build} AS build
 
 WORKDIR /usr/src/otel/injector/
 
-COPY injector-integration-tests/runtimes/jvm /usr/src/otel/injector/
+COPY injector-integration-tests/apps/jvm /usr/src/otel/injector/
 RUN mvn package -B -q
 
 # final stage/image
@@ -17,7 +17,6 @@ FROM ${base_image_run}
 RUN mkdir -p /etc/opentelemetry/injector/conf.d && chmod -R 777 /etc/opentelemetry
 
 WORKDIR /usr/src/otel/injector/
-
 COPY --from=build /usr/src/otel/injector/no-op-agent/target/no-op-agent.jar no-op-agent/no-op-agent.jar
 COPY --from=build /usr/src/otel/injector/app/target/Main.jar app/Main.jar
 
@@ -33,14 +32,12 @@ RUN if [ -z "$create_sdk_dummy_files_script" ]; then \
       exit 1; \
     fi
 
-COPY injector-integration-tests/scripts/run-tests-within-container.sh scripts/
-COPY injector-integration-tests/scripts/create-*.sh scripts/
+COPY injector-integration-tests/scripts/*.sh scripts/
 COPY injector-integration-tests/tests/*.tests tests/
-COPY injector-integration-tests/common/conf.d/ /etc/opentelemetry/injector/conf.d/
-COPY injector-integration-tests/common/injector.conf injector.conf
+COPY injector-integration-tests/common/ common/
 COPY injector-integration-tests/common/injector.custom-location.conf /custom/config/path/injector.conf
-COPY injector-integration-tests/common/default_auto_instrumentation_env.conf default_auto_instrumentation_env.conf
 
+RUN scripts/create-config-file-directory.sh
 RUN ${create_sdk_dummy_files_script}
 
 COPY dist/${injector_binary} /injector/libotelinject.so

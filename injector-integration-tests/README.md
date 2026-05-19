@@ -33,6 +33,6 @@ Usage
   from running the test case. Otherwise, the default log level (`error`) is used, and output is only printed to stdout
   when a test case fails.
 * Set `INTERACTIVE=true` to get a shell into the container under test, instead of running a test. Best used when working
-  on a test for one specific runtime, you would usually want to combine this with something like
+  on a test for one specific app/test set, you would usually want to combine this with something like
   `ARCHITECTURES=arm64 LIBC_FLAVORS=glibc TEST_SETS=dotnet INTERACTIVE=true scripts/test-all.sh` to narrow down the
   scope to one container under test.

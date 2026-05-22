@@ -1,11 +1,11 @@
-# Regression tests for missing __environ symbol:
+# Regression tests for missing getenv symbol:
 run_test_case \
-  "no __environ symbol: read unset environment variable" \
+  "no getenv symbol: read unset environment variable" \
   "app" \
   "./noenviron" \
   "The environment variable \"NO_ENVIRON_TEST_VAR\" is not set."
 run_test_case \
-  "no __environ symbol: read an environment variable that is set" \
+  "no getenv symbol: read an environment variable that is set" \
   "app" \
   "./noenviron" \
   "The environment variable \"NO_ENVIRON_TEST_VAR\" had the value: \"some-value\"." \

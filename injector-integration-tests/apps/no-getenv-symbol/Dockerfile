@@ -14,10 +14,10 @@ RUN mkdir -p /etc/opentelemetry/injector/conf.d && chmod -R 777 /etc/opentelemet
 
 WORKDIR /usr/src/otel/injector
 
-COPY injector-integration-tests/apps/no-environ-symbol/go.mod .
-COPY injector-integration-tests/apps/no-environ-symbol/go.sum .
+COPY injector-integration-tests/apps/no-getenv-symbol/go.mod .
+COPY injector-integration-tests/apps/no-getenv-symbol/go.sum .
 RUN go mod download
-COPY injector-integration-tests/apps/no-environ-symbol/main.go .
+COPY injector-integration-tests/apps/no-getenv-symbol/main.go .
 
 ARG TARGETOS
 ARG TARGETARCH

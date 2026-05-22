@@ -84,10 +84,10 @@ var cached_dotnet_values = CachedDotnetValues{
     .values = null,
     .done = false,
 };
-var libc_flavor: ?types.LibCFlavor = null;
+var libc_info: ?types.LibCInfo = null;
 
-pub fn setLibcFlavor(lf: types.LibCFlavor) void {
-    libc_flavor = lf;
+pub fn setLibcInfo(info: types.LibCInfo) void {
+    libc_info = info;
 }
 
 /// Returns the values for .NET-profiler related environment variables.
@@ -107,11 +107,11 @@ fn doGetDotnetValues(gpa: std.mem.Allocator, dotnet_path_prefix: []u8, dotnet_in
         return null;
     }
 
-    if (libc_flavor == null) {
-        print.printError("invariant violated: libc flavor has not been set prior to calling getDotnetValues().", .{});
+    if (libc_info == null) {
+        print.printError("invariant violated: libc info has not been set prior to calling getDotnetValues().", .{});
         return null;
     }
-    if (libc_flavor == types.LibCFlavor.UNKNOWN) {
+    if (libc_info.?.flavor == .UNKNOWN) {
         print.printError("Cannot determine libc flavor", .{});
         return null;
     }
@@ -128,11 +128,11 @@ fn doGetDotnetValues(gpa: std.mem.Allocator, dotnet_path_prefix: []u8, dotnet_in
         return null;
     }
 
-    if (libc_flavor) |libc_f| {
+    if (libc_info) |info| {
         var dotnet_values = determineDotnetValues(
             gpa,
             dotnet_path_prefix,
-            libc_f,
+            info.flavor,
             builtin.cpu.arch,
         ) catch |err| {
             print.printError("Cannot determine .NET environment variables: {}", .{err});
@@ -252,8 +252,9 @@ fn shouldInjectDotnet(allocator: std.mem.Allocator) bool {
 }
 
 fn findConflictingPreExistingDotnetEnvVar() ?[:0]const u8 {
+    const getenv_fn = libc_info.?.getenv_fn_ptr;
     for (conflicting_dotnet_env_var_names) |env_var_name| {
-        if (std.posix.getenv(env_var_name) != null) {
+        if (getenv_fn(env_var_name) != null) {
             return env_var_name;
         }
     }
@@ -366,7 +367,7 @@ test "doGetDotnetValues: should return null value if the libc flavor has not bee
     const path = try std.fmt.allocPrint(allocator, "", .{});
     defer allocator.free(path);
 
-    libc_flavor = null;
+    // libc_info is null after _resetState()
     const dotnet_values = doGetDotnetValues(allocator, path, false);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
@@ -379,7 +380,7 @@ test "doGetDotnetValues: should return null value if dotnet_instrumentation_disa
     const path = try std.fmt.allocPrint(allocator, "/some/valid/path", .{});
     defer allocator.free(path);
 
-    libc_flavor = .GNU;
+    libc_info = test_util.testLibcInfo(.GNU);
     const dotnet_values = doGetDotnetValues(allocator, path, true);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
@@ -392,7 +393,7 @@ test "doGetDotnetValues: should return null value if dotnet_path_prefix is the e
     const path = try std.fmt.allocPrint(allocator, "", .{});
     defer allocator.free(path);
 
-    libc_flavor = .GNU;
+    libc_info = test_util.testLibcInfo(.GNU);
     const dotnet_values = doGetDotnetValues(allocator, path, false);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
@@ -405,7 +406,7 @@ test "doGetDotnetValues: should return null value if the profiler path cannot be
     const path = try std.fmt.allocPrintSentinel(allocator, "/invalid/path", .{}, 0);
     defer allocator.free(path);
 
-    libc_flavor = .GNU;
+    libc_info = test_util.testLibcInfo(.GNU);
     const dotnet_values = doGetDotnetValues(allocator, path, false);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
@@ -421,7 +422,7 @@ test "doGetDotnetValues: should return null value if conflicting .NET env var al
     const path = try std.fmt.allocPrintSentinel(allocator, "/some/valid/path", .{}, 0);
     defer allocator.free(path);
 
-    libc_flavor = .GNU;
+    libc_info = test_util.testLibcInfo(.GNU);
     const dotnet_values = doGetDotnetValues(allocator, path, false);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
@@ -430,6 +431,7 @@ test "findConflictingPreExistingDotnetEnvVar: returns null when no conflicting .
     const original_environ = try test_util.clearStdCEnviron();
     defer test_util.resetStdCEnviron(original_environ);
 
+    libc_info = test_util.testLibcInfo(.GNU);
     try test_util.expectWithMessage(findConflictingPreExistingDotnetEnvVar() == null, "conflicting env var should be null");
 }
 
@@ -437,6 +439,7 @@ test "findConflictingPreExistingDotnetEnvVar: returns CORECLR_ENABLE_PROFILING w
     const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"CORECLR_ENABLE_PROFILING=1"});
     defer test_util.resetStdCEnviron(original_environ);
 
+    libc_info = test_util.testLibcInfo(.GNU);
     try testing.expectEqualStrings(coreclr_enable_profiling_env_var_name, findConflictingPreExistingDotnetEnvVar() orelse return error.Unexpected);
 }
 
@@ -444,6 +447,7 @@ test "findConflictingPreExistingDotnetEnvVar: returns CORECLR_PROFILER when set"
     const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"CORECLR_PROFILER={existing-profiler-guid}"});
     defer test_util.resetStdCEnviron(original_environ);
 
+    libc_info = test_util.testLibcInfo(.GNU);
     try testing.expectEqualStrings(coreclr_profiler_env_var_name, findConflictingPreExistingDotnetEnvVar() orelse return error.Unexpected);
 }
 
@@ -451,6 +455,7 @@ test "findConflictingPreExistingDotnetEnvVar: returns CORECLR_PROFILER_PATH when
     const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"CORECLR_PROFILER_PATH=/tmp/existing-profiler.so"});
     defer test_util.resetStdCEnviron(original_environ);
 
+    libc_info = test_util.testLibcInfo(.GNU);
     try testing.expectEqualStrings(coreclr_profiler_path_env_var_name, findConflictingPreExistingDotnetEnvVar() orelse return error.Unexpected);
 }
 
@@ -458,6 +463,7 @@ test "findConflictingPreExistingDotnetEnvVar: returns DOTNET_ADDITIONAL_DEPS whe
     const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"DOTNET_ADDITIONAL_DEPS=/tmp/existing-additional-deps"});
     defer test_util.resetStdCEnviron(original_environ);
 
+    libc_info = test_util.testLibcInfo(.GNU);
     try testing.expectEqualStrings(dotnet_additional_deps_env_var_name, findConflictingPreExistingDotnetEnvVar() orelse return error.Unexpected);
 }
 
@@ -465,6 +471,7 @@ test "findConflictingPreExistingDotnetEnvVar: returns DOTNET_SHARED_STORE when s
     const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"DOTNET_SHARED_STORE=/tmp/existing-shared-store"});
     defer test_util.resetStdCEnviron(original_environ);
 
+    libc_info = test_util.testLibcInfo(.GNU);
     try testing.expectEqualStrings(dotnet_shared_store_env_var_name, findConflictingPreExistingDotnetEnvVar() orelse return error.Unexpected);
 }
 
@@ -472,6 +479,7 @@ test "findConflictingPreExistingDotnetEnvVar: returns DOTNET_STARTUP_HOOKS when 
     const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"DOTNET_STARTUP_HOOKS=/tmp/existing-startup-hook.dll"});
     defer test_util.resetStdCEnviron(original_environ);
 
+    libc_info = test_util.testLibcInfo(.GNU);
     try testing.expectEqualStrings(dotnet_startup_hooks_env_var_name, findConflictingPreExistingDotnetEnvVar() orelse return error.Unexpected);
 }
 
@@ -479,6 +487,7 @@ test "findConflictingPreExistingDotnetEnvVar: ignores OTEL_DOTNET_AUTO_HOME on i
     const original_environ = try test_util.setStdCEnviron(&[1][]const u8{"OTEL_DOTNET_AUTO_HOME=/tmp/existing-otel-home"});
     defer test_util.resetStdCEnviron(original_environ);
 
+    libc_info = test_util.testLibcInfo(.GNU);
     try test_util.expectWithMessage(findConflictingPreExistingDotnetEnvVar() == null, "OTEL_DOTNET_AUTO_HOME should not be treated as conflicting");
 }
 
@@ -846,5 +855,5 @@ fn _resetState() void {
         .values = null,
         .done = false,
     };
-    libc_flavor = null;
+    libc_info = null;
 }

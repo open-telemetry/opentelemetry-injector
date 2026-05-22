@@ -73,13 +73,14 @@ The approach taken by the OpenTelemetry injector is as follows:
       address of that symbol.
       If this lookup is successful, we can use it to actually call the `dlsym` function (without declaring a direct
       dependency on it).
-* Finally, use `dlsym` to find the location of the `setenv` and the `__environ` symbol.
+* Finally, use `dlsym` to find the location of `setenv` and `getenv`.
   On glibc < 2.34 (e.g. RHEL 8, Debian Bullseye), `dlsym` is provided by `libdl.so` rather than `libc.so` itself.
   If the binary does not link `libdl.so`, `dlsym` will not be found in the libc memory range.
-  In that case, the injector falls back to looking up `setenv` and `__environ` directly from the ELF symbol table of
+  In that case, the injector falls back to looking up `setenv` and `getenv` directly from the ELF symbol table of
   the libc memory range, which works because both symbols are always exported directly by `libc.so` on all glibc
-  versions.
-* Use the `__environ` symbol to read the existing environment variables for the process.
+  versions. Unlike `__environ` (a data symbol), `getenv` is a function and is not subject to copy relocation, so
+  looking it up from the ELF symbol table is safe regardless of how the executable was linked.
+* Use `getenv` to read the existing environment variables for the process.
 * Use `setenv` to set or modify the required environment variables (`NODE_OPTIONS`, `JAVA_TOOL_OPTIONS`,
   `OTEL_RESOURCE_ATTRIBUTES` etc.)
 
@@ -245,7 +246,7 @@ from the suite of CNI network plug-ins, which runs in Kubernetes pods in the `ku
 Here is how this binary is
 [built](https://github.com/aws/amazon-vpc-cni-k8s/blob/4ee9789484258d1ae8f6bf36859ea325097d5d7b/Makefile#L149-L152):
 It is written in Go and built with `-buildmode=pie` and `-ldflags '-s -w'`.
-There is also a [trivial test application](injector-integration-tests/runtimes/no-environ-symbol) that is built in the
+There is also a [trivial test application](injector-integration-tests/apps/no-getenv-symbol) that is built in the
 same way, contained in this repository.
 
 When using an `LD_PRELOAD`-based injector that declares a dependency on `__environ` (or any other libc symbol), a binary

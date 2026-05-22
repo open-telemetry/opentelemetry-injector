@@ -40,8 +40,8 @@ fi
 if [[ "$TEST_SET" = "jvm.tests" ]]; then
   test_app="jvm"
 fi
-if [[ "$TEST_SET" = "no-environ-symbol.tests" ]]; then
-  test_app="no-environ-symbol"
+if [[ "$TEST_SET" = "no-getenv-symbol.tests" ]]; then
+  test_app="no-getenv-symbol"
 fi
 if [[ "$TEST_SET" = "python.tests" ]]; then
   test_app="python"
@@ -92,8 +92,8 @@ case "$test_app" in
       base_image_run=python:3.14-alpine3.23
     fi
     ;;
-  "no-environ-symbol")
-    dockerfile_name="injector-integration-tests/apps/no-environ-symbol/Dockerfile"
+  "no-getenv-symbol")
+    dockerfile_name="injector-integration-tests/apps/no-getenv-symbol/Dockerfile"
     base_image_run=golang:1.26.3-trixie
     # We do not provide a different base image depending on the libc flavor, the point of this test scenario is to test
     # an app that depends on no libc whatsoever, so the test is the same for LIBC=musl and LIBC=glibc.

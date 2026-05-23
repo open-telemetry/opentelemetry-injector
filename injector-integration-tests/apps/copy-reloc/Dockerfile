@@ -30,11 +30,10 @@ COPY injector-integration-tests/apps/copy-reloc app
 
 COPY injector-integration-tests/scripts/*.sh scripts/
 COPY injector-integration-tests/tests/*.tests tests/
-COPY injector-integration-tests/common/conf.d/ /etc/opentelemetry/injector/conf.d/
-COPY injector-integration-tests/common/injector.conf injector.conf
+COPY injector-integration-tests/common/ common/
 COPY injector-integration-tests/common/injector.custom-location.conf /custom/config/path/injector.conf
-COPY injector-integration-tests/common/default_env.conf common/default_env.conf
 
+RUN scripts/create-config-file-directory.sh
 RUN ${create_sdk_dummy_files_script}
 
 COPY dist/${injector_binary} /injector/libotelinject.so

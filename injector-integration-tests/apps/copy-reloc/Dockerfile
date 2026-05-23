@@ -28,8 +28,7 @@ COPY injector-integration-tests/apps/copy-reloc/no-op-agent no-op-agent
 
 COPY injector-integration-tests/apps/copy-reloc app
 
-COPY injector-integration-tests/scripts/run-tests-within-container.sh scripts/
-COPY injector-integration-tests/scripts/create-*.sh scripts/
+COPY injector-integration-tests/scripts/*.sh scripts/
 COPY injector-integration-tests/tests/*.tests tests/
 COPY injector-integration-tests/common/conf.d/ /etc/opentelemetry/injector/conf.d/
 COPY injector-integration-tests/common/injector.conf injector.conf

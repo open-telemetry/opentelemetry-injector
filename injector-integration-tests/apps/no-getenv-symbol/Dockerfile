@@ -27,7 +27,7 @@ RUN GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -v -buildmode=pie -ldf
 COPY injector-integration-tests/scripts/*.sh scripts/
 COPY injector-integration-tests/tests/*.tests tests/
 COPY injector-integration-tests/common/ common/
-COPY injector-integration-tests/common/injector.exclude-noenviron.conf injector.exclude-noenviron.conf
+COPY injector-integration-tests/common/injector.exclude-nogetenv.conf injector.exclude-nogetenv.conf
 
 COPY dist/${injector_binary} /injector/libotelinject.so
 

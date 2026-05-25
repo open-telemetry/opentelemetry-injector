@@ -1013,10 +1013,8 @@ fn tryToFindSymbolsInMemoryRange(
     // Using getenv (a function) avoids this problem entirely.
     const setenv_fn_ptr = elf_lib.lookup(types.SetenvFnPtr, setenv_function_name) orelse
         return error.CannotFindSetenvSymbol;
-    const getenv_fn_ptr = elf_lib.lookup(types.GetenvFnPtr, getenv_function_name) orelse {
-        print.printDebug("getenv symbol not found in ELF at {x}-{x}; skipping this memory range", .{ start, end });
+    const getenv_fn_ptr = elf_lib.lookup(types.GetenvFnPtr, getenv_function_name) orelse
         return error.CannotFindGetenvSymbol;
-    };
 
     return .{
         .flavor = libc_name_and_flavor.flavor,

@@ -70,6 +70,10 @@ const mappings: [7]EnvToResourceAttributeMapping =
 /// The caller is responsible for freeing the returned string (unless the result is passed on to setenv and needs to
 /// stay in memory).
 pub fn getModifiedOtelResourceAttributesValue(gpa: std.mem.Allocator) !?[:0]u8 {
+    if (libc_info == null) {
+        print.printError("invariant violated: libc info has not been set prior to calling getModifiedOtelResourceAttributesValue().", .{});
+        return null;
+    }
     const getenv_fn = libc_info.?.getenv_fn_ptr;
     var result_list = try std.ArrayList(u8).initCapacity(gpa, std.heap.pageSize());
     const result_writer = result_list.writer(gpa);

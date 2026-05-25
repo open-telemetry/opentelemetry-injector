@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:087fc98e5c6ffcea6c3e276c135c4a6717c589d9509a09cc22e7c634830a4db8 AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:c6a1f83156998790d89bfaf51f891aeab539bfa0792f7ddc19b63ba49b2ed8f2 AS build
 WORKDIR /src
 COPY "packaging/tests/shared/dotnet/DotNetTestApp.csproj" .
 RUN dotnet restore "DotNetTestApp.csproj"
@@ -8,7 +8,7 @@ RUN dotnet build "DotNetTestApp.csproj" -c Release -o /app/build
 FROM build AS publish
 RUN dotnet publish "DotNetTestApp.csproj" -c Release -o /app/publish
 
-FROM debian:bookworm-20260505@sha256:85019db29298555fd1a5f4bb57673ae989414a9884117c75d7a3e1a6cce21688 AS final
+FROM debian:bookworm-20260518@sha256:ed4fcc40bb1162b6d2d32e7bec15044d13963779abbe63f67f1cd62b06220519 AS final
 
 ARG ARCH=amd64
 ARG RPM_ARCH=x86_64

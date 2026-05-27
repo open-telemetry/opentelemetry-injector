@@ -4,6 +4,7 @@
 // **Note: This file must only be imported from *_test.zig files, never from actual production code zig files.**
 
 const std = @import("std");
+const types = @import("types.zig");
 
 const _print = @import("print.zig");
 
@@ -56,6 +57,32 @@ pub fn setStdCEnviron(env_vars: []const []const u8) anyerror![*:null]?[*:0]u8 {
 /// setStdCEnviron earlier, to restore the original environment after the test is done.
 pub fn resetStdCEnviron(original_environ: [*:null]?[*:0]u8) void {
     std.c.environ = original_environ;
+}
+
+/// A GetenvFnPtr-compatible wrapper around std.posix.getenv for use in tests.
+/// Tests manipulate std.c.environ via setStdCEnviron/clearStdCEnviron, and std.posix.getenv
+/// reads from std.c.environ when link_libc is true (which is the case at test runtime).
+pub fn testGetenvFnPtr(name: [*:0]const u8) ?[*:0]const u8 {
+    const val = std.posix.getenv(std.mem.span(name)) orelse return null;
+    // val.ptr points into a null-terminated string in std.c.environ, safe to cast.
+    return @ptrCast(val.ptr);
+}
+
+fn testNoopSetenvFnPtr(name: [*:0]const u8, value: [*:0]const u8, overwrite: bool) c_int {
+    _ = name;
+    _ = value;
+    _ = overwrite;
+    return 0;
+}
+
+/// Returns a LibCInfo suitable for unit tests. The setenv function pointer is a no-op
+/// since tests that use this helper do not exercise the actual setenv path.
+pub fn testLibcInfo(flavor: types.LibCFlavor) types.LibCInfo {
+    return .{
+        .flavor = flavor,
+        .getenv_fn_ptr = testGetenvFnPtr,
+        .setenv_fn_ptr = testNoopSetenvFnPtr,
+    };
 }
 
 /// An extended version of std.testing.expect that prints a message in case of failure. Useful for tests that have

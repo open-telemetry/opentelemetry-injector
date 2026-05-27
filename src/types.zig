@@ -3,15 +3,14 @@
 
 pub const DlSymFn = *const fn (handle: ?*anyopaque, symbol: [*:0]const u8) ?*anyopaque;
 
-pub const SetenvFnPtr = *const fn (name: [*:0]const u8, value: [*:0]const u8, overwrite: bool) c_int;
+pub const GetenvFnPtr = *const fn (name: [*:0]const u8) ?[*:0]const u8;
 
-pub const EnvironPtr = *[*c][*c]const u8;
+pub const SetenvFnPtr = *const fn (name: [*:0]const u8, value: [*:0]const u8, overwrite: bool) c_int;
 
 pub const LibCFlavor = enum { UNKNOWN, GNU, MUSL };
 
 pub const LibCInfo = struct {
     flavor: LibCFlavor,
-    name: []const u8,
-    environ_ptr: EnvironPtr,
+    getenv_fn_ptr: GetenvFnPtr,
     setenv_fn_ptr: SetenvFnPtr,
 };

@@ -18,8 +18,6 @@ const types = @import("types.zig");
 const pattern_matcher = @import("patterns_matcher.zig");
 const args_parser = @import("args_parser.zig");
 
-const empty_z_string = "\x00";
-
 const init_section_name = switch (builtin.target.os.tag) {
     .linux => ".init_array",
     // Note: the injector does not support any OS besides Linux, this case is only here to support running Zig unit
@@ -31,12 +29,6 @@ const init_section_name = switch (builtin.target.os.tag) {
 };
 
 export const init_array: [1]*const fn () callconv(.c) void linksection(init_section_name) = .{&initEnviron};
-
-var environ_ptr: ?types.EnvironPtr = null;
-
-const InjectorError = error{
-    CannotFindEnvironSymbol,
-};
 
 fn initEnviron() callconv(.c) void {
     const allocator = std.heap.page_allocator;
@@ -74,25 +66,11 @@ fn initEnviron() callconv(.c) void {
         }
         return;
     };
-    defer allocator.free(libc_info.name);
-    print.printDebug("identified {s} libc loaded from {s}", .{ switch (libc_info.flavor) {
-        types.LibCFlavor.GNU => "GNU",
-        types.LibCFlavor.MUSL => "musl",
-        else => "unknown",
-    }, libc_info.name });
-    dotnet.setLibcFlavor(libc_info.flavor);
-    python.setLibcFlavor(libc_info.flavor);
+    dotnet.setLibcInfo(libc_info);
+    python.setLibcInfo(libc_info);
+    res_attrs.setLibcInfo(libc_info);
 
-    environ_ptr = libc_info.environ_ptr;
-    updateStdOsEnviron() catch |err| {
-        print.printError("initEnviron(): cannot update std.os.environ: {}; ", .{err});
-        return;
-    };
-
-    const maybe_modified_resource_attributes = res_attrs.getModifiedOtelResourceAttributesValue(
-        allocator,
-        std.posix.getenv(res_attrs.otel_resource_attributes_env_var_name),
-    ) catch |err| {
+    const maybe_modified_resource_attributes = res_attrs.getModifiedOtelResourceAttributesValue(allocator) catch |err| {
         print.printError("cannot calculate modified OTEL_RESOURCE_ATTRIBUTES: {}", .{err});
         return;
     };
@@ -121,92 +99,76 @@ fn initEnviron() callconv(.c) void {
 
     modifyEnvironmentVariable(
         allocator,
-        libc_info.setenv_fn_ptr,
+        libc_info,
         nodejs.node_options_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
         allocator,
-        libc_info.setenv_fn_ptr,
+        libc_info,
         jvm.java_tool_options_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
         allocator,
-        libc_info.setenv_fn_ptr,
+        libc_info,
         python.pythonpath_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
         allocator,
-        libc_info.setenv_fn_ptr,
+        libc_info,
         dotnet.coreclr_enable_profiling_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
         allocator,
-        libc_info.setenv_fn_ptr,
+        libc_info,
         dotnet.coreclr_profiler_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
         allocator,
-        libc_info.setenv_fn_ptr,
+        libc_info,
         dotnet.coreclr_profiler_path_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
         allocator,
-        libc_info.setenv_fn_ptr,
+        libc_info,
         dotnet.dotnet_additional_deps_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
         allocator,
-        libc_info.setenv_fn_ptr,
+        libc_info,
         dotnet.dotnet_shared_store_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
         allocator,
-        libc_info.setenv_fn_ptr,
+        libc_info,
         dotnet.dotnet_startup_hooks_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
         allocator,
-        libc_info.setenv_fn_ptr,
+        libc_info,
         dotnet.otel_dotnet_auto_home_env_var_name,
         configuration,
     );
 
     setCustomEnvironmentVariables(
         allocator,
-        libc_info.setenv_fn_ptr,
+        libc_info,
         configuration.all_auto_instrumentation_agents_env_vars,
     );
 
     print.printInfo("environment injection finished", .{});
 }
 
-fn updateStdOsEnviron() !void {
-    // Dynamic libs do not get the std.os.environ initialized, see https://github.com/ziglang/zig/issues/4524, so we
-    // back fill it. This logic is based on parsing of envp on zig's start.
-    if (environ_ptr) |environment_ptr| {
-        const env_array = environment_ptr.*;
-        var env_var_count: usize = 0;
-        // Note: env_array will be empty in some cases, for example if the application calls clearenv. Accessing
-        // env_array[0] as we do in the while loop below would segfault. Instead we initialize an empty environ slice.
-        if (env_array == 0) {
-            std.os.environ = &.{};
-            return;
-        }
-        while (env_array[env_var_count] != null) : (env_var_count += 1) {}
-
-        std.os.environ = @ptrCast(@constCast(env_array[0..env_var_count]));
-    } else {
-        return error.CannotFindEnvironSymbol;
-    }
+fn libcGetenv(getenv_fn: types.GetenvFnPtr, name: [:0]const u8) ?[:0]const u8 {
+    return std.mem.span(getenv_fn(name) orelse return null);
 }
 
 fn evaluateAllowDeny(allocator: std.mem.Allocator, configuration: config.InjectorConfiguration) bool {
@@ -295,16 +257,16 @@ fn getExecutablePath(allocator: std.mem.Allocator) ![]u8 {
 
 fn modifyEnvironmentVariable(
     allocator: std.mem.Allocator,
-    setenv_fn_ptr: types.SetenvFnPtr,
+    lci: types.LibCInfo,
     name: [:0]const u8,
     configuration: config.InjectorConfiguration,
 ) void {
-    if (getEnvValue(allocator, name, configuration)) |value| {
+    if (getEnvValue(allocator, lci, name, configuration)) |value| {
         // Note: We must *not* free/deallocate the return value of getEnvValue after handing it over to setenv, or we
         // may cause a USE_AFTER_FREE memory corruption in the parent process.
         // Note: getEnvValue returns a sentinel-terminated slices, which can be coerced automatically into the
         // sentinel-terminated many pointer which is required by setenv.
-        const setenv_res = setenv_fn_ptr(name, value, true);
+        const setenv_res = lci.setenv_fn_ptr(name, value, true);
         if (setenv_res == 0) {
             print.printDebug(
                 "setting \"{s}\"=\"{s}\"",
@@ -321,10 +283,11 @@ fn modifyEnvironmentVariable(
 
 fn getEnvValue(
     allocator: std.mem.Allocator,
+    lci: types.LibCInfo,
     name: [:0]const u8,
     configuration: config.InjectorConfiguration,
 ) ?[:0]const u8 {
-    const original_value = std.posix.getenv(name);
+    const original_value = libcGetenv(lci.getenv_fn_ptr, name);
     if (std.mem.eql(u8, name, jvm.java_tool_options_env_var_name)) {
         return jvm.checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
             allocator,
@@ -388,7 +351,7 @@ fn getEnvValue(
 
 fn setCustomEnvironmentVariables(
     allocator: std.mem.Allocator,
-    setenv_fn_ptr: types.SetenvFnPtr,
+    lci: types.LibCInfo,
     custom_env_vars: std.StringHashMap([]u8),
 ) void {
     if (custom_env_vars.count() == 0) {
@@ -418,7 +381,7 @@ fn setCustomEnvironmentVariables(
             );
             return;
         };
-        const setenv_res = setenv_fn_ptr(name, value, true);
+        const setenv_res = lci.setenv_fn_ptr(name, value, true);
         if (setenv_res == 0) {
             print.printDebug("setting \"{s}\"=\"{s}\"", .{ name, value });
         } else {

@@ -138,7 +138,7 @@ run_test_case() {
   set -e
   if [ "$match" -gt 0 ]; then
     echo "providing include paths filter configuration file at /etc/opentelemetry/injector/injector.conf for test case \"$test_case_label\""
-    cp injector.exclude-noenviron.conf /etc/opentelemetry/injector/injector.conf
+    cp injector.exclude-nogetenv.conf /etc/opentelemetry/injector/injector.conf
   fi
 
   set +e

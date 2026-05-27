@@ -12,10 +12,10 @@ const testing = std.testing;
 
 pub const pythonpath_env_var_name = "PYTHONPATH";
 
-var libc_flavor: ?types.LibCFlavor = null;
+var libc_info: ?types.LibCInfo = null;
 
-pub fn setLibcFlavor(lf: types.LibCFlavor) void {
-    libc_flavor = lf;
+pub fn setLibcInfo(info: types.LibCInfo) void {
+    libc_info = info;
 }
 
 /// Returns the modified value for PYTHONPATH with the Python auto-instrumentation prepended to the original value of
@@ -47,17 +47,17 @@ fn doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
         return null;
     }
 
-    if (libc_flavor == null) {
-        print.printError("invariant violated: libc flavor has not been set prior to calling doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue().", .{});
+    if (libc_info == null) {
+        print.printError("invariant violated: libc info has not been set prior to calling doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue().", .{});
         return null;
     }
-    if (libc_flavor == types.LibCFlavor.UNKNOWN) {
+    if (libc_info.?.flavor == .UNKNOWN) {
         print.printError("Cannot determine libc flavor", .{});
         return null;
     }
-    if (libc_flavor) |libc_f| {
+    if (libc_info) |info| {
         const libc_flavor_suffix =
-            switch (libc_f) {
+            switch (info.flavor) {
                 .GNU => "glibc",
                 .MUSL => "musl",
                 else => unreachable,
@@ -114,7 +114,7 @@ test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should
     const path_prefix = try std.fmt.allocPrint(allocator, "", .{});
     defer allocator.free(path_prefix);
 
-    libc_flavor = .UNKNOWN;
+    libc_info = test_util.testLibcInfo(.UNKNOWN);
     const modified_pythonpath_value =
         doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
             allocator,
@@ -133,7 +133,7 @@ test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should
     const path_prefix = try std.fmt.allocPrint(allocator, "/some/valid/path", .{});
     defer allocator.free(path_prefix);
 
-    libc_flavor = .GNU;
+    libc_info = test_util.testLibcInfo(.GNU);
     const modified_pythonpath_value =
         doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
             allocator,
@@ -152,7 +152,7 @@ test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should
     const path_prefix = try std.fmt.allocPrint(allocator, "", .{});
     defer allocator.free(path_prefix);
 
-    libc_flavor = .GNU;
+    libc_info = test_util.testLibcInfo(.GNU);
     const modified_pythonpath_value =
         doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
             allocator,
@@ -171,7 +171,7 @@ test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should
     const path_prefix = try std.fmt.allocPrint(allocator, "/invalid/path", .{});
     defer allocator.free(path_prefix);
 
-    libc_flavor = .GNU;
+    libc_info = test_util.testLibcInfo(.GNU);
     const modified_pythonpath_value =
         doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
             allocator,
@@ -190,7 +190,7 @@ test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should
     const path_prefix = try std.fmt.allocPrint(allocator, "/invalid/path", .{});
     defer allocator.free(path_prefix);
 
-    libc_flavor = .GNU;
+    libc_info = test_util.testLibcInfo(.GNU);
     const modified_pythonpath_value =
         doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
             allocator,
@@ -368,5 +368,5 @@ test "getModifiedPythonpathValue: should return null if the auto-instrumentation
 
 /// Only used for unit tests.
 fn _resetState() void {
-    libc_flavor = null;
+    libc_info = null;
 }

@@ -73,7 +73,7 @@ fn matchEntry(entry: []const u8, name: []const u8) ?[]const u8 {
 /// Initializes a few selected configuration settings (injector disabled, log level) based on environment variables
 /// (OTEL_INJECTOR_DISABLED, OTEL_INJECTOR_LOG_LEVEL), by reading /proc/self/environ directly. This runs before
 /// libc detection, config file reading, and allow/deny filtering — all of which depend on these settings or must
-/// complete before libc is accessed. The __environ pointer from libc is not yet available at this stage.
+/// complete before libc is accessed. Reading /proc/self/environ directly avoids any dependency on libc at this stage.
 pub fn initFromProcSelfEnviron() !void {
     try initFromEnvironFile(proc_self_environ_path);
 }

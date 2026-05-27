@@ -344,12 +344,12 @@ This is a short summary of how the injector works internally:
 2. If the process does not bind a libc, or it cannot be identified, the injector aborts injection and hands back control
    to the host process.
 3. Find the location of the `dlsym` function in the loaded libc (in memory), reading ELF metadata.
-4. Use the libc's `dlsym` handle to look up more symbols in memory, in particular `__environ` and `setenv`.
+4. Use the libc's `dlsym` handle to look up more symbols in memory, in particular `getenv` and `setenv`.
 5. Again, if looking up any of the symbols fails, the injector aborts injection and hands back control to the host
    process.
-6. Use the pointer to the `__environ` symbol to read the current environment of the process (before adding or modifying
-   any environment variables).
-7. Use the pointer to the `setenv` symbol to add or modify environment variables to add and activate OpenTelemetry
+6. Use the `getenv` function to read the current environment of the process (before adding or modifying any environment
+   variables).
+7. Use the `setenv` function to add or modify environment variables to add and activate OpenTelemetry
    SDKs/auto-instrumentation agents for supported runtimes (e.g. `NODE_OPTIONS`, `JAVA_TOOL_OPTIONS`,
    `CORECLR_PROFILER`).
 8. Use the pointer to the `setenv` symbol to add or modify `OTEL_RESOURCE_ATTRIBUTES`.

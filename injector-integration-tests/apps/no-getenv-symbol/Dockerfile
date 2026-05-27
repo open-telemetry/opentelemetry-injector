@@ -14,20 +14,20 @@ RUN mkdir -p /etc/opentelemetry/injector/conf.d && chmod -R 777 /etc/opentelemet
 
 WORKDIR /usr/src/otel/injector
 
-COPY injector-integration-tests/apps/no-environ-symbol/go.mod .
-COPY injector-integration-tests/apps/no-environ-symbol/go.sum .
+COPY injector-integration-tests/apps/no-getenv-symbol/go.mod .
+COPY injector-integration-tests/apps/no-getenv-symbol/go.sum .
 RUN go mod download
-COPY injector-integration-tests/apps/no-environ-symbol/main.go .
+COPY injector-integration-tests/apps/no-getenv-symbol/main.go .
 
 ARG TARGETOS
 ARG TARGETARCH
 
-RUN GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -v -buildmode=pie -ldflags '-s -w' -o app/noenviron .
+RUN GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -v -buildmode=pie -ldflags '-s -w' -o app/nogetenv .
 
 COPY injector-integration-tests/scripts/*.sh scripts/
 COPY injector-integration-tests/tests/*.tests tests/
 COPY injector-integration-tests/common/ common/
-COPY injector-integration-tests/common/injector.exclude-noenviron.conf injector.exclude-noenviron.conf
+COPY injector-integration-tests/common/injector.exclude-nogetenv.conf injector.exclude-nogetenv.conf
 
 COPY dist/${injector_binary} /injector/libotelinject.so
 

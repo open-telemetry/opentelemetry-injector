@@ -17,8 +17,8 @@ const musl_name_part = "musl";
 const readable_executable_private = "r-xp";
 const readable_private = "r--p";
 const dlsym_function_name = "dlsym";
+const getenv_function_name = "getenv";
 const setenv_function_name = "setenv";
-const environ_symbol_name = "__environ";
 
 const reader_buffer_len = 4096;
 const empty_string = @constCast("");
@@ -28,37 +28,15 @@ const LibCNameAndFlavor = struct {
     name: []const u8,
 };
 
-const LibCError = error{
-    CannotAllocateMemory,
-    CannotFindAtBase,
-    CannotFindElfDynamicSymbolTableOffset,
-    CannotFindElfDynamicSymbolTableSize,
-    CannotFindEnvironSymbol,
-    CannotFindLibcMemoryRange,
-    CannotFindSetenvSymbol,
-    CannotOpenLibc,
-    UnknownLibCFlavor,
-};
-
 const UnknownLibC = LibCNameAndFlavor{
     .flavor = types.LibCFlavor.UNKNOWN,
     .name = "",
 };
 
-const DlsymLookupResult = struct {
-    found: bool,
-    libc_info: types.LibCInfo,
-};
-
-const AuxiliaryPointers = struct {
-    base: usize,
-    phdr: usize,
-};
-
 pub const DlsymLookupFn = *const fn (LibCNameAndFlavor, usize, usize) @typeInfo(@typeInfo(@TypeOf(tryToFindSymbolsInMemoryRange)).@"fn".return_type.?).error_union.error_set!types.LibCInfo;
 
 /// Look up which libc flavor (glibc vs. musl) is used (if any), and the memory addresses of key libc facilities we need
-/// (i.e. __environ, setenv).
+/// (i.e. getenv, setenv).
 ///
 /// This is performed in three steps:
 /// 1. Inspect the ELF metadata of the program's executable ("/proc/self/exe"), using the DT_NEEDED symbols for the
@@ -66,9 +44,10 @@ pub const DlsymLookupFn = *const fn (LibCNameAndFlavor, usize, usize) @typeInfo(
 /// 2. Look up pointer to the `dlsym` function in the libc loaded by the program, as springboard for the next look ups.
 ///    We use a simplified version of the ELF support in Zig's std library (`dynamic_library`) because we do not want to
 ///    have to support the infinite number of corner cases of the various libc flavors and versions.
-/// 3. Use the loaded libc's `dlsym` function to look up the symbols we need (__environ, setenv).
+/// 3. Use the loaded libc's `dlsym` function to look up the symbols we need (getenv, setenv).
 pub fn getLibCInfo(gpa: std.mem.Allocator) !types.LibCInfo {
     const libc_name_and_flavor = try getLibCNameAndFlavor(gpa, proc_self_exe_path);
+    defer if (libc_name_and_flavor.flavor != .UNKNOWN) gpa.free(libc_name_and_flavor.name);
     const libc_info = getLibCMemoryLocations(
         proc_self_maps_path,
         libc_name_and_flavor,
@@ -84,6 +63,14 @@ pub fn getLibCInfo(gpa: std.mem.Allocator) !types.LibCInfo {
         }
         return err;
     };
+    print.printDebug("identified {s} libc loaded from {s}", .{
+        switch (libc_name_and_flavor.flavor) {
+            .GNU => "GNU",
+            .MUSL => "musl",
+            else => "unknown",
+        },
+        libc_name_and_flavor.name,
+    });
     return libc_info;
 }
 
@@ -354,8 +341,7 @@ test "getLibCMemoryLocations: glibc" {
         mockFindSymbolsInMemoryRange,
     );
     try testing.expectEqual(.GNU, libc_info.flavor);
-    try testing.expectEqual(glibc_name, libc_info.name);
-    try test_util.expectMemoryRangeLimit(0x7fffff2e6000, libc_info.environ_ptr);
+    try test_util.expectMemoryRangeLimit(0x7fffff2e6000, libc_info.getenv_fn_ptr);
     try test_util.expectMemoryRangeLimit(0x7fffff43c000, libc_info.setenv_fn_ptr);
     try testing.expectEqual(__test_find_symbol_succeed_on_attempt, __test_find_symbol_actual_attempts);
 }
@@ -549,8 +535,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: x86_64" {
         mockFindSymbolsInMemoryRange,
     );
     try testing.expectEqual(.GNU, libc_info.flavor);
-    try testing.expectEqual(glibc_name, libc_info.name);
-    try test_util.expectMemoryRangeLimit(0x7fffff2e6000, libc_info.environ_ptr);
+    try test_util.expectMemoryRangeLimit(0x7fffff2e6000, libc_info.getenv_fn_ptr);
     try test_util.expectMemoryRangeLimit(0x7fffff43c000, libc_info.setenv_fn_ptr);
     try testing.expectEqual(__test_find_symbol_succeed_on_attempt, __test_find_symbol_actual_attempts);
 }
@@ -569,8 +554,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: arm64" {
         .name = glibc_name,
     }, mockFindSymbolsInMemoryRange);
     try testing.expectEqual(.GNU, libc_info.flavor);
-    try testing.expectEqual(glibc_name, libc_info.name);
-    try test_util.expectMemoryRangeLimit(0xffff88c50000, libc_info.environ_ptr);
+    try test_util.expectMemoryRangeLimit(0xffff88c50000, libc_info.getenv_fn_ptr);
     try test_util.expectMemoryRangeLimit(0xffff88ddb000, libc_info.setenv_fn_ptr);
     try testing.expectEqual(__test_find_symbol_succeed_on_attempt, __test_find_symbol_actual_attempts);
 }
@@ -593,8 +577,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocation: x86_64/Debian 11" {
         mockFindSymbolsInMemoryRange,
     );
     try testing.expectEqual(.GNU, libc_info.flavor);
-    try testing.expectEqual(glibc_name, libc_info.name);
-    try test_util.expectMemoryRangeLimit(0x7fffff2c9000, libc_info.environ_ptr);
+    try test_util.expectMemoryRangeLimit(0x7fffff2c9000, libc_info.getenv_fn_ptr);
     try test_util.expectMemoryRangeLimit(0x7fffff422000, libc_info.setenv_fn_ptr);
     try testing.expectEqual(__test_find_symbol_succeed_on_attempt, __test_find_symbol_actual_attempts);
 }
@@ -613,8 +596,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: arm64/Debian 11" {
         .name = glibc_name,
     }, mockFindSymbolsInMemoryRange);
     try testing.expectEqual(.GNU, libc_info.flavor);
-    try testing.expectEqual(glibc_name, libc_info.name);
-    try test_util.expectMemoryRangeLimit(0xffffa72b3000, libc_info.environ_ptr);
+    try test_util.expectMemoryRangeLimit(0xffffa72b3000, libc_info.getenv_fn_ptr);
     try test_util.expectMemoryRangeLimit(0xffffa740f000, libc_info.setenv_fn_ptr);
     try testing.expectEqual(__test_find_symbol_succeed_on_attempt, __test_find_symbol_actual_attempts);
 }
@@ -637,8 +619,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: continue to read after disca
         mockFindSymbolsInMemoryRange,
     );
     try testing.expectEqual(.GNU, libc_info.flavor);
-    try testing.expectEqual(glibc_name, libc_info.name);
-    try test_util.expectMemoryRangeLimit(0x7fffff2e6000, libc_info.environ_ptr);
+    try test_util.expectMemoryRangeLimit(0x7fffff2e6000, libc_info.getenv_fn_ptr);
     try test_util.expectMemoryRangeLimit(0x7fffff43c000, libc_info.setenv_fn_ptr);
     try testing.expectEqual(__test_find_symbol_succeed_on_attempt, __test_find_symbol_actual_attempts);
 }
@@ -661,8 +642,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: continue to read after disca
         mockFindSymbolsInMemoryRange,
     );
     try testing.expectEqual(.GNU, libc_info.flavor);
-    try testing.expectEqual(glibc_name, libc_info.name);
-    try test_util.expectMemoryRangeLimit(0x7fffff2c9000, libc_info.environ_ptr);
+    try test_util.expectMemoryRangeLimit(0x7fffff2c9000, libc_info.getenv_fn_ptr);
     try test_util.expectMemoryRangeLimit(0x7fffff422000, libc_info.setenv_fn_ptr);
     try testing.expectEqual(__test_find_symbol_succeed_on_attempt, __test_find_symbol_actual_attempts);
 }
@@ -685,8 +665,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: read last line if not termin
         mockFindSymbolsInMemoryRange,
     );
     try testing.expectEqual(.GNU, libc_info.flavor);
-    try testing.expectEqual(glibc_name, libc_info.name);
-    try test_util.expectMemoryRangeLimit(0x7fffff2e6000, libc_info.environ_ptr);
+    try test_util.expectMemoryRangeLimit(0x7fffff2e6000, libc_info.getenv_fn_ptr);
     try test_util.expectMemoryRangeLimit(0x7fffff43c000, libc_info.setenv_fn_ptr);
     try testing.expectEqual(__test_find_symbol_succeed_on_attempt, __test_find_symbol_actual_attempts);
 }
@@ -709,8 +688,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: read last line if not termin
         mockFindSymbolsInMemoryRange,
     );
     try testing.expectEqual(.GNU, libc_info.flavor);
-    try testing.expectEqual(glibc_name, libc_info.name);
-    try test_util.expectMemoryRangeLimit(0x7fffff2c9000, libc_info.environ_ptr);
+    try test_util.expectMemoryRangeLimit(0x7fffff2c9000, libc_info.getenv_fn_ptr);
     try test_util.expectMemoryRangeLimit(0x7fffff422000, libc_info.setenv_fn_ptr);
     try testing.expectEqual(__test_find_symbol_succeed_on_attempt, __test_find_symbol_actual_attempts);
 }
@@ -839,8 +817,7 @@ test "findMuslMemoryRangeAndLookupMemoryLocations: x86_64" {
         mockFindSymbolsInMemoryRange,
     );
     try testing.expectEqual(.MUSL, libc_info.flavor);
-    try testing.expectEqual(musl_name_part, libc_info.name);
-    try test_util.expectMemoryRangeLimit(0x7ffffff6e000, libc_info.environ_ptr);
+    try test_util.expectMemoryRangeLimit(0x7ffffff6e000, libc_info.getenv_fn_ptr);
     try test_util.expectMemoryRangeLimit(0x7ffffffc5000, libc_info.setenv_fn_ptr);
     try testing.expectEqual(__test_find_symbol_succeed_on_attempt, __test_find_symbol_actual_attempts);
 }
@@ -864,8 +841,7 @@ test "findMuslMemoryRangeAndLookupMemoryLocations: arm64" {
         mockFindSymbolsInMemoryRange,
     );
     try testing.expectEqual(.MUSL, libc_info.flavor);
-    try testing.expectEqual(musl_name_part, libc_info.name);
-    try test_util.expectMemoryRangeLimit(0xffffb3670000, libc_info.environ_ptr);
+    try test_util.expectMemoryRangeLimit(0xffffb3670000, libc_info.getenv_fn_ptr);
     try test_util.expectMemoryRangeLimit(0xffffb3712000, libc_info.setenv_fn_ptr);
     try testing.expectEqual(__test_find_symbol_succeed_on_attempt, __test_find_symbol_actual_attempts);
 }
@@ -889,8 +865,7 @@ test "findMuslMemoryRangeAndLookupMemoryLocations: continue to read after discar
         mockFindSymbolsInMemoryRange,
     );
     try testing.expectEqual(.MUSL, libc_info.flavor);
-    try testing.expectEqual(musl_name_part, libc_info.name);
-    try test_util.expectMemoryRangeLimit(0x7ffffff6e000, libc_info.environ_ptr);
+    try test_util.expectMemoryRangeLimit(0x7ffffff6e000, libc_info.getenv_fn_ptr);
     try test_util.expectMemoryRangeLimit(0x7ffffffc5000, libc_info.setenv_fn_ptr);
     try testing.expectEqual(__test_find_symbol_succeed_on_attempt, __test_find_symbol_actual_attempts);
 }
@@ -914,8 +889,7 @@ test "findMuslMemoryRangeAndLookupMemoryLocations: read last line if not termina
         mockFindSymbolsInMemoryRange,
     );
     try testing.expectEqual(.MUSL, libc_info.flavor);
-    try testing.expectEqual(musl_name_part, libc_info.name);
-    try test_util.expectMemoryRangeLimit(0x7ffffff6e000, libc_info.environ_ptr);
+    try test_util.expectMemoryRangeLimit(0x7ffffff6e000, libc_info.getenv_fn_ptr);
     try test_util.expectMemoryRangeLimit(0x7ffffffc5000, libc_info.setenv_fn_ptr);
     try testing.expectEqual(__test_find_symbol_succeed_on_attempt, __test_find_symbol_actual_attempts);
 }
@@ -991,10 +965,11 @@ test "pathLooksLikeSharedObject" {
     try test_util.expectWithMessage(!pathLooksLikeSharedObject("/some/path/libotelinject_arm64.so"), "!pathLooksLikeSharedObject(\"/some/path/libotelinject_arm64.so\")");
 }
 
-/// Reads the given memory range via elf.ElfDynLib.open and tries to look up setenv and __environ.
+/// Reads the given memory range via elf.ElfDynLib.open and tries to look up setenv and getenv.
 /// Preferred path: find dlsym in the ELF and use it with handle=null (RTLD_DEFAULT) to resolve symbols across all
 /// loaded libraries. Fallback path for glibc < 2.34: dlsym lives in libdl.so, not libc.so, so if it is not found,
-/// look up setenv and __environ directly from the ELF symbol table instead.
+/// look up setenv and getenv directly from the ELF symbol table instead. If getenv is not found, the injection is
+/// skipped for this memory range.
 fn tryToFindSymbolsInMemoryRange(
     libc_name_and_flavor: LibCNameAndFlavor,
     start: usize,
@@ -1010,17 +985,16 @@ fn tryToFindSymbolsInMemoryRange(
         // across all loaded libraries. Available on glibc >= 2.34 (where dlsym is in
         // libc.so itself) and on any binary that links libdl.so.
         const maybe_setenv_fn = dlsym_fn(null, setenv_function_name);
-        const maybe_environ_ptr = dlsym_fn(null, environ_symbol_name);
+        const maybe_getenv_fn = dlsym_fn(null, getenv_function_name);
 
         const setenv_fn_ptr: types.SetenvFnPtr =
             @ptrCast(@alignCast(maybe_setenv_fn orelse return error.CannotFindSetenvSymbol));
-        const environ_ptr: types.EnvironPtr =
-            @ptrCast(@alignCast(maybe_environ_ptr orelse return error.CannotFindEnvironSymbol));
+        const getenv_fn_ptr: types.GetenvFnPtr =
+            @ptrCast(@alignCast(maybe_getenv_fn orelse return error.CannotFindGetenvSymbol));
 
         return .{
             .flavor = libc_name_and_flavor.flavor,
-            .name = libc_name_and_flavor.name,
-            .environ_ptr = environ_ptr,
+            .getenv_fn_ptr = getenv_fn_ptr,
             .setenv_fn_ptr = setenv_fn_ptr,
         };
     }
@@ -1028,20 +1002,23 @@ fn tryToFindSymbolsInMemoryRange(
     // Fallback path for glibc < 2.34: on those versions dlsym is exported by libdl.so
     // rather than libc.so. A binary that does not link libdl.so will not have
     // libdl.so in its /proc/self/maps, so dlsym is unreachable via the second pass.
-    // Look up setenv and __environ directly from this library's ELF symbol table.
+    // Look up setenv and getenv directly from this library's ELF symbol table.
     // Both symbols are exported by libc.so on all glibc versions, so the second pass
     // will find them here when it reaches the libc.so range. Libraries that do not
     // export these symbols (libpthread, ld-linux, etc.) return an error and the second
     // pass simply moves on to the next candidate.
+    // Note: we intentionally do not look up __environ here. On binaries with copy
+    // relocation on __environ, elf_lib.lookup would return the address of libc's own
+    // (unused) data-segment slot rather than the BSS copy that setenv actually modifies.
+    // Using getenv (a function) avoids this problem entirely.
     const setenv_fn_ptr = elf_lib.lookup(types.SetenvFnPtr, setenv_function_name) orelse
         return error.CannotFindSetenvSymbol;
-    const environ_ptr = elf_lib.lookup(types.EnvironPtr, environ_symbol_name) orelse
-        return error.CannotFindEnvironSymbol;
+    const getenv_fn_ptr = elf_lib.lookup(types.GetenvFnPtr, getenv_function_name) orelse
+        return error.CannotFindGetenvSymbol;
 
     return .{
         .flavor = libc_name_and_flavor.flavor,
-        .name = libc_name_and_flavor.name,
-        .environ_ptr = environ_ptr,
+        .getenv_fn_ptr = getenv_fn_ptr,
         .setenv_fn_ptr = setenv_fn_ptr,
     };
 }
@@ -1058,8 +1035,7 @@ fn mockFindSymbolsInMemoryRange(
     if (__test_find_symbol_actual_attempts == __test_find_symbol_succeed_on_attempt) {
         return .{
             .flavor = libc_name_and_flavor.flavor,
-            .name = libc_name_and_flavor.name,
-            .environ_ptr = @ptrFromInt(start),
+            .getenv_fn_ptr = @ptrFromInt(start),
             .setenv_fn_ptr = @ptrFromInt(end),
         };
     }

@@ -4,6 +4,19 @@
 
 <!-- next version -->
 
+## v0.9.0
+
+### 🧰 Bug fixes 🧰
+
+- `injector`: Fix injection failure on glibc < 2.34 when the target binary uses copy relocation on environ (#348)
+  The injector previously resolved `__environ` (a data symbol) from the ELF symbol table, which returned
+  a null pointer on binaries with copy relocation (e.g. Node.js on Debian Bullseye / glibc 2.31), causing
+  pre-existing values of `NODE_OPTIONS`, `OTEL_RESOURCE_ATTRIBUTES`, etc. to be overwritten rather than
+  merged. The fix switches to resolving `getenv` (a function), which is not subject to copy relocation.
+  
+
+<!-- previous-version -->
+
 ## v0.8.0
 
 ### 🧰 Bug fixes 🧰

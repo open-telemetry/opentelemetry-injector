@@ -147,10 +147,16 @@ Here is an overview of the modifications that the injector will apply:
     * Note that the injector will not append to existing environment variables but overwrite them unconditionally if
       they are already set.
       In contrast to other runtimes, .NET does not support adding multiple agents.
-    * To reduce the risk of double-instrumentation, the injector inspects the adjacent `*.deps.json` file of the
+    * The injector first inspects the adjacent `*.runtimeconfig.json` file of the target application when it is
+      available.
+    * The injector stands down if the specified runtime version does not target `net8.0` or later.
+    * If the `.runtimeconfig.json` file is missing, unreadable, malformed, or missing the expected fields, the
+      injector proceeds with additional .NET checks.
+    * To reduce the risk of double-instrumentation, the injector then inspects the adjacent `*.deps.json` file of the
       target application when it is available.
     * The injector stands down if that `.deps.json` file already references `OpenTelemetry*` packages.
-    * If the `.deps.json` file is missing, unreadable, or malformed, the injector proceeds with .NET injection.
+    * If the `.deps.json` file is missing, unreadable, malformed, or missing the expected fields, the
+      injector proceeds with .NET injection.
 * It inspects specific existing environment variables and populates `OTEL_RESOURCE_ATTRIBUTES` with additional resource
   attributes. These environment variables need to be set externally (for example by a Kubernetes operator with a mutating
   webhook on the pod spec template of the workload). If `OTEL_RESOURCE_ATTRIBUTES` is already set, the additional

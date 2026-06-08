@@ -244,11 +244,9 @@ fn shouldInjectDotnet(allocator: std.mem.Allocator) bool {
         print.printDebug("Proceeding with the injection of the .NET OpenTelemetry instrumentation. Could not parse {s} safely: {}", .{ metadata_paths.runtimeconfig_path, err });
         return true;
     };
-    if (runtimeconfig_targets_modern_dotnet) |is_supported| {
-        if (!is_supported) {
-            print.printInfo("Skipping the injection of the .NET OpenTelemetry instrumentation because {s} does not target a supported .NET runtime.", .{metadata_paths.runtimeconfig_path});
-            return false;
-        }
+    if (!runtimeconfig_targets_modern_dotnet) {
+        print.printInfo("Skipping the injection of the .NET OpenTelemetry instrumentation because {s} does not target a supported .NET runtime.", .{metadata_paths.runtimeconfig_path});
+        return false;
     }
 
     const deps_content = readSmallTextFileAlloc(allocator, metadata_paths.deps_path) catch |err| {
@@ -372,34 +370,31 @@ fn jsonObjectKeyLooksLikeOpenTelemetryDependency(key: []const u8) bool {
     return std.mem.startsWith(u8, dependency_name, opentelemetry_dependency_prefix);
 }
 
-fn runtimeConfigTargetsModernDotnet(allocator: std.mem.Allocator, content: []const u8) !?bool {
+fn runtimeConfigTargetsModernDotnet(allocator: std.mem.Allocator, content: []const u8) !bool {
     var parsed = try std.json.parseFromSlice(std.json.Value, allocator, content, .{});
     defer parsed.deinit();
 
     const root = switch (parsed.value) {
         .object => |obj| obj,
-        else => return null,
+        else => return true,
     };
 
-    const runtime_options_value = root.get("runtimeOptions") orelse return null;
+    const runtime_options_value = root.get("runtimeOptions") orelse return true;
     const runtime_options = switch (runtime_options_value) {
         .object => |obj| obj,
-        else => return null,
+        else => return true,
     };
 
-    const tfm = runtime_options.get("tfm") orelse return null;
+    const tfm = runtime_options.get("tfm") orelse return true;
     const tfm_str = switch (tfm) {
         .string => |str| str,
-        else => return null,
+        else => return true,
     };
 
-    const tfm_support = tfmTargetsModernDotnet(tfm_str) orelse return null;
-    if (!tfm_support) return false;
-
-    return true;
+    return tfmTargetsModernDotnet(tfm_str);
 }
 
-fn tfmTargetsModernDotnet(tfm: []const u8) ?bool {
+fn tfmTargetsModernDotnet(tfm: []const u8) bool {
     if (!std.mem.startsWith(u8, tfm, "net")) return false;
 
     const rest = tfm[3..];
@@ -407,11 +402,11 @@ fn tfmTargetsModernDotnet(tfm: []const u8) ?bool {
     // We MUST find a dot to ensure it's a major.minor modern layout (e.g., net8.0)
     // This immediately filters out legacy dotless TFMs like "net48" or "net472"
     const dot_index = std.mem.indexOfScalar(u8, rest, '.') orelse return false;
-    if (dot_index == 0) return null;
+    if (dot_index == 0) return false;
 
     // Extract just the major version up to the dot (e.g., "8" from "8.0-windows")
     const major_str = rest[0..dot_index];
-    const major = std.fmt.parseUnsigned(u32, major_str, 10) catch return null;
+    const major = std.fmt.parseUnsigned(u32, major_str, 10) catch return false;
 
     return major >= 8;
 }
@@ -631,7 +626,7 @@ test "runtimeConfigTargetsModernDotnet: true for net8.0 Microsoft.NETCore.App" {
         \\}
     ;
 
-    try test_util.expectWithMessage((try runtimeConfigTargetsModernDotnet(testing.allocator, content)) orelse return error.Unexpected, "runtimeconfig should qualify");
+    try test_util.expectWithMessage(try runtimeConfigTargetsModernDotnet(testing.allocator, content), "runtimeconfig should qualify");
 }
 
 test "runtimeConfigTargetsModernDotnet: true for ASP.NET Core runtimeconfig" {
@@ -647,7 +642,7 @@ test "runtimeConfigTargetsModernDotnet: true for ASP.NET Core runtimeconfig" {
         \\}
     ;
 
-    try test_util.expectWithMessage((try runtimeConfigTargetsModernDotnet(testing.allocator, content)) orelse return error.Unexpected, "runtimeconfig should qualify");
+    try test_util.expectWithMessage(try runtimeConfigTargetsModernDotnet(testing.allocator, content), "runtimeconfig should qualify");
 }
 
 test "runtimeConfigTargetsModernDotnet: false for net7.0 runtimeconfig" {
@@ -663,10 +658,10 @@ test "runtimeConfigTargetsModernDotnet: false for net7.0 runtimeconfig" {
         \\}
     ;
 
-    try test_util.expectWithMessage(!(try runtimeConfigTargetsModernDotnet(testing.allocator, content) orelse return error.Unexpected), "runtimeconfig should not qualify");
+    try test_util.expectWithMessage(!(try runtimeConfigTargetsModernDotnet(testing.allocator, content)), "runtimeconfig should not qualify");
 }
 
-test "runtimeConfigTargetsModernDotnet: null for incomplete runtimeconfig" {
+test "runtimeConfigTargetsModernDotnet: true for incomplete runtimeconfig" {
     const content =
         \\{
         \\  "runtimeOptions": {
@@ -675,7 +670,7 @@ test "runtimeConfigTargetsModernDotnet: null for incomplete runtimeconfig" {
         \\}
     ;
 
-    try test_util.expectWithMessage((try runtimeConfigTargetsModernDotnet(testing.allocator, content)) == null, "runtimeconfig should be treated as unknown");
+    try test_util.expectWithMessage(try runtimeConfigTargetsModernDotnet(testing.allocator, content), "runtimeconfig with no tfm should proceed with injection");
 }
 
 test "runtimeConfigTargetsModernDotnet: rejects malformed json" {
@@ -695,7 +690,7 @@ test "runtimeConfigTargetsModernDotnet: true for net9.0 Microsoft.NETCore.App" {
         \\}
     ;
 
-    try test_util.expectWithMessage((try runtimeConfigTargetsModernDotnet(testing.allocator, content)) orelse return error.Unexpected, "runtimeconfig should qualify");
+    try test_util.expectWithMessage(try runtimeConfigTargetsModernDotnet(testing.allocator, content), "runtimeconfig should qualify");
 }
 
 test "runtimeConfigTargetsModernDotnet: true for net10.0 future multi-digit major" {
@@ -711,7 +706,7 @@ test "runtimeConfigTargetsModernDotnet: true for net10.0 future multi-digit majo
         \\}
     ;
 
-    try test_util.expectWithMessage((try runtimeConfigTargetsModernDotnet(testing.allocator, content)) orelse return error.Unexpected, "runtimeconfig should qualify");
+    try test_util.expectWithMessage(try runtimeConfigTargetsModernDotnet(testing.allocator, content), "runtimeconfig should qualify");
 }
 
 test "runtimeConfigTargetsModernDotnet: true for OS-specific TFM net8.0-windows" {
@@ -727,7 +722,7 @@ test "runtimeConfigTargetsModernDotnet: true for OS-specific TFM net8.0-windows"
         \\}
     ;
 
-    try test_util.expectWithMessage((try runtimeConfigTargetsModernDotnet(testing.allocator, content)) orelse return error.Unexpected, "runtimeconfig should qualify");
+    try test_util.expectWithMessage(try runtimeConfigTargetsModernDotnet(testing.allocator, content), "runtimeconfig should qualify");
 }
 
 test "depsJsonContainsOpenTelemetryDependency: false when no OpenTelemetry packages are present" {

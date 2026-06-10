@@ -693,14 +693,14 @@ test "runtimeConfigTargetsModernDotnet: true for net9.0 Microsoft.NETCore.App" {
     try test_util.expectWithMessage(try runtimeConfigTargetsModernDotnet(testing.allocator, content), "runtimeconfig should qualify");
 }
 
-test "runtimeConfigTargetsModernDotnet: true for net10.0 future multi-digit major" {
+test "runtimeConfigTargetsModernDotnet: true for net11.0 future multi-digit major" {
     const content =
         \\{
         \\  "runtimeOptions": {
-        \\    "tfm": "net10.0",
+        \\    "tfm": "net11.0",
         \\    "framework": {
         \\      "name": "Microsoft.NETCore.App",
-        \\      "version": "10.0.0"
+        \\      "version": "11.0.0"
         \\    }
         \\  }
         \\}

@@ -51,9 +51,11 @@ const DotnetError = error{
 
 const DotnetMetadataPaths = struct {
     deps_path: []u8,
+    runtimeconfig_path: []u8,
 
     fn freeAll(self: DotnetMetadataPaths, allocator: std.mem.Allocator) void {
         allocator.free(self.deps_path);
+        allocator.free(self.runtimeconfig_path);
     }
 };
 
@@ -232,6 +234,21 @@ fn shouldInjectDotnet(allocator: std.mem.Allocator) bool {
     };
     defer metadata_paths.freeAll(allocator);
 
+    const runtimeconfig_content = readSmallTextFileAlloc(allocator, metadata_paths.runtimeconfig_path) catch |err| {
+        print.printDebug("Proceeding with the injection of the .NET OpenTelemetry instrumentation. Could not read {s}: {}", .{ metadata_paths.runtimeconfig_path, err });
+        return true;
+    };
+    defer allocator.free(runtimeconfig_content);
+
+    const runtimeconfig_targets_modern_dotnet = runtimeConfigTargetsModernDotnet(allocator, runtimeconfig_content) catch |err| {
+        print.printDebug("Proceeding with the injection of the .NET OpenTelemetry instrumentation. Could not parse {s} safely: {}", .{ metadata_paths.runtimeconfig_path, err });
+        return true;
+    };
+    if (!runtimeconfig_targets_modern_dotnet) {
+        print.printInfo("Skipping the injection of the .NET OpenTelemetry instrumentation because {s} does not target a supported .NET runtime.", .{metadata_paths.runtimeconfig_path});
+        return false;
+    }
+
     const deps_content = readSmallTextFileAlloc(allocator, metadata_paths.deps_path) catch |err| {
         print.printDebug("Proceeding with the injection of the .NET OpenTelemetry instrumentation. Could not read {s}: {}", .{ metadata_paths.deps_path, err });
         return true;
@@ -295,6 +312,7 @@ fn createDotnetMetadataPaths(allocator: std.mem.Allocator, app_path: []const u8)
 
     return .{
         .deps_path = try std.fmt.allocPrint(allocator, "{s}.deps.json", .{app_base_path}),
+        .runtimeconfig_path = try std.fmt.allocPrint(allocator, "{s}.runtimeconfig.json", .{app_base_path}),
     };
 }
 
@@ -352,11 +370,45 @@ fn jsonObjectKeyLooksLikeOpenTelemetryDependency(key: []const u8) bool {
     return std.mem.startsWith(u8, dependency_name, opentelemetry_dependency_prefix);
 }
 
-fn getJsonObject(value: std.json.Value) ?std.json.ObjectMap {
-    return switch (value) {
-        .object => |object| object,
-        else => null,
+fn runtimeConfigTargetsModernDotnet(allocator: std.mem.Allocator, content: []const u8) !bool {
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, content, .{});
+    defer parsed.deinit();
+
+    const root = switch (parsed.value) {
+        .object => |obj| obj,
+        else => return true,
     };
+
+    const runtime_options_value = root.get("runtimeOptions") orelse return true;
+    const runtime_options = switch (runtime_options_value) {
+        .object => |obj| obj,
+        else => return true,
+    };
+
+    const tfm = runtime_options.get("tfm") orelse return true;
+    const tfm_str = switch (tfm) {
+        .string => |str| str,
+        else => return true,
+    };
+
+    return tfmTargetsModernDotnet(tfm_str);
+}
+
+fn tfmTargetsModernDotnet(tfm: []const u8) bool {
+    if (!std.mem.startsWith(u8, tfm, "net")) return false;
+
+    const rest = tfm[3..];
+
+    // We MUST find a dot to ensure it's a major.minor modern layout (e.g., net8.0)
+    // This immediately filters out legacy dotless TFMs like "net48" or "net472"
+    const dot_index = std.mem.indexOfScalar(u8, rest, '.') orelse return false;
+    if (dot_index == 0) return false;
+
+    // Extract just the major version up to the dot (e.g., "8" from "8.0-windows")
+    const major_str = rest[0..dot_index];
+    const major = std.fmt.parseUnsigned(u32, major_str, 10) catch return false;
+
+    return major >= 8;
 }
 
 test "doGetDotnetValues: should return null value if the libc flavor has not been set" {
@@ -538,6 +590,17 @@ test "createDotnetMetadataPaths: managed dll path produces deps path" {
     defer metadata_paths.freeAll(allocator);
 
     try testing.expectEqualStrings("/app/MyApp.deps.json", metadata_paths.deps_path);
+    try testing.expectEqualStrings("/app/MyApp.runtimeconfig.json", metadata_paths.runtimeconfig_path);
+}
+
+test "createDotnetMetadataPaths: managed exe path produces runtimeconfig path" {
+    const allocator = testing.allocator;
+
+    const metadata_paths = try createDotnetMetadataPaths(allocator, "/app/MyApp.exe");
+    defer metadata_paths.freeAll(allocator);
+
+    try testing.expectEqualStrings("/app/MyApp.deps.json", metadata_paths.deps_path);
+    try testing.expectEqualStrings("/app/MyApp.runtimeconfig.json", metadata_paths.runtimeconfig_path);
 }
 
 test "createDotnetMetadataPaths: apphost path produces deps path" {
@@ -547,6 +610,119 @@ test "createDotnetMetadataPaths: apphost path produces deps path" {
     defer metadata_paths.freeAll(allocator);
 
     try testing.expectEqualStrings("/app/MyApp.deps.json", metadata_paths.deps_path);
+    try testing.expectEqualStrings("/app/MyApp.runtimeconfig.json", metadata_paths.runtimeconfig_path);
+}
+
+test "runtimeConfigTargetsModernDotnet: true for net8.0 Microsoft.NETCore.App" {
+    const content =
+        \\{
+        \\  "runtimeOptions": {
+        \\    "tfm": "net8.0",
+        \\    "framework": {
+        \\      "name": "Microsoft.NETCore.App",
+        \\      "version": "8.0.0"
+        \\    }
+        \\  }
+        \\}
+    ;
+
+    try test_util.expectWithMessage(try runtimeConfigTargetsModernDotnet(testing.allocator, content), "runtimeconfig should qualify");
+}
+
+test "runtimeConfigTargetsModernDotnet: true for ASP.NET Core runtimeconfig" {
+    const content =
+        \\{
+        \\  "runtimeOptions": {
+        \\    "tfm": "net8.0",
+        \\    "framework": {
+        \\      "name": "Microsoft.AspNetCore.App",
+        \\      "version": "8.0.1"
+        \\    }
+        \\  }
+        \\}
+    ;
+
+    try test_util.expectWithMessage(try runtimeConfigTargetsModernDotnet(testing.allocator, content), "runtimeconfig should qualify");
+}
+
+test "runtimeConfigTargetsModernDotnet: false for net7.0 runtimeconfig" {
+    const content =
+        \\{
+        \\  "runtimeOptions": {
+        \\    "tfm": "net7.0",
+        \\    "framework": {
+        \\      "name": "Microsoft.NETCore.App",
+        \\      "version": "7.0.0"
+        \\    }
+        \\  }
+        \\}
+    ;
+
+    try test_util.expectWithMessage(!(try runtimeConfigTargetsModernDotnet(testing.allocator, content)), "runtimeconfig should not qualify");
+}
+
+test "runtimeConfigTargetsModernDotnet: true for incomplete runtimeconfig" {
+    const content =
+        \\{
+        \\  "runtimeOptions": {
+        \\    "rollForward": "Major"
+        \\  }
+        \\}
+    ;
+
+    try test_util.expectWithMessage(try runtimeConfigTargetsModernDotnet(testing.allocator, content), "runtimeconfig with no tfm should proceed with injection");
+}
+
+test "runtimeConfigTargetsModernDotnet: rejects malformed json" {
+    try testing.expectError(error.UnexpectedEndOfInput, runtimeConfigTargetsModernDotnet(testing.allocator, "{"));
+}
+
+test "runtimeConfigTargetsModernDotnet: true for net9.0 Microsoft.NETCore.App" {
+    const content =
+        \\{
+        \\  "runtimeOptions": {
+        \\    "tfm": "net9.0",
+        \\    "framework": {
+        \\      "name": "Microsoft.NETCore.App",
+        \\      "version": "9.0.0"
+        \\    }
+        \\  }
+        \\}
+    ;
+
+    try test_util.expectWithMessage(try runtimeConfigTargetsModernDotnet(testing.allocator, content), "runtimeconfig should qualify");
+}
+
+test "runtimeConfigTargetsModernDotnet: true for net11.0 future multi-digit major" {
+    const content =
+        \\{
+        \\  "runtimeOptions": {
+        \\    "tfm": "net11.0",
+        \\    "framework": {
+        \\      "name": "Microsoft.NETCore.App",
+        \\      "version": "11.0.0"
+        \\    }
+        \\  }
+        \\}
+    ;
+
+    try test_util.expectWithMessage(try runtimeConfigTargetsModernDotnet(testing.allocator, content), "runtimeconfig should qualify");
+}
+
+test "runtimeConfigTargetsModernDotnet: true for OS-specific TFM net8.0-windows" {
+    const content =
+        \\{
+        \\  "runtimeOptions": {
+        \\    "tfm": "net8.0-windows",
+        \\    "framework": {
+        \\      "name": "Microsoft.NETCore.App",
+        \\      "version": "8.0.0"
+        \\    }
+        \\  }
+        \\}
+    ;
+
+    try test_util.expectWithMessage(try runtimeConfigTargetsModernDotnet(testing.allocator, content), "runtimeconfig should qualify");
 }
 
 test "depsJsonContainsOpenTelemetryDependency: false when no OpenTelemetry packages are present" {

@@ -86,8 +86,12 @@ The approach taken by the OpenTelemetry injector is as follows:
 
 For .NET, the injector applies an additional check before setting the profiler
 and startup-hook related environment variables. It resolves the target application and inspects the adjacent
-`*.deps.json` file when available, standing down only when the dependency graph already references
-`OpenTelemetry*` packages. This keeps the injector fail-open while still reducing the risk of double-instrumentation.
+`*.runtimeconfig.json` file when available, using `runtimeOptions.tfm` to decide
+whether the target is a compatible .NET application. It stands down when the application clearly
+targets an older framework, but missing, unreadable, malformed, or incomplete runtimeconfig files remain fail-open.
+Following that check, the injector also inspects the adjacent `*.deps.json` file when available
+and stands down only when the dependency graph already references `OpenTelemetry*` packages. This keeps the injector
+fail-open while still reducing the risk of double-instrumentation.
 
 If this sounds convoluted, and more complex than it should be, read on!
 The next section outlines which alternative approaches have been considered, and the shortcomings of each of them.

@@ -1,0 +1,4 @@
+change_type: enhancement
+component: injector
+note: Add a build-time option to override which environment variable prefixes are accepted from `all_auto_instrumentation_agents_env_path`.
+issues: [351]

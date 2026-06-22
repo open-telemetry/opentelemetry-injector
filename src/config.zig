@@ -27,6 +27,7 @@ const dotnet_path_prefix_key = "dotnet_auto_instrumentation_agent_path_prefix";
 const jvm_path_key = "jvm_auto_instrumentation_agent_path";
 const nodejs_path_key = "nodejs_auto_instrumentation_agent_path";
 const python_path_prefix_key = "python_auto_instrumentation_agent_path_prefix";
+const ruby_path_prefix_key = "ruby_auto_instrumentation_agent_path_prefix";
 
 const all_agents_env_path_key = "all_auto_instrumentation_agents_env_path";
 const auto_instrumentation_disabled_key = "auto_instrumentation_disabled";
@@ -35,6 +36,7 @@ const dotnet_agent_path_prefix_env_var = "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH
 const jvm_agent_path_env_var = "JVM_AUTO_INSTRUMENTATION_AGENT_PATH";
 const nodejs_agent_path_env_var = "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
 const python_agent_path_prefix_env_var = "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
+const ruby_agent_path_prefix_env_var = "RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
 
 /// Configuration options for choosing what to instrument or exclude from instrumentation
 const include_paths_key = "include_paths";
@@ -57,6 +59,7 @@ pub const InjectorConfiguration = struct {
     jvm_auto_instrumentation_agent_path: []u8,
     nodejs_auto_instrumentation_agent_path: []u8,
     python_auto_instrumentation_agent_path_prefix: []u8,
+    ruby_auto_instrumentation_agent_path_prefix: []u8,
     all_auto_instrumentation_agents_env_path: []u8,
     all_auto_instrumentation_agents_env_vars: std.StringHashMap([]u8),
     include_paths: [][]const u8,
@@ -67,12 +70,14 @@ pub const InjectorConfiguration = struct {
     jvm_instrumentation_disabled: bool,
     nodejs_instrumentation_disabled: bool,
     python_instrumentation_disabled: bool,
+    ruby_instrumentation_disabled: bool,
 
     pub fn deinit(self: *InjectorConfiguration, allocator: std.mem.Allocator) void {
         allocator.free(self.dotnet_auto_instrumentation_agent_path_prefix);
         allocator.free(self.jvm_auto_instrumentation_agent_path);
         allocator.free(self.nodejs_auto_instrumentation_agent_path);
         allocator.free(self.python_auto_instrumentation_agent_path_prefix);
+        allocator.free(self.ruby_auto_instrumentation_agent_path_prefix);
         allocator.free(self.all_auto_instrumentation_agents_env_path);
         var it = self.all_auto_instrumentation_agents_env_vars.iterator();
         while (it.next()) |entry| {
@@ -96,6 +101,10 @@ const default_nodejs_auto_instrumentation_agent_path = "";
 // Python auto-instrumentation is opt-in for now, hence the default value for the Python path is the empty string --
 // an empty path effectively disables auto-instrumentation for the runtime in question.
 const default_python_auto_instrumentation_agent_path = "";
+
+// Ruby auto-instrumentation defaults to the empty string (disabled). It is enabled by installing the
+// conf.d drop-in file from the Ruby auto-instrumentation package (ruby.conf), which sets the path prefix.
+const default_ruby_auto_instrumentation_agent_path = "";
 
 var cached_configuration_optional: ?InjectorConfiguration = null;
 
@@ -136,6 +145,7 @@ fn createEmptyConfiguration(allocator: std.mem.Allocator) InjectorConfiguration 
         .jvm_auto_instrumentation_agent_path = "",
         .nodejs_auto_instrumentation_agent_path = "",
         .python_auto_instrumentation_agent_path_prefix = "",
+        .ruby_auto_instrumentation_agent_path_prefix = "",
         .all_auto_instrumentation_agents_env_path = "",
         .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(allocator),
         .include_paths = &.{},
@@ -146,6 +156,7 @@ fn createEmptyConfiguration(allocator: std.mem.Allocator) InjectorConfiguration 
         .jvm_instrumentation_disabled = false,
         .nodejs_instrumentation_disabled = false,
         .python_instrumentation_disabled = false,
+        .ruby_instrumentation_disabled = false,
     };
 }
 
@@ -478,6 +489,7 @@ fn createDefaultConfiguration(arena_allocator: std.mem.Allocator) std.mem.Alloca
         .jvm_auto_instrumentation_agent_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_jvm_auto_instrumentation_agent_path}),
         .nodejs_auto_instrumentation_agent_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_nodejs_auto_instrumentation_agent_path}),
         .python_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_python_auto_instrumentation_agent_path}),
+        .ruby_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_ruby_auto_instrumentation_agent_path}),
         .all_auto_instrumentation_agents_env_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_all_auto_instrumentation_agents_env_path}),
         .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(arena_allocator),
         .include_paths = &.{},
@@ -488,6 +500,7 @@ fn createDefaultConfiguration(arena_allocator: std.mem.Allocator) std.mem.Alloca
         .jvm_instrumentation_disabled = false,
         .nodejs_instrumentation_disabled = false,
         .python_instrumentation_disabled = false,
+        .ruby_instrumentation_disabled = false,
     };
 }
 
@@ -497,6 +510,7 @@ fn applyAutoInstrumentationDisabledValue(trimmed_value: []const u8, source: []co
         configuration.jvm_instrumentation_disabled = true;
         configuration.nodejs_instrumentation_disabled = true;
         configuration.python_instrumentation_disabled = true;
+        configuration.ruby_instrumentation_disabled = true;
     } else {
         // In case the configuration file specifies auto_instrumentation_disabled and this is the second call of
         // applyAutoInstrumentationDisabledValue for parsing OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED (if present),
@@ -506,6 +520,7 @@ fn applyAutoInstrumentationDisabledValue(trimmed_value: []const u8, source: []co
         configuration.jvm_instrumentation_disabled = false;
         configuration.nodejs_instrumentation_disabled = false;
         configuration.python_instrumentation_disabled = false;
+        configuration.ruby_instrumentation_disabled = false;
         var it = std.mem.splitScalar(u8, trimmed_value, ',');
         while (it.next()) |part| {
             const trimmed_part = std.mem.trim(u8, part, " \t");
@@ -517,6 +532,8 @@ fn applyAutoInstrumentationDisabledValue(trimmed_value: []const u8, source: []co
                 configuration.nodejs_instrumentation_disabled = true;
             } else if (std.mem.eql(u8, trimmed_part, "python")) {
                 configuration.python_instrumentation_disabled = true;
+            } else if (std.mem.eql(u8, trimmed_part, "ruby")) {
+                configuration.ruby_instrumentation_disabled = true;
             } else if (trimmed_part.len > 0) {
                 print.printWarn(
                     "Unknown runtime in the list of disabled runtimes from {s}: \"{s}\" - this list item will be ignored.",
@@ -547,6 +564,8 @@ fn applyKeyValueToGeneralOptions(arena_allocator: std.mem.Allocator, key: []cons
         _configuration.nodejs_auto_instrumentation_agent_path = value;
     } else if (std.mem.eql(u8, key, python_path_prefix_key)) {
         _configuration.python_auto_instrumentation_agent_path_prefix = value;
+    } else if (std.mem.eql(u8, key, ruby_path_prefix_key)) {
+        _configuration.ruby_auto_instrumentation_agent_path_prefix = value;
     } else if (std.mem.eql(u8, key, all_agents_env_path_key)) {
         _configuration.all_auto_instrumentation_agents_env_path = value;
     } else if (std.mem.eql(u8, key, include_paths_key)) {
@@ -741,6 +760,11 @@ fn copyToPermanentlyAllocatedHeap(
             "{s}",
             .{preliminary_configuration.python_auto_instrumentation_agent_path_prefix},
         ),
+        .ruby_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(
+            allocator,
+            "{s}",
+            .{preliminary_configuration.ruby_auto_instrumentation_agent_path_prefix},
+        ),
         .all_auto_instrumentation_agents_env_path = try std.fmt.allocPrint(
             allocator,
             "{s}",
@@ -758,6 +782,7 @@ fn copyToPermanentlyAllocatedHeap(
         .jvm_instrumentation_disabled = preliminary_configuration.jvm_instrumentation_disabled,
         .nodejs_instrumentation_disabled = preliminary_configuration.nodejs_instrumentation_disabled,
         .python_instrumentation_disabled = preliminary_configuration.python_instrumentation_disabled,
+        .ruby_instrumentation_disabled = preliminary_configuration.ruby_instrumentation_disabled,
     };
 }
 
@@ -894,6 +919,10 @@ test "readConfigurationFile: all configuration values" {
     try testing.expectEqualStrings(
         "/custom/path/to/python",
         configuration.python_auto_instrumentation_agent_path_prefix,
+    );
+    try testing.expectEqualStrings(
+        "/custom/path/to/ruby",
+        configuration.ruby_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
         "/custom/path/to/auto_instrumentation_env.conf",
@@ -2022,6 +2051,14 @@ fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configur
             return;
         };
         configuration.python_auto_instrumentation_agent_path_prefix = python_value;
+    }
+    if (getenv_fn(arena_allocator, ruby_agent_path_prefix_env_var)) |value| {
+        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
+        const ruby_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
+            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
+            return;
+        };
+        configuration.ruby_auto_instrumentation_agent_path_prefix = ruby_value;
     }
     if (getenv_fn(arena_allocator, auto_instrumentation_disabled_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");

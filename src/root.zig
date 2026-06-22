@@ -13,6 +13,7 @@ const print = @import("print.zig");
 const proc_self_environ_values = @import("proc_self_environ_values.zig");
 const proc_self_environ_parser = @import("proc_self_environ_parser.zig");
 const python = @import("python.zig");
+const ruby = @import("ruby.zig");
 const res_attrs = @import("resource_attributes.zig");
 const types = @import("types.zig");
 const pattern_matcher = @import("patterns_matcher.zig");
@@ -68,6 +69,7 @@ fn initEnviron() callconv(.c) void {
     };
     dotnet.setLibcInfo(libc_info);
     python.setLibcInfo(libc_info);
+    ruby.setLibcInfo(libc_info);
     res_attrs.setLibcInfo(libc_info);
 
     const maybe_modified_resource_attributes = res_attrs.getModifiedOtelResourceAttributesValue(allocator) catch |err| {
@@ -113,6 +115,18 @@ fn initEnviron() callconv(.c) void {
         allocator,
         libc_info,
         python.pythonpath_env_var_name,
+        configuration,
+    );
+    modifyEnvironmentVariable(
+        allocator,
+        libc_info,
+        ruby.rubyopt_env_var_name,
+        configuration,
+    );
+    modifyEnvironmentVariable(
+        allocator,
+        libc_info,
+        ruby.ruby_additional_gem_path_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
@@ -306,6 +320,16 @@ fn getEnvValue(
             original_value,
             configuration,
         );
+    } else if (std.mem.eql(u8, name, ruby.rubyopt_env_var_name)) {
+        return ruby.checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(
+            allocator,
+            original_value,
+            configuration,
+        );
+    } else if (std.mem.eql(u8, name, ruby.ruby_additional_gem_path_env_var_name)) {
+        // Respect a user-provided value; only set it ourselves when Ruby injection is active.
+        if (original_value != null) return null;
+        return ruby.getRubyAdditionalGemPath(allocator, configuration);
     } else if (std.mem.eql(u8, name, dotnet.coreclr_enable_profiling_env_var_name)) {
         if (dotnet.getDotnetValues(allocator, configuration)) |v| {
             return v.coreclr_enable_profiling;

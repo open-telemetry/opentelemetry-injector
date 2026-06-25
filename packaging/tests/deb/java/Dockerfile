@@ -1,4 +1,4 @@
-FROM debian:bookworm-20260610@sha256:49ba348354a28e39c70beffd6cf43bdb8d55d81ce4b746b0428717d054b8bbc4
+FROM debian:trixie-20260623@sha256:d07d1b51c39f51188e60be9b64e6bf769fa94e187f092bc32b91305cfa34ba5a
 
 ARG ARCH=amd64
 ARG tomcat_download_url

@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:1f2cb07e7ced57c4ea61163d485a2ee1cffd63763c6b17a4447ce734ff236475 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:ea8bde36c11b6e7eec2656d0e59101d4462f6bd630730f2c8201ed0572b295d5 AS build
 WORKDIR /src
 COPY "packaging/tests/shared/dotnet/DotNetTestApp.csproj" .
 RUN dotnet restore "DotNetTestApp.csproj"
@@ -8,7 +8,7 @@ RUN dotnet build "DotNetTestApp.csproj" -c Release -o /app/build
 FROM build AS publish
 RUN dotnet publish "DotNetTestApp.csproj" -c Release -o /app/publish
 
-FROM fedora:41@sha256:f1a3fab47bcb3c3ddf3135d5ee7ba8b7b25f2e809a47440936212a3a50957f3d AS final
+FROM fedora:45@sha256:0c1f63ed8fb818fad16cf6ae091598c410a21d2e1a9adf183beb93189299bfba AS final
 
 ARG ARCH=amd64
 ARG RPM_ARCH=x86_64

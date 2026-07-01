@@ -1086,6 +1086,32 @@ test "hasAllowedPrefix: supports multiple prefixes and whitespace" {
 }
 
 test "readAllAgentsEnvFile: stores only variables matching allowed prefixes" {
+    // Derive the sample keys from the build's configured allowed prefixes so this test
+    // stays correct regardless of the -Dallowed-env-var-prefixes value it was built with.
+    const allowed_key = comptime blk: {
+        var prefixes = std.mem.splitScalar(u8, build_options.allowed_env_var_prefixes, ',');
+        while (prefixes.next()) |raw_prefix| {
+            const prefix = std.mem.trim(u8, raw_prefix, " \t\r\n");
+            if (prefix.len == 0) continue;
+            break :blk prefix ++ "TEST_ALLOWED_KEY";
+        }
+        @compileError("build has no non-empty allowed_env_var_prefixes");
+    };
+    const disallowed_key = comptime blk: {
+        // Pick a sentinel key that provably does not match any configured prefix.
+        const candidates = [_][]const u8{
+            "ZZZ_TEST_DISALLOWED_KEY",
+            "QQQ_TEST_DISALLOWED_KEY",
+            "JJJ_TEST_DISALLOWED_KEY",
+        };
+        for (candidates) |c| {
+            if (!hasAllowedPrefix(c, build_options.allowed_env_var_prefixes)) {
+                break :blk c;
+            }
+        }
+        @compileError("could not find a sentinel disallowed key for this build's allowed_env_var_prefixes");
+    };
+
     const allocator = testing.allocator;
 
     var tmp_dir = testing.tmpDir(.{});
@@ -1093,11 +1119,7 @@ test "readAllAgentsEnvFile: stores only variables matching allowed prefixes" {
     {
         const file = try tmp_dir.dir.createFile("default_env.conf", .{});
         defer file.close();
-        try file.writeAll(
-            \\OTEL_SDK_DISABLED=true
-            \\CUSTOM_PREFIX_ACCESS_TOKEN=secret
-            \\
-        );
+        try file.writeAll(allowed_key ++ "=allowed-value\n" ++ disallowed_key ++ "=disallowed-value\n");
     }
 
     const absolute_path_to_env_file = try tmp_dir.dir.realpathAlloc(allocator, "default_env.conf");
@@ -1112,12 +1134,12 @@ test "readAllAgentsEnvFile: stores only variables matching allowed prefixes" {
 
     try testing.expectEqual(1, configuration.all_auto_instrumentation_agents_env_vars.count());
     try testing.expectEqualStrings(
-        "true",
-        configuration.all_auto_instrumentation_agents_env_vars.get("OTEL_SDK_DISABLED").?,
+        "allowed-value",
+        configuration.all_auto_instrumentation_agents_env_vars.get(allowed_key).?,
     );
     try test_util.expectWithMessage(
-        configuration.all_auto_instrumentation_agents_env_vars.get("CUSTOM_PREFIX_ACCESS_TOKEN") == null,
-        "CUSTOM_PREFIX_ACCESS_TOKEN should not be loaded by the default build",
+        configuration.all_auto_instrumentation_agents_env_vars.get(disallowed_key) == null,
+        "key with disallowed prefix should not be loaded",
     );
 }
 

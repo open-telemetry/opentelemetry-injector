@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 const std = @import("std");
+const build_options = @import("build_options");
 
 const print = @import("print.zig");
 const test_util = @import("test_util.zig");
@@ -14,7 +15,7 @@ const default_config_file_path = "/etc/opentelemetry/injector/injector.conf";
 const config_file_path_env_var = "OTEL_INJECTOR_CONFIG_FILE";
 const max_line_length = 8192;
 const empty_string = @constCast("");
-const otel_env_var_prefix = "OTEL_";
+const allowed_env_var_prefixes = build_options.allowed_env_var_prefixes;
 
 // Agent paths are empty by default; they are enabled by installing conf.d drop-in files from the
 // respective language packages (e.g., opentelemetry-java-autoinstrumentation installs java.conf).
@@ -636,13 +637,34 @@ fn readConfigurationDirectory(arena_allocator: std.mem.Allocator, configuration:
 }
 
 fn applyKeyValueToAllAgentsEnv(_: std.mem.Allocator, key: []const u8, value: []u8, _file_path: []const u8, _configuration: *InjectorConfiguration) void {
-    if (!std.mem.startsWith(u8, key, otel_env_var_prefix)) {
-        print.printWarn("environment variable {s} does not start with {s}. ignoring.", .{ key, otel_env_var_prefix });
+    if (!isAllowedEnvVarKey(key)) {
+        print.printWarn(
+            "environment variable {s} does not match any allowed prefix from this build ({s}). ignoring.",
+            .{ key, allowed_env_var_prefixes },
+        );
         return;
     }
     _configuration.all_auto_instrumentation_agents_env_vars.put(key, value) catch |e| {
         print.printError("error storing environment variable {s} from file {s}: {}", .{ key, _file_path, e });
     };
+}
+
+fn isAllowedEnvVarKey(key: []const u8) bool {
+    return hasAllowedPrefix(key, allowed_env_var_prefixes);
+}
+
+fn hasAllowedPrefix(key: []const u8, prefixes_csv: []const u8) bool {
+    var prefixes = std.mem.splitScalar(u8, prefixes_csv, ',');
+    while (prefixes.next()) |raw_prefix| {
+        const prefix = std.mem.trim(u8, raw_prefix, " \t\r\n");
+        if (prefix.len == 0) {
+            continue;
+        }
+        if (std.mem.startsWith(u8, key, prefix)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 fn readAllAgentsEnvFile(arena_allocator: std.mem.Allocator, env_file_path: []const u8, configuration: *InjectorConfiguration) void {
@@ -1031,6 +1053,94 @@ test "readConfigurationFile: multiple auto_instrumentation_disabled line: last o
     try test_util.expectWithMessage(configuration.jvm_instrumentation_disabled, "configuration.jvm_instrumentation_disabled");
     try test_util.expectWithMessage(!configuration.nodejs_instrumentation_disabled, "!configuration.nodejs_instrumentation_disabled");
     try test_util.expectWithMessage(!configuration.python_instrumentation_disabled, "!configuration.python_instrumentation_disabled");
+}
+
+test "hasAllowedPrefix: default OTEL_ prefix only" {
+    try test_util.expectWithMessage(
+        hasAllowedPrefix("OTEL_SDK_DISABLED", "OTEL_"),
+        "OTEL_SDK_DISABLED should match OTEL_",
+    );
+    try test_util.expectWithMessage(
+        !hasAllowedPrefix("CUSTOM_PREFIX_ACCESS_TOKEN", "OTEL_"),
+        "CUSTOM_PREFIX_ACCESS_TOKEN should not match OTEL_",
+    );
+}
+
+test "hasAllowedPrefix: supports multiple prefixes and whitespace" {
+    try test_util.expectWithMessage(
+        hasAllowedPrefix("OTEL_SDK_DISABLED", " OTEL_ , CUSTOM_PREFIX_ ,, VENDOR_ "),
+        "OTEL_SDK_DISABLED should match OTEL_",
+    );
+    try test_util.expectWithMessage(
+        hasAllowedPrefix("CUSTOM_PREFIX_ACCESS_TOKEN", " OTEL_ , CUSTOM_PREFIX_ ,, VENDOR_ "),
+        "CUSTOM_PREFIX_ACCESS_TOKEN should match CUSTOM_PREFIX_",
+    );
+    try test_util.expectWithMessage(
+        hasAllowedPrefix("VENDOR_TRACE_MODE", " OTEL_ , CUSTOM_PREFIX_ ,, VENDOR_ "),
+        "VENDOR_TRACE_MODE should match VENDOR_",
+    );
+    try test_util.expectWithMessage(
+        !hasAllowedPrefix("PATH", " OTEL_ , CUSTOM_PREFIX_ ,, VENDOR_ "),
+        "PATH should not match any configured prefix",
+    );
+}
+
+test "readAllAgentsEnvFile: stores only variables matching allowed prefixes" {
+    // Derive the sample keys from the build's configured allowed prefixes so this test
+    // stays correct regardless of the -Dallowed-env-var-prefixes value it was built with.
+    const allowed_key = comptime blk: {
+        var prefixes = std.mem.splitScalar(u8, build_options.allowed_env_var_prefixes, ',');
+        while (prefixes.next()) |raw_prefix| {
+            const prefix = std.mem.trim(u8, raw_prefix, " \t\r\n");
+            if (prefix.len == 0) continue;
+            break :blk prefix ++ "TEST_ALLOWED_KEY";
+        }
+        @compileError("build has no non-empty allowed_env_var_prefixes");
+    };
+    const disallowed_key = comptime blk: {
+        // Pick a sentinel key that provably does not match any configured prefix.
+        const candidates = [_][]const u8{
+            "ZZZ_TEST_DISALLOWED_KEY",
+            "QQQ_TEST_DISALLOWED_KEY",
+            "JJJ_TEST_DISALLOWED_KEY",
+        };
+        for (candidates) |c| {
+            if (!hasAllowedPrefix(c, build_options.allowed_env_var_prefixes)) {
+                break :blk c;
+            }
+        }
+        @compileError("could not find a sentinel disallowed key for this build's allowed_env_var_prefixes");
+    };
+
+    const allocator = testing.allocator;
+
+    var tmp_dir = testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+    {
+        const file = try tmp_dir.dir.createFile("default_env.conf", .{});
+        defer file.close();
+        try file.writeAll(allowed_key ++ "=allowed-value\n" ++ disallowed_key ++ "=disallowed-value\n");
+    }
+
+    const absolute_path_to_env_file = try tmp_dir.dir.realpathAlloc(allocator, "default_env.conf");
+    defer allocator.free(absolute_path_to_env_file);
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    readAllAgentsEnvFile(arena_allocator, absolute_path_to_env_file, &configuration);
+
+    try testing.expectEqual(1, configuration.all_auto_instrumentation_agents_env_vars.count());
+    try testing.expectEqualStrings(
+        "allowed-value",
+        configuration.all_auto_instrumentation_agents_env_vars.get(allowed_key).?,
+    );
+    try test_util.expectWithMessage(
+        configuration.all_auto_instrumentation_agents_env_vars.get(disallowed_key) == null,
+        "key with disallowed prefix should not be loaded",
+    );
 }
 
 /// Parses a single line from a configuration file.

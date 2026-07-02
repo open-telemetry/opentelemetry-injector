@@ -26,6 +26,7 @@ See the page [Zig Learn](https://ziglang.org/learn/) for more information about 
 ### Makefile commands
 
 * `make zig-build` to build the injector binary locally on your machine
+  * Set a comma-separated list of allowed environment variable prefixes using `ALLOWED_ENV_VAR_PREFIXES`, e.g.: `OTEL_,CUSTOM_PREFIX_`, to allow additional env var prefixes in a custom build. Default value is `OTEL_`.
 * `make watch-zig-build` to continually rebuild the Zig sources on every change (requires [`fd`](https://github.com/sharkdp/fd) and [`entr`](https://github.com/eradman/entr) to be installed)
 * `make zig-unit-tests` to run the unit tests
 * `watch-zig-unit-tests` to continually run the Zig unit tests on every change (requires [`fd`](https://github.com/sharkdp/fd) and [`entr`](https://github.com/eradman/entr) to be installed)

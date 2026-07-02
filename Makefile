@@ -1,5 +1,6 @@
 ARCH?=amd64
 VERSION?=0.0.0-dev
+ALLOWED_ENV_VAR_PREFIXES?=OTEL_
 INSTALL_DIR:=/usr/lib/opentelemetry/otelinject
 DIST_DIR_BINARY:=dist
 BINARY_NAME_PREFIX:=libotelinject
@@ -57,7 +58,7 @@ clean:
 	rm -rf so $(DIST_DIR_BINARY) $(DIST_DIR_PACKAGE) zig-out .zig-cache
 
 so/$(BINARY_NAME_NO_ARCH): so
-	zig build -Dcpu-arch=${ARCH} --prominent-compile-errors --summary none
+	zig build -Dcpu-arch=${ARCH} -Dallowed-env-var-prefixes='$(ALLOWED_ENV_VAR_PREFIXES)' --prominent-compile-errors --summary none
 
 $(DIST_TARGET): $(DIST_SRCS)
 	@echo building the injector binary for architecture $(ARCH)
@@ -71,7 +72,7 @@ $(DIST_TARGET): $(DIST_SRCS)
 	docker buildx build --platform linux/$(ARCH) --build-arg DOCKER_REPO=$(DOCKER_REPO) --build-arg ZIG_ARCHITECTURE=$$ZIG_ARCHITECTURE -o type=image,name=libotelinject-builder:$(ARCH),push=false .
 	docker rm -f libotelinject-builder 2>/dev/null || true
 	docker run -d --platform linux/$(ARCH) --name libotelinject-builder libotelinject-builder:$(ARCH) sleep inf
-	docker exec libotelinject-builder make ARCH=$(ARCH) SHELL=/bin/sh all
+	docker exec libotelinject-builder make ARCH=$(ARCH) ALLOWED_ENV_VAR_PREFIXES='$(ALLOWED_ENV_VAR_PREFIXES)' SHELL=/bin/sh all
 	docker cp libotelinject-builder:/libotelinject/so/$(BINARY_NAME_NO_ARCH) $(DIST_DIR_BINARY)/$(BINARY_NAME)
 	docker rm -f libotelinject-builder
 
@@ -141,7 +142,7 @@ check-zig-installed:
 .PHONY: zig-build
 zig-build: check-zig-installed
 	@mkdir -p so
-	@(zig build -Dcpu-arch=${ARCH} --prominent-compile-errors --summary none && echo $(shell date) build successful) || (echo $(shell date) build failed && exit 1)
+	@(zig build -Dcpu-arch=${ARCH} -Dallowed-env-var-prefixes='$(ALLOWED_ENV_VAR_PREFIXES)' --prominent-compile-errors --summary none && echo $(shell date) build successful) || (echo $(shell date) build failed && exit 1)
 
 .PHONY: watch-zig-build
 watch-zig-build: check-zig-installed
@@ -149,7 +150,7 @@ watch-zig-build: check-zig-installed
 
 .PHONY: zig-unit-tests
 zig-unit-tests: check-zig-installed
-	@(zig build test -Dcpu-arch=${ARCH} --prominent-compile-errors --summary none && echo $(shell date) tests successful) || (echo $(shell date) tests failed && exit 1)
+	@(zig build test -Dcpu-arch=${ARCH} -Dallowed-env-var-prefixes='$(ALLOWED_ENV_VAR_PREFIXES)' --prominent-compile-errors --summary none && echo $(shell date) tests successful) || (echo $(shell date) tests failed && exit 1)
 
 .PHONY: watch-zig-unit-tests
 watch-zig-unit-tests: check-zig-installed

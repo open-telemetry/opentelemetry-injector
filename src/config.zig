@@ -1143,6 +1143,151 @@ test "readAllAgentsEnvFile: stores only variables matching allowed prefixes" {
     );
 }
 
+/// Unquotes a configuration value using shell-style quoting rules for the
+/// well-formed cases, with a deliberate divergence from bash for malformed
+/// input (see the "not shell-standard" note below).
+///
+/// - Values wrapped in matching `"..."`: the outer quotes are stripped and backslash
+///   escapes are processed only for `\"`, `\\`, `\$`, and `` \` `` — the backslash
+///   is consumed and the next character is kept. Any other `\<c>` is preserved
+///   verbatim (both the backslash and `c`), which matches bash's behavior inside
+///   double quotes: `"\n"`, `"\t"`, `"\z"` all stay literal two-character sequences.
+/// - Values wrapped in matching `'...'`: the outer quotes are stripped and no
+///   escape processing is performed. This matches bash single-quote semantics
+///   (a `'` cannot appear inside single quotes at all).
+/// - Values without matching surrounding quotes are returned unchanged. THIS IS
+///   NOT SHELL-STANDARD: bash would either report a syntax error or continue
+///   reading additional lines looking for a matching closing quote. This parser
+///   is line-oriented and does neither. Instead, parseLine emits a warning via
+///   `hasUnbalancedQuotes` so the user can spot the typo, and passes the value
+///   through literally rather than silently dropping the line.
+///
+/// May allocate on the arena when escape processing shortens the value.
+fn unquoteValue(arena_allocator: std.mem.Allocator, value: []const u8) std.mem.Allocator.Error![]u8 {
+    if (value.len >= 2) {
+        const first = value[0];
+        const last = value[value.len - 1];
+        if (first == last and (first == '"' or first == '\'')) {
+            const inner = value[1 .. value.len - 1];
+            if (first == '\'') {
+                return arena_allocator.dupe(u8, inner);
+            }
+            // Double-quoted: fast path when there are no backslashes to process.
+            if (std.mem.indexOfScalar(u8, inner, '\\') == null) {
+                return arena_allocator.dupe(u8, inner);
+            }
+            // Two-pass: compute the final length first so the returned slice
+            // length matches the underlying allocation exactly. That keeps
+            // callers using a GPA (e.g. tests) able to free the value cleanly.
+            var final_len: usize = 0;
+            var i: usize = 0;
+            while (i < inner.len) : (i += 1) {
+                if (isEscapedByBackslash(inner, i)) {
+                    i += 1;
+                }
+                final_len += 1;
+            }
+            const buf = try arena_allocator.alloc(u8, final_len);
+            var w: usize = 0;
+            i = 0;
+            while (i < inner.len) : (i += 1) {
+                if (isEscapedByBackslash(inner, i)) {
+                    buf[w] = inner[i + 1];
+                    w += 1;
+                    i += 1;
+                    continue;
+                }
+                buf[w] = inner[i];
+                w += 1;
+            }
+            return buf;
+        }
+    }
+    return arena_allocator.dupe(u8, value);
+}
+
+fn isEscapedByBackslash(inner: []const u8, i: usize) bool {
+    if (inner[i] != '\\' or i + 1 >= inner.len) return false;
+    const next = inner[i + 1];
+    return next == '"' or next == '\\' or next == '$' or next == '`';
+}
+
+/// Reports whether a raw value (as read from a config line, after whitespace
+/// trimming and before unquoteValue) contains quote characters that do not
+/// form a well-formed pair. Intended to catch user typos like `KEY="value`,
+/// `KEY=value"`, or `KEY=va"lue`.
+///
+/// This exists precisely because the parser diverges from shell semantics
+/// for malformed input: a shell would refuse to parse `KEY="value` (or keep
+/// reading until it finds a closing quote on a later line), but this parser
+/// is line-oriented and accepts the value literally. The warning surfaces
+/// that divergence so users can spot the mistake instead of only finding
+/// out when the downstream process rejects the injected env var.
+fn hasUnbalancedQuotes(value: []const u8) bool {
+    if (value.len >= 2) {
+        const first = value[0];
+        const last = value[value.len - 1];
+        if (first == last and (first == '"' or first == '\'')) {
+            const inner = value[1 .. value.len - 1];
+            if (first == '"') {
+                // Inside a double-quoted value, any unescaped " is stray.
+                var i: usize = 0;
+                while (i < inner.len) : (i += 1) {
+                    if (isEscapedByBackslash(inner, i)) {
+                        i += 1;
+                        continue;
+                    }
+                    if (inner[i] == '"') return true;
+                }
+                return false;
+            }
+            // Inside a single-quoted value, any ' is stray (bash cannot
+            // escape ' inside '...').
+            return std.mem.indexOfScalar(u8, inner, '\'') != null;
+        }
+    }
+    // No matching outer pair: any quote character in the value is stray.
+    return std.mem.indexOfAny(u8, value, "\"'") != null;
+}
+
+test "hasUnbalancedQuotes: balanced values" {
+    try testing.expectEqual(false, hasUnbalancedQuotes(""));
+    try testing.expectEqual(false, hasUnbalancedQuotes("plain"));
+    try testing.expectEqual(false, hasUnbalancedQuotes("\"quoted\""));
+    try testing.expectEqual(false, hasUnbalancedQuotes("'quoted'"));
+    try testing.expectEqual(false, hasUnbalancedQuotes("\"\""));
+    try testing.expectEqual(false, hasUnbalancedQuotes("''"));
+    // Escaped double quotes inside a double-quoted value are balanced.
+    try testing.expectEqual(false, hasUnbalancedQuotes("\"he said \\\"hi\\\"\""));
+    // Escaped backslash before an unrelated char is balanced.
+    try testing.expectEqual(false, hasUnbalancedQuotes("\"a\\\\b\""));
+    // Single quotes inside a double-quoted value are fine.
+    try testing.expectEqual(false, hasUnbalancedQuotes("\"don't\""));
+    // Double quotes inside a single-quoted value are fine.
+    try testing.expectEqual(false, hasUnbalancedQuotes("'he said \"hi\"'"));
+}
+
+test "hasUnbalancedQuotes: stray or unmatched quotes" {
+    // Unmatched leading double quote.
+    try testing.expectEqual(true, hasUnbalancedQuotes("\"value"));
+    // Unmatched trailing double quote.
+    try testing.expectEqual(true, hasUnbalancedQuotes("value\""));
+    // Interior double quote in an otherwise unquoted value.
+    try testing.expectEqual(true, hasUnbalancedQuotes("va\"lue"));
+    // Unmatched leading single quote (typical: apostrophe in unquoted word).
+    try testing.expectEqual(true, hasUnbalancedQuotes("don't"));
+    // Mismatched quote types on the outside.
+    try testing.expectEqual(true, hasUnbalancedQuotes("\"value'"));
+    try testing.expectEqual(true, hasUnbalancedQuotes("'value\""));
+    // Single stray character.
+    try testing.expectEqual(true, hasUnbalancedQuotes("\""));
+    try testing.expectEqual(true, hasUnbalancedQuotes("'"));
+    // Double-quoted value with unescaped " inside.
+    try testing.expectEqual(true, hasUnbalancedQuotes("\"\"nested\"\""));
+    // Single-quoted value with a ' inside (bash cannot escape ' in '...').
+    try testing.expectEqual(true, hasUnbalancedQuotes("'don\\'t'"));
+}
+
 /// Parses a single line from a configuration file.
 /// Returns a key-value pair if the line is a valid key-value pair, and null for empty
 /// lines, comments and invalid lines.
@@ -1169,8 +1314,18 @@ fn parseLine(arena_allocator: std.mem.Allocator, line: []u8, cfg_file_path: []co
             return null;
         };
         const value_trimmed = std.mem.trim(u8, trimmed[equalsIdx + 1 ..], " \t\r\n");
-        const value = std.fmt.allocPrint(arena_allocator, "{s}", .{value_trimmed}) catch |err| {
-            print.printError("error in allocPrint while allocating value from file {s}: {}", .{ cfg_file_path, err });
+        if (hasUnbalancedQuotes(value_trimmed)) {
+            // Divergence from shell semantics: bash would refuse to parse this
+            // (or keep reading additional lines looking for a matching closing
+            // quote). This parser is line-oriented, so it uses the value as-is
+            // and warns instead of failing.
+            print.printWarn(
+                "value for key \"{s}\" in {s} contains unbalanced or unquoted quote characters and will be used literally: {s}",
+                .{ key, cfg_file_path, value_trimmed },
+            );
+        }
+        const value = unquoteValue(arena_allocator, value_trimmed) catch |err| {
+            print.printError("error while allocating value from file {s}: {}", .{ cfg_file_path, err });
             return null;
         };
         return .{
@@ -1348,6 +1503,491 @@ test "parseLine: invalid line (line too long)" {
         "/path/to/configuration",
     );
     try test_util.expectWithMessage(result == null, "parseLine(invalid line) returns null");
+}
+
+test "parseLine: strips surrounding double quotes from value" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "OTEL_EXPORTER_OTLP_PROTOCOL=\"http/protobuf\"", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(double-quoted value) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("OTEL_EXPORTER_OTLP_PROTOCOL", kv.key);
+        try testing.expectEqualStrings("http/protobuf", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: strips surrounding single quotes from value" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "OTEL_EXPORTER_OTLP_ENDPOINT='https://example.com'", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(single-quoted value) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("OTEL_EXPORTER_OTLP_ENDPOINT", kv.key);
+        try testing.expectEqualStrings("https://example.com", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: strips surrounding quotes around whitespace" {
+    const allocator = testing.allocator;
+    // Whitespace inside the quotes must be preserved, only whitespace outside the
+    // quotes is trimmed.
+    const line = try std.fmt.allocPrint(allocator, "  key  =  \"  value with spaces  \"  ", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(quoted value with padding) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("  value with spaces  ", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: preserves inner quotes and only strips one surrounding pair" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=\"\"nested\"\"", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(nested quotes) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("\"nested\"", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: preserves unbalanced quotes" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=\"unbalanced", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(unbalanced quote) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("\"unbalanced", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: preserves mismatched quote characters" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=\"mismatched'", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(mismatched quote types) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("\"mismatched'", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: empty double-quoted value becomes empty string" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=\"\"", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(empty quoted value) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: single quote character is preserved" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=\"", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(single quote char) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("\"", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: quoted value with commas is preserved verbatim" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "OTEL_EXPORTER_OTLP_HEADERS=\"Authorization=Bearer%20abc,Custom-Header=value\"", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(quoted headers) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("OTEL_EXPORTER_OTLP_HEADERS", kv.key);
+        try testing.expectEqualStrings("Authorization=Bearer%20abc,Custom-Header=value", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: empty single-quoted value" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=''", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(empty single-quoted) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: unbalanced single quote is preserved" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key='unbalanced", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(unbalanced single quote) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("'unbalanced", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+// --- Double-quoted escape processing ---
+
+test "parseLine: double quote escapes an inner double quote" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=\"a\\\"b\"", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(\\\") returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("a\"b", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: double quote escapes a backslash" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=\"a\\\\b\"", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(\\\\) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("a\\b", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: double quote escapes a dollar sign" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=\"a\\$b\"", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(\\$) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("a$b", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: double quote escapes a backtick" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=\"a\\`b\"", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(\\`) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("a`b", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: double-quoted \\n is a literal two-character sequence" {
+    // Matches bash: \n inside double quotes is NOT a newline.
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=\"a\\nb\"", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(\\n literal) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("a\\nb", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: double-quoted \\t is a literal two-character sequence" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=\"a\\tb\"", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(\\t literal) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("a\\tb", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: double-quoted unknown escape stays literal" {
+    // Bash: \<c> for c not in {$, `, \", \\, newline} keeps both chars.
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=\"a\\zb\"", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(\\z literal) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("a\\zb", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: escaped quote as sole content produces a single quote character" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=\"\\\"\"", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(escaped quote only) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("\"", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: mixed escapes \\\\ then \\\"" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key=\"\\\\\\\"\"", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(\\\\\\\") returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("\\\"", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+// --- Single-quoted values: no escape processing ---
+
+test "parseLine: single-quoted backslash-quote is literal" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key='a\\\"b'", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(single-quoted \\\") returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("a\\\"b", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: single-quoted double backslash is literal" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key='a\\\\b'", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(single-quoted \\\\) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("a\\\\b", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: single-quoted dollar sign is literal" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key='a$b'", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(single-quoted $) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("a$b", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: single-quoted backslash-n is literal" {
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "key='a\\nb'", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(single-quoted \\n literal) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("a\\nb", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+// --- Trailing-backslash edge cases (bash would treat these as unmatched
+//     quotes / line continuation; a line-oriented parser cannot, so we keep
+//     the backslash literal). ---
+
+test "parseLine: unquoted value with interior double quote is preserved literally" {
+    // This should also emit a warning, but the parser still returns the value
+    // rather than dropping it — losing a line silently would be worse than
+    // passing through a possibly-mistyped value.
+    const allocator = testing.allocator;
+    const line = try std.fmt.allocPrint(allocator, "a=b\"c", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(interior stray quote) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("a", kv.key);
+        try testing.expectEqualStrings("b\"c", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
+}
+
+test "parseLine: trailing backslash inside double quotes is literal" {
+    const allocator = testing.allocator;
+    // The inner content after stripping outer quotes is `a\`. The trailing
+    // backslash has no following character to escape, so it stays literal.
+    const line = try std.fmt.allocPrint(allocator, "key=\"a\\\"", .{});
+    defer allocator.free(line);
+    const result = parseLine(
+        allocator,
+        line,
+        "/path/to/configuration",
+    );
+    try test_util.expectWithMessage(result != null, "parseLine(trailing backslash) returns key-value");
+    if (result) |kv| {
+        try testing.expectEqualStrings("key", kv.key);
+        try testing.expectEqualStrings("a\\", kv.value);
+        allocator.free(kv.key);
+        allocator.free(kv.value);
+    }
 }
 
 fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configuration: *InjectorConfiguration, getenv_fn: proc_self_environ_parser.GetenvFn) void {

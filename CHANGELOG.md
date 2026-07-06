@@ -4,6 +4,32 @@
 
 <!-- next version -->
 
+## v0.9.1
+
+### 💡 Enhancements 💡
+
+- `injector`: Add a build-time option to override which environment variable prefixes are accepted from `all_auto_instrumentation_agents_env_path`. (#351)
+
+### 🧰 Bug fixes 🧰
+
+- `injection`: Skip .NET injection for unsupported runtime versions. (#360)
+- `injector`: Parse quoted values in injector configuration files with bash-style semantics. (#373)
+  Values in `default_env.conf` and other injector configuration files were previously
+  used verbatim after whitespace trimming, so `KEY="value"` would inject a literal `"`
+  into the target process environment. The parser now follows bash quoting rules for
+  well-formed input: a matching pair of surrounding double or single quotes is stripped;
+  inside double quotes, the escapes `\"`, `\\`, `\$`, and `` \` `` are processed while
+  other backslash sequences (`\n`, `\t`, `\z`, ...) are kept literally; inside single
+  quotes, no escape processing is performed.
+  For malformed input the parser deliberately diverges from shell semantics: values
+  with stray or unbalanced quote characters (e.g. `KEY="value`) are passed through
+  literally rather than rejected, because the parser is line-oriented and cannot
+  continue reading past a newline to find a matching closing quote. A warning is
+  emitted in that case so the mistake is visible.
+  
+
+<!-- previous-version -->
+
 ## v0.9.0
 
 ### 🧰 Bug fixes 🧰

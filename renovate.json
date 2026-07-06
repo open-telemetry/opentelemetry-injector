@@ -23,8 +23,7 @@
     {
       "matchManagers": ["dockerfile"],
       "matchUpdateTypes": ["major"],
-      "dependencyDashboardApproval": true,
-      "separateMultipleMajor": true
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "GitHub Actions",

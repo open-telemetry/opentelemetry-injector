@@ -9,6 +9,11 @@ const std = @import("std");
 pub fn build(b: *std.Build) !void {
     const optimize = std.builtin.OptimizeMode.ReleaseSafe;
     const target_cpu = b.option(SupportedCpuArch, "cpu-arch", "The system architecture to compile the injector for; valid options are 'amd64' and 'arm64' (default)") orelse .arm64;
+    const allowed_env_var_prefixes = b.option(
+        []const u8,
+        "allowed-env-var-prefixes",
+        "Comma-separated env var prefixes allowed in the file pointed by all_auto_instrumentation_agents_env_path (default: OTEL_)",
+    ) orelse "OTEL_";
 
     const target = b.resolveTargetQuery(.{
         .cpu_arch = target_cpu.arch(),
@@ -34,6 +39,13 @@ pub fn build(b: *std.Build) !void {
         // Avoid a dependency from `__tls_get_addr` when compiling for x86
         .single_threaded = true,
     });
+    const build_options = b.addOptions();
+    build_options.addOption(
+        []const u8,
+        "allowed_env_var_prefixes",
+        allowed_env_var_prefixes,
+    );
+    lib_mod.addOptions("build_options", build_options);
 
     // Create a dynamically linked library based on the module created above.
     // This creates a `std.Build.Step.Compile`, which is the build step responsible
@@ -78,6 +90,7 @@ pub fn build(b: *std.Build) !void {
         .pic = true,
         .strip = false,
     });
+    test_mod.addOptions("build_options", build_options);
     const unit_tests = b.addTest(.{
         .root_module = test_mod,
         .filters = test_filters orelse &.{},

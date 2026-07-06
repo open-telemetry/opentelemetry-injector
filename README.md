@@ -82,8 +82,9 @@ This method requires `root` privileges.
 
 3. (Optional) The default env agent configuration file `/etc/opentelemetry/injector/default_env.conf` is empty (use
    `all_auto_instrumentation_agents_env_path` option to specify a different path). Environment variables added to this file
-   will be passed to all agents' environments. **NOTE**: environment variables which do not start with `OTEL_` are
-   ignored.
+   will be passed to all agents' environments. **NOTE**: by default, environment variables which do not start with
+   `OTEL_` are ignored. If you need to allow additional prefixes in a custom build, compile the injector with
+   `zig build -Dallowed-env-var-prefixes=OTEL_,CUSTOM_PREFIX_`. This setting is build-time only.
 
    The `auto_instrumentation_env.conf` file format is the same as other configurations:
 

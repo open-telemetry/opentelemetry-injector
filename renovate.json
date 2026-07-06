@@ -17,8 +17,14 @@
     {
       "groupName": "Dockerfile",
       "matchManagers": ["dockerfile"],
-      "matchUpdateTypes": ["minor", "major", "patch", "digest"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
       "schedule": ["before 8am on Monday"]
+    },
+    {
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true,
+      "separateMultipleMajor": true
     },
     {
       "groupName": "GitHub Actions",

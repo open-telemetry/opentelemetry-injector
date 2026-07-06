@@ -4,6 +4,21 @@
 
 <!-- next version -->
 
+## v0.9.2
+
+### 🧰 Bug fixes 🧰
+
+- `injector`: Silently fall back to defaults when `/proc/self/environ` is unreadable. (#361)
+  When the host process drops privileges before the injector runs (e.g. a package
+  postinst script that switches to a service user before starting a daemon), opening
+  `/proc/self/environ` fails with `AccessDenied`. This previously bubbled up as an
+  error-level log entry in the host process's own log stream. The injector now
+  treats `AccessDenied` the same as any other read failure and silently falls back
+  to the default log level and disabled state.
+  
+
+<!-- previous-version -->
+
 ## v0.9.1
 
 ### 💡 Enhancements 💡

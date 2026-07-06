@@ -1,5 +1,0 @@
-change_type: bug_fix
-component: injection
-note: Skip .NET injection for unsupported runtime versions.
-issues: [360]
-change_logs: [user]

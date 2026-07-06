@@ -92,7 +92,10 @@ fn initFromEnvironFile(self_environ_path: []const u8) !void {
     const allocator = std.heap.page_allocator;
 
     const log_level_value = getenvFromFile(allocator, self_environ_path, otel_injector_log_level_env_var_name) catch |err| switch (err) {
-        error.ReadFailed => {
+        // AccessDenied happens when the host process has dropped privileges before the injector runs
+        // (e.g. a package postinst script that switches to a service user before starting a daemon).
+        // Both errors mean the same thing here: we cannot read /proc/self/environ, so we fall back to defaults.
+        error.ReadFailed, error.AccessDenied => {
             print.printWarn("Failed to read {s}", .{self_environ_path});
             return;
         },
@@ -101,7 +104,7 @@ fn initFromEnvironFile(self_environ_path: []const u8) !void {
     defer if (log_level_value) |v| allocator.free(v);
 
     const disabled_value = getenvFromFile(allocator, self_environ_path, otel_injector_disabled_env_var_name) catch |err| switch (err) {
-        error.ReadFailed => null,
+        error.ReadFailed, error.AccessDenied => null,
         else => return err,
     };
     defer if (disabled_value) |v| allocator.free(v);
@@ -297,6 +300,35 @@ test "initFromEnvironFile: both OTEL_INJECTOR_LOG_LEVEL and OTEL_INJECTOR_DISABL
         try testing.expectEqual(true, proc_self_environ_values.getOtelInjectorDisabled());
         proc_self_environ_values.reset();
     }
+}
+
+test "initFromEnvironFile: unreadable environ file falls back to defaults" {
+    // Skip when running as root: chmod 0 does not prevent root from reading the file,
+    // so we cannot exercise the AccessDenied path.
+    if (builtin.target.os.tag == .linux and std.os.linux.geteuid() == 0) return;
+    if (builtin.target.os.tag == .macos and std.c.geteuid() == 0) return;
+
+    defer proc_self_environ_values.reset();
+    const allocator = testing.allocator;
+    var tmp_dir = testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+    {
+        const f = try tmp_dir.dir.createFile("environ-restricted", .{});
+        try f.writeAll("OTEL_INJECTOR_LOG_LEVEL=debug\x00OTEL_INJECTOR_DISABLED=true\x00");
+        f.close();
+    }
+    const path = try tmp_dir.dir.realpathAlloc(allocator, "environ-restricted");
+    defer allocator.free(path);
+    // Make the file unreadable to trigger AccessDenied when opening it.
+    try std.posix.fchmodat(std.posix.AT.FDCWD, path, 0o000, 0);
+    // Restore permissions on the way out so tmpDir cleanup succeeds.
+    defer std.posix.fchmodat(std.posix.AT.FDCWD, path, 0o600, 0) catch {};
+
+    // Must return without an error so the caller does not log at Error level.
+    try initFromEnvironFile(path);
+    // Defaults must be used since the file was unreadable.
+    try testing.expectEqual(.Error, proc_self_environ_values.getLogLevel());
+    try testing.expectEqual(false, proc_self_environ_values.getOtelInjectorDisabled());
 }
 
 test "initFromEnvironFile: overly long environment variable" {

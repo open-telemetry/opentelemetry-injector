@@ -68,7 +68,7 @@ $(DIST_TARGET): $(DIST_SRCS)
 	  ZIG_ARCHITECTURE=aarch64; \
 	elif [[ "$(ARCH)" = amd64 ]]; then \
 	  ZIG_ARCHITECTURE=x86_64; \
-	else then \
+	else \
 	  ZIG_ARCHITECTURE=$(ARCH); \
 	fi; \
 	docker buildx build --platform linux/$(ARCH) --build-arg DOCKER_REPO=$(DOCKER_REPO) --build-arg ZIG_ARCHITECTURE=$$ZIG_ARCHITECTURE -o type=image,name=libotelinject-builder:$(ARCH),push=false .

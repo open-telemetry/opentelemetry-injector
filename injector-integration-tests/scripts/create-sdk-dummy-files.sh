@@ -44,6 +44,15 @@ if [ -f no-op-agent/usercustomize.py ]; then
   cp no-op-agent/usercustomize.py /usr/lib/opentelemetry/python/musl
 fi
 
+# Ruby
+# Copy the Ruby no-op agent to the entry path the injector requires via RUBYOPT.
+if [ -f no-op-agent/opentelemetry-auto-instrumentation.rb ]; then
+  mkdir -p /usr/lib/opentelemetry/ruby/glibc
+  mkdir -p /usr/lib/opentelemetry/ruby/musl
+  cp no-op-agent/opentelemetry-auto-instrumentation.rb /usr/lib/opentelemetry/ruby/glibc
+  cp no-op-agent/opentelemetry-auto-instrumentation.rb /usr/lib/opentelemetry/ruby/musl
+fi
+
 # Provide instrumentation files also in three more locations, for testing configuration via
 # /etc/opentelemetry/injector/injector.conf, OTEL_INJECTOR_CONFIG_FILE, and via environment variables
 # NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH and friends.

@@ -1,0 +1,97 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+run_test_case \
+  "injects RUBYOPT if it is not present" \
+  "app" \
+  "ruby app.rb rubyopt" \
+  "RUBYOPT: -r /usr/lib/opentelemetry/ruby/${LIBC_FLAVOR}/opentelemetry-auto-instrumentation.rb"
+run_test_case \
+  "prepends to RUBYOPT if it is present" \
+  "app" \
+  "ruby app.rb rubyopt" \
+  "RUBYOPT: -r /usr/lib/opentelemetry/ruby/${LIBC_FLAVOR}/opentelemetry-auto-instrumentation.rb -W0" \
+  "RUBYOPT=-W0"
+
+run_test_case \
+  "injects OTEL_RUBY_ADDITIONAL_GEM_PATH" \
+  "app" \
+  "ruby app.rb additional-gem-path" \
+  "OTEL_RUBY_ADDITIONAL_GEM_PATH: /usr/lib/opentelemetry/ruby/${LIBC_FLAVOR}"
+
+run_test_case \
+  "injects the Ruby auto-instrumentation agent" \
+  "app" \
+  "ruby app.rb verify-auto-instrumentation-agent-has-been-injected" \
+  "otel_injector_ruby_no_op_agent_has_been_loaded: true"
+
+# For test cases with the "default configuration file" substring in their label, run-tests-within-container.sh
+# will provide a configuration file in the default location (/etc/opentelemetry/injector/injector.conf).
+run_test_case \
+  "uses RUBYOPT path from the default configuration file" \
+  "app" \
+  "ruby app.rb rubyopt" \
+  "RUBYOPT: -r /path/from/config-file/ruby/${LIBC_FLAVOR}/opentelemetry-auto-instrumentation.rb"
+run_test_case \
+  "the RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX environment variable overrides the RUBYOPT path from the default configuration file" \
+  "app" \
+  "ruby app.rb rubyopt" \
+  "RUBYOPT: -r /path/from/environment-variable/ruby/${LIBC_FLAVOR}/opentelemetry-auto-instrumentation.rb" \
+  "RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/environment-variable/ruby"
+
+run_test_case \
+  "uses RUBYOPT path from the configuration file at a custom location" \
+  "app" \
+  "ruby app.rb rubyopt" \
+  "RUBYOPT: -r /path/from/config-file-custom-location/ruby/${LIBC_FLAVOR}/opentelemetry-auto-instrumentation.rb" \
+  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/injector.conf"
+run_test_case \
+  "the RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX environment variable overrides the RUBYOPT path from the configuration file at a custom location" \
+  "app" \
+  "ruby app.rb rubyopt" \
+  "RUBYOPT: -r /path/from/environment-variable/ruby/${LIBC_FLAVOR}/opentelemetry-auto-instrumentation.rb" \
+  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/injector.conf RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/environment-variable/ruby"
+
+run_test_case \
+  "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=ruby disables the Ruby auto-instrumentation" \
+  "app" \
+  "ruby app.rb rubyopt" \
+  "RUBYOPT: -" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=ruby"
+run_test_case \
+  "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=* disables the Ruby auto-instrumentation" \
+  "app" \
+  "ruby app.rb rubyopt" \
+  "RUBYOPT: -" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=*"
+run_test_case \
+  "setting RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX to the empty string disables the Ruby auto-instrumentation" \
+  "app" \
+  "ruby app.rb rubyopt" \
+  "RUBYOPT: -" \
+  "RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX="
+
+run_test_case \
+  "sets k8s.pod.uid and k8s.container.name via OTEL_RESOURCE_ATTRIBUTES" \
+  "app" \
+  "ruby app.rb otel-resource-attributes" \
+  "OTEL_RESOURCE_ATTRIBUTES: k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app"
+
+run_test_case \
+  "OTEL_ custom env var is returned according to the env file provided" \
+  "app" \
+  "ruby app.rb custom-env-var OTEL_SDK_DISABLED" \
+  "OTEL_SDK_DISABLED: true"
+
+run_test_case \
+  "non OTEL_ custom env var is ignored" \
+  "app" \
+  "ruby app.rb custom-env-var CUSTOM_ENV_VAR" \
+  "CUSTOM_ENV_VAR: -"
+
+run_test_case \
+  "setting OTEL_INJECTOR_DISABLED to true string disables the Ruby auto-instrumentation" \
+  "app" \
+  "ruby app.rb rubyopt" \
+  "RUBYOPT: -" \
+  "OTEL_INJECTOR_DISABLED=T"

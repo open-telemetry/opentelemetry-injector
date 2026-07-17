@@ -46,6 +46,9 @@ fi
 if [[ "$TEST_SET" = "python.tests" ]]; then
   test_app="python"
 fi
+if [[ "$TEST_SET" = "ruby.tests" ]]; then
+  test_app="ruby"
+fi
 if [[ "$TEST_SET" = "no-libdl.tests" ]]; then
   test_app="no-libdl"
 fi
@@ -93,6 +96,13 @@ case "$test_app" in
     base_image_run=python:3.14-slim-bookworm
     if [[ "$LIBC" = "musl" ]]; then
       base_image_run=python:3.14-alpine3.23
+    fi
+    ;;
+  "ruby")
+    dockerfile_name="injector-integration-tests/apps/ruby/Dockerfile"
+    base_image_run=ruby:3.3-slim
+    if [[ "$LIBC" = "musl" ]]; then
+      base_image_run=ruby:3.3-alpine
     fi
     ;;
   "no-getenv-symbol")

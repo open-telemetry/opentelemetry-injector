@@ -2,7 +2,7 @@
 
 An approver or maintainer can run the GitHub action to [prepare the release from the GitHub Actions page of the repository](https://github.com/open-telemetry/opentelemetry-injector/actions/workflows/prepare-release.yml).
 
-The pattern for the version should be vX.Y.Z for a regular release, or vX.Y.Z-<additional-qualfier> for a release candidate.
+The action asks for an `override` input with the choices `auto` (default), `major`, `minor`, or `patch`. When left as `auto`, the release-tooling program at [tooling/nextversion](tooling/nextversion) derives the bump from the `change_type` of the chloggen entries in [.chloggen](.chloggen) (`breaking` -> major, `deprecation`/`new_component`/`enhancement` -> minor, `bug_fix` -> patch; while the current release is on `0.y.z`, a `breaking` change is bumped as minor per the semver 0.x convention). Any of `major`, `minor`, `patch` overrides the auto-derived bump. The action then bumps the appropriate component of the most recent stable `vX.Y.Z` tag, so there is no need to type out the full version.
 
 The action will trigger the creation of a pull request for review by project approvers ([example](https://github.com/open-telemetry/opentelemetry-injector/pull/112)).
 

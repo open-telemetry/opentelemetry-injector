@@ -2,11 +2,28 @@ name: Automation - Prepare Release
 
 on:
   workflow_dispatch:
-    # Determine the version number that will be assigned to the release.
     inputs:
-      version:
+      override:
+        description: |
+          Override the auto-derived bump. Leave as "auto" to derive from
+          chloggen entries in .chloggen/, or force a specific bump kind.
         required: true
-        description: Release version or release candidate version (like v0.70.0 or v0.70.0-20260109)
+        default: auto
+        type: choice
+        options:
+          - auto
+          - major
+          - minor
+          - patch
+      prerelease:
+        description: |
+          When true, release the next release candidate for the computed
+          version instead of the stable release, tagging v<computed>-rc.<N>
+          where N is one greater than the highest existing rc index for the
+          same base version (or 1 if no prior rc exists).
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 jobs:
@@ -16,19 +33,32 @@ jobs:
       contents: write # required for pushing changes in prepare-release.sh
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-tags: true
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.5"
+          cache: false
+      - name: Determine next release version
+        id: version
+        env:
+          OVERRIDE: ${{ inputs.override }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        working-directory: ./tooling/nextversion
+        run: |
+          go run . \
+            -override "$OVERRIDE" \
+            -prerelease="$PRERELEASE" \
+            -chloggen-dir ../../.chloggen
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: otelbot-token
         with:
           client-id: ${{ vars.OTELBOT_CLIENT_ID }}
           private-key: ${{ secrets.OTELBOT_PRIVATE_KEY }}
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.26.5"
-          cache: false
       - name: Prepare release for injector
         env:
           GITHUB_TOKEN: ${{ steps.otelbot-token.outputs.token }}
           REPO: open-telemetry/opentelemetry-injector
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: ./.github/workflows/scripts/prepare-release.sh

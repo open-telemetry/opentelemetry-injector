@@ -152,5 +152,9 @@ jobs:
         with:
           body_path: release-notes.md
           fail_on_unmatched_files: true
+          # RC tags (e.g. v0.10.0-rc.1) land as a draft release so maintainers
+          # can review the notes and artifacts before publishing; stable tags
+          # publish immediately.
+          draft: ${{ contains(github.ref_name, '-rc.') }}
           files: |
             artifacts/**/*

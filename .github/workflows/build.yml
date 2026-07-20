@@ -43,84 +43,10 @@ jobs:
           path: ./dist/*.so
           if-no-files-found: error
 
-  build-package:
-    needs: verify-and-build-binary
-    runs-on: ${{ matrix.ARCH == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
-    strategy:
-      matrix:
-        SYS_PACKAGE: [ "deb", "rpm" ]
-        ARCH: [ "amd64", "arm64"]
-    steps:
-      - name: Check out the codebase.
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 0
-
-      - name: Download binary
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: libotelinject-${{ matrix.ARCH }}
-          path: ./dist
-
-      - name: Determine version
-        id: github_tag
-        run: |
-          TAG="${GITHUB_REF##*/}"
-          if [[ -z "$TAG" ]]
-          then
-            echo "version=$TAG" >> $GITHUB_OUTPUT
-          else
-            echo "version=dev" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build ${{ matrix.ARCH }} ${{ matrix.SYS_PACKAGE }} package
-        run: make ${{ matrix.SYS_PACKAGE }}-package ARCH="${{ matrix.ARCH }}" VERSION="${{ steps.github_tag.version.version }}"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: opentelemetry-injector-${{ matrix.ARCH }}-${{ matrix.SYS_PACKAGE }}
-          path: ./instrumentation/dist/*.${{ matrix.SYS_PACKAGE }}
-          if-no-files-found: error
-
-  packaging-integration-tests:
-    needs: build-package
-    strategy:
-      matrix:
-        SYS_PACKAGE: [ "deb", "rpm" ]
-        lang: [ "java", "nodejs", "dotnet" ]
-        ARCH: [ "amd64", "arm64" ]
-        exclude:
-          - lang: "dotnet"
-            ARCH: "arm64"
-    runs-on: ${{ matrix.ARCH == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
-    steps:
-      - name: Check out the codebase.
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 0
-
-      # The package integration tests do not actually need the binary, but the packaging-integration-test-... will
-      # implicitly call "make dist", downloading the binary makes sure we do not rebuild the binary.
-      - name: Download binary
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: libotelinject-${{ matrix.ARCH }}
-          path: ./dist
-
-      - name: Download package
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: opentelemetry-injector-${{ matrix.ARCH }}-${{ matrix.SYS_PACKAGE }}
-          path: ./instrumentation/dist
-
-      - name: Run packaging integration tests for ${{ matrix.SYS_PACKAGE }}/${{ matrix.lang }}/${{ matrix.ARCH }}
-        run: make packaging-integration-test-${{ matrix.SYS_PACKAGE }}-${{ matrix.lang }} ARCH=${{ matrix.ARCH }}
-
   publish-stable:
     runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/') && github.repository == 'open-telemetry/opentelemetry-injector'
-    needs: packaging-integration-tests
+    needs: verify-and-build-binary
     permissions:
       contents: write
     steps:

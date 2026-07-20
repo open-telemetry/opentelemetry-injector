@@ -6,8 +6,6 @@ DIST_DIR_BINARY:=dist
 BINARY_NAME_PREFIX:=libotelinject
 BINARY_NAME_NO_ARCH:=$(BINARY_NAME_PREFIX).so
 BINARY_NAME:=$(BINARY_NAME_PREFIX)_$(ARCH).so
-DIST_DIR_PACKAGE:=instrumentation/dist
-PACKAGE_NAME:=opentelemetry-injector
 
 # Docker repository used.
 DOCKER_REPO?=docker.io
@@ -21,29 +19,6 @@ DIST_SRCS:=\
 
 DIST_TARGET:=$(DIST_DIR_BINARY)/$(BINARY_NAME)
 
-COMMON_PACKAGE_SRCS:=\
-  $(DIST_SRCS) \
-	$(wildcard packaging/*-release.txt) \
-	$(wildcard packaging/fpm/*.*) \
-	$(wildcard packaging/fpm/etc/*.*) \
-	$(wildcard packaging/fpm/etc/**/*.*)
-
-DEB_PACKAGE_SRCS:=\
-	$(COMMON_PACKAGE_SRCS) \
-	$(wildcard packaging/fpm/deb/*.*)
-DEB_PACKAGE_TARGET:=$(DIST_DIR_PACKAGE)/$(PACKAGE_NAME)_$(VERSION)_$(ARCH).deb
-
-RPM_PACKAGE_SRCS:=\
-	$(COMMON_PACKAGE_SRCS) \
-	$(wildcard packaging/fpm/rpm/*.*)
-ifeq ($(ARCH),arm64)
-  RPM_PACKAGE_ARCH:=aarch64
-else
-  RPM_PACKAGE_ARCH:=x86_64
-endif
-RPM_VERSION=$(subst -,_,$(VERSION))
-RPM_PACKAGE_TARGET := $(DIST_DIR_PACKAGE)/$(PACKAGE_NAME)-$(RPM_VERSION)-1.$(RPM_PACKAGE_ARCH).rpm
-
 .PHONY: all
 all: so/$(BINARY_NAME_NO_ARCH)
 
@@ -55,7 +30,7 @@ obj:
 
 .PHONY: clean
 clean:
-	rm -rf so $(DIST_DIR_BINARY) $(DIST_DIR_PACKAGE) zig-out .zig-cache
+	rm -rf so $(DIST_DIR_BINARY) zig-out .zig-cache
 
 so/$(BINARY_NAME_NO_ARCH): so
 	zig build -Dcpu-arch=${ARCH} -Dallowed-env-var-prefixes='$(ALLOWED_ENV_VAR_PREFIXES)' --prominent-compile-errors --summary none
@@ -78,33 +53,6 @@ $(DIST_TARGET): $(DIST_SRCS)
 
 .PHONY: dist
 dist: $(DIST_TARGET)
-
-.PHONY: deb-package
-deb-package: $(DEB_PACKAGE_TARGET)
-
-.PHONY: rpm-package
-rpm-package: $(RPM_PACKAGE_TARGET)
-
-$(DEB_PACKAGE_TARGET): $(DEB_PACKAGE_SRCS)
-	$(MAKE) dist
-	@$(call build_package,deb,$(VERSION))
-
-$(RPM_PACKAGE_TARGET): $(RPM_PACKAGE_SRCS)
-	$(MAKE) dist
-	@$(call build_package,rpm,$(RPM_VERSION))
-
-define build_package
-$(eval $@_SYS_PACKAGE = $(1))
-$(eval $@_VERSION = $(2))
-@echo building the injector package for architecture $(ARCH) and system package type $($@_SYS_PACKAGE)
-@mkdir -p $(DIST_DIR_PACKAGE)
-docker build -t instrumentation-fpm packaging/fpm
-docker rm -f libotelinject-packager 2>/dev/null || true
-docker run -d --name libotelinject-packager --rm -v $(CURDIR):/repo -e PACKAGE=$* -e VERSION=$($@_VERSION) -e ARCH=$(ARCH) instrumentation-fpm sleep inf
-docker exec libotelinject-packager ./packaging/fpm/$($@_SYS_PACKAGE)/build.sh "$($@_VERSION)" "$(ARCH)" "/repo/$(DIST_DIR_PACKAGE)"
-docker cp --quiet libotelinject-packager:/repo/$(DIST_DIR_PACKAGE)/. $(DIST_DIR_PACKAGE)
-docker rm -f libotelinject-packager 2>/dev/null
-endef
 
 # Run this to install and enable the auto-instrumentation files. Mostly intended for development.
 .PHONY: install
@@ -246,11 +194,3 @@ chlog-update: $(CHLOGGEN)
 
 list:
 	@grep '^[^#[:space:]].*:' Makefile
-
-.PHONY: packaging-integration-test-deb
-packaging-integration-test-deb-%: deb-package
-	(cd packaging/tests/deb/$* && ARCH=$(ARCH) ./run.sh)
-
-.PHONY: packaging-integration-test-rpm
-packaging-integration-test-rpm-%: rpm-package
-	(cd packaging/tests/rpm/$* && ARCH=$(ARCH) ./run.sh)

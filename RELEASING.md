@@ -16,6 +16,9 @@ Creating the tag will trigger the `build` GitHub action workflow, which will the
 job (`publish-stable`).
 (This can take a couple of minutes.)
 
+Releases from this repository publish only the raw `libotelinject_<arch>.so` shared library.
+The DEB and RPM system packages are released independently from [open-telemetry/opentelemetry-packaging](https://github.com/open-telemetry/opentelemetry-packaging) on its own cadence.
+
 ## Announce the release
 
 Make sure to drop the good news of the release to the CNCF slack #otel-injector channel!

@@ -1,5 +1,15 @@
 ## OpenTelemetry Injector
 
+> [!IMPORTANT]
+> **The DEB and RPM packages for the OpenTelemetry Injector have moved.**
+> They are now built and released from
+> [open-telemetry/opentelemetry-packaging](https://github.com/open-telemetry/opentelemetry-packaging).
+> Download the latest `.deb` / `.rpm` from that repository's
+> [releases page](https://github.com/open-telemetry/opentelemetry-packaging/releases).
+>
+> This repository publishes only the raw `libotelinject.so` shared library.
+> Please open packaging bugs and feature requests against `opentelemetry-packaging`.
+
 The OpenTelemetry injector is a shared library (written in [Zig](https://ziglang.org/)) that is intended to be
 used via the environment variable [`LD_PRELOAD`](https://man7.org/linux/man-pages/man8/ld.so.8.html#ENVIRONMENT), the
 [`/etc/ld.so.preload`](https://man7.org/linux/man-pages/man8/ld.so.8.html#FILES) file, or similar mechanisms to inject
@@ -15,12 +25,14 @@ The injector can be used to enable automatic zero-touch instrumentation of proce
 For this to work, the injector binary needs to be bundled together with the OpenTelemetry auto-instrumentation agents
 for the target runtimes.
 
-Official RPM and DEB packages that contain the injector as well as the auto-instrumentation agents are available, and
-can be downloaded from the [releases page](https://github.com/open-telemetry/opentelemetry-injector/releases).
+Official RPM and DEB packages that bundle the injector together with auto-instrumentation
+agents for supported runtimes are built and published from the
+[open-telemetry/opentelemetry-packaging](https://github.com/open-telemetry/opentelemetry-packaging) repository.
 The OpenTelemetry injector Debian/RPM packages install the OpenTelemetry auto-instrumentation agents, the
 `libotelinject.so` shared object library, and a default configuration file to automatically instrument applications and
 services to capture and report distributed traces and metrics to the
 [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/).
+This repository publishes only the raw `libotelinject.so` shared library.
 
 The `opentelemetry-injector` deb/rpm package installs and supports configuration of the following auto-instrumentation
 agents:
@@ -123,8 +135,8 @@ When providing your own instrumentation files (for example via environment varia
        - `musl/store`
        - `musl/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll`
 
-Note that the defaults provided by the RPM and Debian packages take care of all of that, and it is not necessary to
-edit `/etc/opentelemetry/injector/injector.conf` or set any of the above environment variables.
+Note that the defaults provided by the RPM and Debian packages from
+[open-telemetry/opentelemetry-packaging](https://github.com/open-telemetry/opentelemetry-packaging) take care of all of that, and it is not necessary to edit `/etc/opentelemetry/injector/injector.conf` or set any of the above environment variables.
 
 Check the following for details about the auto-instrumentation agents and further configuration options:
 - [Java](https://opentelemetry.io/docs/zero-code/java/agent/configuration/)

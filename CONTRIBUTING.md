@@ -31,8 +31,9 @@ See the page [Zig Learn](https://ziglang.org/learn/) for more information about 
 * `make zig-unit-tests` to run the unit tests
 * `watch-zig-unit-tests` to continually run the Zig unit tests on every change (requires [`fd`](https://github.com/sharkdp/fd) and [`entr`](https://github.com/eradman/entr) to be installed)
 * `make tests` to run the unit tests and the injector integration tests
-* `make rpm-package deb-package` to build the RPM and Debian package
-* `make packaging-integration-test-deb packaging-integration-test-rpm` to rebuild the RPM and Debian packages and run integration tests against the newly built packages.
+
+The DEB and RPM system packages that bundle the injector with the auto-instrumentation agents for supported runtimes live in [open-telemetry/opentelemetry-packaging](https://github.com/open-telemetry/opentelemetry-packaging).
+Please open packaging bugs, feature requests, and pull requests against that repository.
 
 ### Github PR Workflow
 

@@ -18,13 +18,17 @@ import (
 	"strings"
 )
 
-// Semver is a bare-bones vMAJOR.MINOR.PATCH version. Pre-release and build
-// metadata are intentionally not modeled: the release process only ever bumps
-// stable tags.
+// Semver is a bare-bones vMAJOR.MINOR.PATCH version, optionally carrying a
+// SemVer 2.0.0 pre-release suffix (e.g. "rc.1"). Build metadata is not
+// modeled. The pre-release field is only ever populated on the *output*
+// version; parsed tags always have an empty PreRelease -- LatestStable
+// deliberately skips pre-release tags so the next release is computed from
+// the last stable base.
 type Semver struct {
-	Major int
-	Minor int
-	Patch int
+	Major      int
+	Minor      int
+	Patch      int
+	PreRelease string
 }
 
 var stableSemverRe = regexp.MustCompile(`^v(\d+)\.(\d+)\.(\d+)$`)
@@ -39,11 +43,57 @@ func ParseStableSemver(s string) (Semver, bool) {
 	maj, _ := strconv.Atoi(m[1])
 	min, _ := strconv.Atoi(m[2])
 	pat, _ := strconv.Atoi(m[3])
-	return Semver{maj, min, pat}, true
+	return Semver{Major: maj, Minor: min, Patch: pat}, true
 }
 
 func (v Semver) String() string {
-	return fmt.Sprintf("v%d.%d.%d", v.Major, v.Minor, v.Patch)
+	base := fmt.Sprintf("v%d.%d.%d", v.Major, v.Minor, v.Patch)
+	if v.PreRelease == "" {
+		return base
+	}
+	return base + "-" + v.PreRelease
+}
+
+// WithPreRelease returns a copy of v with the given SemVer 2.0.0 pre-release
+// identifier attached. An empty argument clears any existing suffix.
+func (v Semver) WithPreRelease(pre string) Semver {
+	v.PreRelease = pre
+	return v
+}
+
+// rcTagRe extracts the rc index from a "vX.Y.Z-rc.N" tag matching the given
+// base version. Built dynamically by NextRCIndex so the base X.Y.Z is
+// literal, and only rc.N is captured.
+func rcTagRe(base Semver) *regexp.Regexp {
+	pattern := fmt.Sprintf(`^v%d\.%d\.%d-rc\.(\d+)$`, base.Major, base.Minor, base.Patch)
+	return regexp.MustCompile(pattern)
+}
+
+// NextRCIndex returns the next rc index for base by scanning tags for
+// existing "v<base>-rc.N" entries and taking max(N)+1. Returns 1 when no
+// prior rc exists. Ignores rc tags whose numeric part has a leading zero
+// (e.g. "-rc.01"), since we never emit those and treating them as valid
+// would produce a duplicate tag on the next run.
+func NextRCIndex(tags []string, base Semver) int {
+	re := rcTagRe(base)
+	best := 0
+	for _, t := range tags {
+		m := re.FindStringSubmatch(strings.TrimSpace(t))
+		if m == nil {
+			continue
+		}
+		if len(m[1]) > 1 && m[1][0] == '0' {
+			continue
+		}
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			continue
+		}
+		if n > best {
+			best = n
+		}
+	}
+	return best + 1
 }
 
 // Less reports whether v is strictly older than o.

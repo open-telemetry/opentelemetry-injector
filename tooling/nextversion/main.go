@@ -25,10 +25,12 @@ func main() {
 func run() error {
 	var (
 		override     string
+		prerelease   bool
 		chloggenDir  string
 		gitTagOutput string
 	)
 	flag.StringVar(&override, "override", "auto", "override the auto-derived bump: auto, major, minor, or patch")
+	flag.BoolVar(&prerelease, "prerelease", false, "when true, produce the next v<computed>-rc.<N> instead of the stable version")
 	flag.StringVar(&chloggenDir, "chloggen-dir", ".chloggen", "directory containing chloggen entry files")
 	flag.StringVar(&gitTagOutput, "git-tag-output", "", "(testing) read the tag list from this file instead of running git")
 	flag.Parse()
@@ -51,6 +53,10 @@ func run() error {
 	}
 
 	next := latest.Apply(kind)
+	if prerelease {
+		idx := NextRCIndex(tags, next)
+		next = next.WithPreRelease(fmt.Sprintf("rc.%d", idx))
+	}
 	fmt.Fprintf(os.Stderr, "Next release version (%s bump): %s\n", kind, next)
 	fmt.Println(next)
 

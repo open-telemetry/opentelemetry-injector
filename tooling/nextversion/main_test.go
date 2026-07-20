@@ -147,7 +147,7 @@ func TestWriteGitHubOutput(t *testing.T) {
 	path := filepath.Join(dir, "out")
 	t.Setenv("GITHUB_OUTPUT", path)
 
-	if err := writeGitHubOutput(Semver{0, 10, 0}, BumpMinor); err != nil {
+	if err := writeGitHubOutput(Semver{Major: 0, Minor: 10, Patch: 0}, BumpMinor); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(path)
@@ -168,7 +168,7 @@ func TestWriteGitHubOutputAppends(t *testing.T) {
 	}
 	t.Setenv("GITHUB_OUTPUT", path)
 
-	if err := writeGitHubOutput(Semver{1, 0, 0}, BumpMajor); err != nil {
+	if err := writeGitHubOutput(Semver{Major: 1, Minor: 0, Patch: 0}, BumpMajor); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(path)
@@ -183,7 +183,7 @@ func TestWriteGitHubOutputAppends(t *testing.T) {
 
 func TestWriteGitHubOutputEmptyEnvIsNoop(t *testing.T) {
 	t.Setenv("GITHUB_OUTPUT", "")
-	if err := writeGitHubOutput(Semver{0, 1, 0}, BumpMinor); err != nil {
+	if err := writeGitHubOutput(Semver{Major: 0, Minor: 1, Patch: 0}, BumpMinor); err != nil {
 		t.Fatal(err)
 	}
 }

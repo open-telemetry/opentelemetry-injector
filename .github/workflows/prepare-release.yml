@@ -15,6 +15,15 @@ on:
           - major
           - minor
           - patch
+      prerelease:
+        description: |
+          When true, release the next release candidate for the computed
+          version instead of the stable release, tagging v<computed>-rc.<N>
+          where N is one greater than the highest existing rc index for the
+          same base version (or 1 if no prior rc exists).
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 jobs:
@@ -35,10 +44,12 @@ jobs:
         id: version
         env:
           OVERRIDE: ${{ inputs.override }}
+          PRERELEASE: ${{ inputs.prerelease }}
         working-directory: ./tooling/nextversion
         run: |
           go run . \
             -override "$OVERRIDE" \
+            -prerelease="$PRERELEASE" \
             -chloggen-dir ../../.chloggen
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: otelbot-token

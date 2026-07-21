@@ -1,19 +1,6 @@
 name: Other issue
 description: Create a new issue to help us improve
 body:
-  - type: dropdown
-    id: component
-    attributes:
-      label: Component(s)
-      description: Which component(s) does your issue concern?
-      multiple: true
-      options:
-        - injector
-        - packaging
-        - dotnet
-        - java
-        - nodejs
-        - python
   - type: textarea
     attributes:
       label: Describe the issue you're reporting

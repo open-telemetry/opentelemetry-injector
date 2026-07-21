@@ -4,8 +4,8 @@ Injector Integration Tests
 This directory contains integration tests for the injector binary.
 The tests in this folder do not use a multi-platform image; instead, an injector binary is build (in a container)
 per CPU architecture, and then used for testing.
-Note that the Zig source code in `src` also contains Zig unit tests, and `packaging/tests` contains integration
-tests for the system packages (Debian, RPM).
+Note that the Zig source code in `src` also contains Zig unit tests. The integration tests for the DEB and RPM system
+packages live in [open-telemetry/opentelemetry-packaging](https://github.com/open-telemetry/opentelemetry-packaging).
 
 The available test cases for the injector integration tests are listed in the files
 `injector-integration-tests/tests/*.tests`.

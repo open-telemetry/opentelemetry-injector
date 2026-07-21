@@ -30,27 +30,9 @@
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["minor", "major", "patch", "digest"],
       "schedule": ["before 8am on Monday"]
-    },
-    {
-      "matchManagers": ["custom.regex"],
-      "matchFileNames": ["packaging/*.txt"],
-      "groupName": null,
-      "matchUpdateTypes": ["minor", "major", "patch"],
-      "schedule": ["before 8am on Monday"]
     }
   ],
   "labels": [
     "dependencies"
-  ],
-  "customManagers": [
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/(^|\\/).*\\.txt$/"
-      ],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>[a-z-.]+?) depName=(?<depName>[^\\s]+?)(?: (?:packageName)=(?<packageName>[^\\s]+?))?(?: versioning=(?<versioning>[^\\s]+?))?(?: extractVersion=(?<extractVersion>[^\\s]+?))?(?: registryUrl=(?<registryUrl>[^\\s]+?))?\\s+(?<currentValue>\\S+)"
-      ]
-    }
   ]
 }

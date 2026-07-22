@@ -16,7 +16,7 @@ jobs:
     runs-on: ${{ matrix.ARCH == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     strategy:
       matrix:
-        ARCH: [ "amd64", "arm64"]
+        ARCH: [ "amd64", "arm64", "s390x", "ppc64le"]
     steps:
       - name: Check out the codebase.
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

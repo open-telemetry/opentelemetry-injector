@@ -117,15 +117,17 @@ fn determineLibcDir(gpa: std.mem.Allocator, configuration: config.InjectorConfig
         print.printError("invariant violated: libc info has not been set prior to calling determineLibcDir().", .{});
         return null;
     }
-    if (libc_info.?.flavor == .UNKNOWN) {
-        print.printError("Cannot determine libc flavor", .{});
-        return null;
-    }
 
+    // Fail-safe on any libc flavor we don't have a directory suffix for. This covers .UNKNOWN today, and
+    // any variant added to LibCFlavor in the future -- an `else => unreachable` here would panic in every
+    // process's .init_array on hosts running a newly-supported libc before ruby.zig learns about it.
     const libc_flavor_suffix = switch (libc_info.?.flavor) {
         .GNU => "glibc",
         .MUSL => "musl",
-        else => unreachable,
+        else => {
+            print.printError("Cannot determine libc flavor for Ruby auto-instrumentation: \"{s}\"", .{@tagName(libc_info.?.flavor)});
+            return null;
+        },
     };
 
     return std.fmt.allocPrintSentinel(gpa, "{s}/{s}", .{

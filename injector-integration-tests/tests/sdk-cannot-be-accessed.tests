@@ -21,3 +21,16 @@ run_test_case \
   "app" \
   "node index.js node-options" \
   "NODE_OPTIONS: -"
+
+# RUBYOPT / OTEL_RUBY_ADDITIONAL_GEM_PATH -- both env vars share a gate on the entry file, so a
+# permission-denied access() must leave both unmodified.
+run_test_case \
+  "does not add RUBYOPT if the Ruby auto-instrumentation is present but cannot be accessed" \
+  "app" \
+  "node index.js rubyopt" \
+  "RUBYOPT: -"
+run_test_case \
+  "does not add OTEL_RUBY_ADDITIONAL_GEM_PATH if the Ruby auto-instrumentation is present but cannot be accessed" \
+  "app" \
+  "node index.js otel-ruby-additional-gem-path" \
+  "OTEL_RUBY_ADDITIONAL_GEM_PATH: -"

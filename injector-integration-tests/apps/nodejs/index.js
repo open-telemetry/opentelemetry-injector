@@ -55,6 +55,12 @@ function main() {
     case 'dotnet-startup-hooks':
       echoEnvVar('DOTNET_STARTUP_HOOKS');
       break;
+    case 'rubyopt':
+      echoEnvVar('RUBYOPT');
+      break;
+    case 'otel-ruby-additional-gem-path':
+      echoEnvVar('OTEL_RUBY_ADDITIONAL_GEM_PATH');
+      break;
     case 'custom-env-var':
       echoEnvVar(process.argv[3]);
       break;

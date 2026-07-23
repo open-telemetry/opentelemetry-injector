@@ -30,5 +30,11 @@ mkdir -p /usr/lib/opentelemetry/jvm && touch /usr/lib/opentelemetry/jvm/javaagen
 mkdir -p /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src
 touch /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
 
+# Ruby (both libc flavors need an entry file that the injector access()-checks before injecting)
+mkdir -p /usr/lib/opentelemetry/ruby/glibc
+mkdir -p /usr/lib/opentelemetry/ruby/musl
+touch /usr/lib/opentelemetry/ruby/glibc/opentelemetry-auto-instrumentation.rb
+touch /usr/lib/opentelemetry/ruby/musl/opentelemetry-auto-instrumentation.rb
+
 # make all files inaccessible
 chmod -R 600 /usr/lib/opentelemetry

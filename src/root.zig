@@ -321,13 +321,22 @@ fn getEnvValue(
             configuration,
         );
     } else if (std.mem.eql(u8, name, ruby.rubyopt_env_var_name)) {
+        // The two Ruby env vars are a coupled pair: our RUBYOPT entry file requires its bundled OpenTelemetry
+        // dependencies from OTEL_RUBY_ADDITIONAL_GEM_PATH. If the user has pre-set the gem path, we respect
+        // their value (see below) -- so we must also skip RUBYOPT here to avoid a hybrid boot where our entry
+        // file loads but its deps resolve against the user's path (LoadError on every Ruby process).
+        if (libcGetenv(lci.getenv_fn_ptr, ruby.ruby_additional_gem_path_env_var_name) != null) {
+            print.printInfo("Skipping the injection of the Ruby OpenTelemetry auto-instrumentation because \"{s}\" is already set to a user-provided value.", .{ruby.ruby_additional_gem_path_env_var_name});
+            return null;
+        }
         return ruby.checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(
             allocator,
             original_value,
             configuration,
         );
     } else if (std.mem.eql(u8, name, ruby.ruby_additional_gem_path_env_var_name)) {
-        // Respect a user-provided value; only set it ourselves when Ruby injection is active.
+        // Respect a user-provided value; only set it ourselves when Ruby injection is active. The RUBYOPT branch
+        // above mirrors this decision by standing down when the user has already set this variable.
         if (original_value != null) return null;
         return ruby.getRubyAdditionalGemPath(allocator, configuration);
     } else if (std.mem.eql(u8, name, dotnet.coreclr_enable_profiling_env_var_name)) {

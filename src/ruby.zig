@@ -56,7 +56,7 @@ pub fn checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(
         return null;
     };
 
-    return getModifiedRubyoptValue(gpa, original_value_optional, require_flag);
+    return getModifiedRubyoptValue(gpa, original_value_optional, require_flag, entry_file);
 }
 
 /// Returns the value for OTEL_RUBY_ADDITIONAL_GEM_PATH (the libc-specific gem directory) so the auto-instrumentation
@@ -142,10 +142,11 @@ fn getModifiedRubyoptValue(
     gpa: std.mem.Allocator,
     original_value_optional: ?[:0]const u8,
     require_flag: [:0]u8,
+    entry_file: []const u8,
 ) ?[:0]u8 {
     if (original_value_optional) |original_value| {
-        if (std.mem.indexOf(u8, original_value, require_flag)) |_| {
-            // Our `-r ...` flag is already present in RUBYOPT, do nothing. This avoids double injection, e.g. when we
+        if (rubyoptAlreadyRequires(original_value, entry_file)) {
+            // Our entry file is already required in RUBYOPT, do nothing. This avoids double injection, e.g. when we
             // inject into a shell entry point that then starts the Ruby process, which inherits the modified env.
             gpa.free(require_flag);
             return null;
@@ -161,6 +162,25 @@ fn getModifiedRubyoptValue(
 
     // RUBYOPT is not set, simply return the `-r ...` flag.
     return require_flag[0..];
+}
+
+/// Returns true when `rubyopt_value` already requires `entry_file` via `-r`. Mirrors Ruby's RUBYOPT
+/// parsing: whitespace-tokenized, and each `-r` token can be followed by the path as the next token
+/// (`-r PATH`) or attached to the flag (`-rPATH`). Substring matching is not enough -- a coincidental
+/// `-r <entry_file>.disabled` would falsely suppress our injection, and Ruby's no-space attached form
+/// would slip past a `"-r " ++ path` substring check and cause double injection.
+fn rubyoptAlreadyRequires(rubyopt_value: []const u8, entry_file: []const u8) bool {
+    var tokens = std.mem.tokenizeAny(u8, rubyopt_value, " \t\r\n");
+    while (tokens.next()) |token| {
+        if (std.mem.eql(u8, token, "-r")) {
+            if (tokens.next()) |next_token| {
+                if (std.mem.eql(u8, next_token, entry_file)) return true;
+            }
+        } else if (std.mem.startsWith(u8, token, "-r") and std.mem.eql(u8, token[2..], entry_file)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 test "checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue: returns null if ruby instrumentation is disabled" {
@@ -292,8 +312,9 @@ test "getRubyAdditionalGemPath: returns null if entry file cannot be accessed" {
 
 test "getModifiedRubyoptValue: returns -r flag if original value is unset" {
     const allocator = testing.allocator;
-    const require_flag = try std.fmt.allocPrintSentinel(allocator, "-r /usr/lib/opentelemetry/ruby/glibc/opentelemetry-auto-instrumentation.rb", .{}, 0);
-    const result = getModifiedRubyoptValue(allocator, null, require_flag);
+    const entry_file = "/usr/lib/opentelemetry/ruby/glibc/opentelemetry-auto-instrumentation.rb";
+    const require_flag = try std.fmt.allocPrintSentinel(allocator, "-r {s}", .{entry_file}, 0);
+    const result = getModifiedRubyoptValue(allocator, null, require_flag, entry_file);
     defer if (result) |v| allocator.free(v);
     try testing.expectEqualStrings(
         "-r /usr/lib/opentelemetry/ruby/glibc/opentelemetry-auto-instrumentation.rb",
@@ -304,8 +325,9 @@ test "getModifiedRubyoptValue: returns -r flag if original value is unset" {
 test "getModifiedRubyoptValue: prepends -r flag if original value exists" {
     const allocator = testing.allocator;
     const original_value: [:0]const u8 = "--enable-frozen-string-literal"[0.. :0];
-    const require_flag = try std.fmt.allocPrintSentinel(allocator, "-r /opt/otel/ruby/glibc/opentelemetry-auto-instrumentation.rb", .{}, 0);
-    const result = getModifiedRubyoptValue(allocator, original_value, require_flag);
+    const entry_file = "/opt/otel/ruby/glibc/opentelemetry-auto-instrumentation.rb";
+    const require_flag = try std.fmt.allocPrintSentinel(allocator, "-r {s}", .{entry_file}, 0);
+    const result = getModifiedRubyoptValue(allocator, original_value, require_flag, entry_file);
     defer if (result) |v| allocator.free(v);
     try testing.expectEqualStrings(
         "-r /opt/otel/ruby/glibc/opentelemetry-auto-instrumentation.rb --enable-frozen-string-literal",
@@ -313,12 +335,37 @@ test "getModifiedRubyoptValue: prepends -r flag if original value exists" {
     );
 }
 
-test "getModifiedRubyoptValue: does nothing if our -r flag is already present" {
+test "getModifiedRubyoptValue: does nothing if our -r flag is already present (space form)" {
     const allocator = testing.allocator;
     const original_value: [:0]const u8 = "--yjit -r /opt/otel/ruby/glibc/opentelemetry-auto-instrumentation.rb --enable-frozen-string-literal"[0.. :0];
-    const require_flag = try std.fmt.allocPrintSentinel(allocator, "-r /opt/otel/ruby/glibc/opentelemetry-auto-instrumentation.rb", .{}, 0);
-    const result = getModifiedRubyoptValue(allocator, original_value, require_flag);
+    const entry_file = "/opt/otel/ruby/glibc/opentelemetry-auto-instrumentation.rb";
+    const require_flag = try std.fmt.allocPrintSentinel(allocator, "-r {s}", .{entry_file}, 0);
+    const result = getModifiedRubyoptValue(allocator, original_value, require_flag, entry_file);
     try test_util.expectWithMessage(result == null, "result == null");
+}
+
+test "getModifiedRubyoptValue: does nothing if our -r flag is already present (attached -rPATH form)" {
+    const allocator = testing.allocator;
+    // Ruby accepts `-rPATH` (no space between flag and path) as an equivalent to `-r PATH`.
+    const original_value: [:0]const u8 = "--yjit -r/opt/otel/ruby/glibc/opentelemetry-auto-instrumentation.rb --enable-frozen-string-literal"[0.. :0];
+    const entry_file = "/opt/otel/ruby/glibc/opentelemetry-auto-instrumentation.rb";
+    const require_flag = try std.fmt.allocPrintSentinel(allocator, "-r {s}", .{entry_file}, 0);
+    const result = getModifiedRubyoptValue(allocator, original_value, require_flag, entry_file);
+    try test_util.expectWithMessage(result == null, "result == null");
+}
+
+test "getModifiedRubyoptValue: prepends when RUBYOPT contains our path as a substring of a different token" {
+    const allocator = testing.allocator;
+    // A coincidental `-r <entry_file>.disabled` must not suppress our injection.
+    const entry_file = "/opt/otel/ruby/glibc/opentelemetry-auto-instrumentation.rb";
+    const original_value: [:0]const u8 = "-r /opt/otel/ruby/glibc/opentelemetry-auto-instrumentation.rb.disabled"[0.. :0];
+    const require_flag = try std.fmt.allocPrintSentinel(allocator, "-r {s}", .{entry_file}, 0);
+    const result = getModifiedRubyoptValue(allocator, original_value, require_flag, entry_file);
+    defer if (result) |v| allocator.free(v);
+    try testing.expectEqualStrings(
+        "-r /opt/otel/ruby/glibc/opentelemetry-auto-instrumentation.rb -r /opt/otel/ruby/glibc/opentelemetry-auto-instrumentation.rb.disabled",
+        result orelse "-",
+    );
 }
 
 /// Builds a minimal InjectorConfiguration for unit tests. Only the Ruby-relevant fields are meaningful.

@@ -71,6 +71,16 @@ run_test_case \
   "RUBYOPT: -" \
   "RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX="
 
+# Whitespace in the path prefix would let Ruby's RUBYOPT tokenizer parse additional switches, either crashing every
+# Ruby process on the host with "invalid switch in RUBYOPT" or letting an attacker inject `-I<dir>` to hijack
+# $LOAD_PATH. The injector rejects such prefixes and stands down.
+run_test_case \
+  "whitespace in RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX disables the Ruby auto-instrumentation" \
+  "app" \
+  "ruby app.rb rubyopt" \
+  "RUBYOPT: -" \
+  "RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/opt/OpenTelemetry Injector/ruby"
+
 # When the user has pre-set OTEL_RUBY_ADDITIONAL_GEM_PATH, the injector stands down for both env vars (RUBYOPT is
 # skipped and OTEL_RUBY_ADDITIONAL_GEM_PATH is left untouched) to avoid a hybrid boot where our entry file loads
 # but its bundled dependencies would be searched in the user's path (LoadError).

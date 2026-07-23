@@ -87,11 +87,23 @@ pub fn getRubyAdditionalGemPath(
     return libc_dir;
 }
 
-/// Resolves <prefix>/<libc flavor> and returns it, or null if disabled, unconfigured, or the libc flavor is unknown.
+/// Resolves <prefix>/<libc flavor> and returns it, or null if disabled, unconfigured, the prefix
+/// contains whitespace, or the libc flavor is unknown.
 fn determineLibcDir(gpa: std.mem.Allocator, configuration: config.InjectorConfiguration) ?[:0]u8 {
     if (configuration.ruby_instrumentation_disabled or configuration.ruby_auto_instrumentation_agent_path_prefix.len == 0) {
         print.printInfo("Skipping the injection of the Ruby OpenTelemetry auto-instrumentation because it has been explicitly disabled.", .{});
         return null;
+    }
+
+    // Ruby tokenizes RUBYOPT on whitespace like a command line, so a prefix containing whitespace would
+    // either crash every Ruby process with "invalid switch in RUBYOPT" (benign misconfig) or, worse, let
+    // an attacker inject additional Ruby switches such as `-I<dir>` to hijack $LOAD_PATH (security). Reject
+    // whitespace at composition time and stand down.
+    for (configuration.ruby_auto_instrumentation_agent_path_prefix) |c| {
+        if (c == ' ' or c == '\t' or c == '\n' or c == '\r') {
+            print.printError("Skipping the injection of the Ruby OpenTelemetry auto-instrumentation because the configured path prefix \"{s}\" contains a whitespace character; whitespace in the prefix would break Ruby's RUBYOPT tokenization.", .{configuration.ruby_auto_instrumentation_agent_path_prefix});
+            return null;
+        }
     }
 
     if (libc_info == null) {
@@ -186,6 +198,36 @@ test "checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue: returns null 
     const configuration = testConfiguration("/invalid/path", false);
     const result = checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration);
     try test_util.expectWithMessage(result == null, "result == null");
+}
+
+test "checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue: returns null if prefix contains whitespace" {
+    const allocator = testing.allocator;
+    _resetState();
+    defer _resetState();
+
+    libc_info = test_util.testLibcInfo(.GNU);
+    // Rejected because a space in the prefix would let Ruby's RUBYOPT tokenizer parse additional switches.
+    const configuration_space = testConfiguration("/opt/OpenTelemetry Injector/ruby", false);
+    try test_util.expectWithMessage(
+        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration_space) == null,
+        "space in prefix -> null",
+    );
+    // Tab, newline, and carriage return also break RUBYOPT tokenization.
+    const configuration_tab = testConfiguration("/opt/otel\tinjector/ruby", false);
+    try test_util.expectWithMessage(
+        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration_tab) == null,
+        "tab in prefix -> null",
+    );
+    const configuration_newline = testConfiguration("/opt/otel\ninjector/ruby", false);
+    try test_util.expectWithMessage(
+        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration_newline) == null,
+        "newline in prefix -> null",
+    );
+    const configuration_cr = testConfiguration("/opt/otel\rinjector/ruby", false);
+    try test_util.expectWithMessage(
+        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration_cr) == null,
+        "cr in prefix -> null",
+    );
 }
 
 test "getRubyAdditionalGemPath: returns <prefix>/glibc for GNU libc" {

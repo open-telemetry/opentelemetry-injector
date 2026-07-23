@@ -85,6 +85,7 @@ This method requires `root` privileges.
      agent files
    - `JVM_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Java auto-instrumentation agent JAR file
    - `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Node.js auto-instrumentation agent registration file
+   - `PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the Python auto-instrumentation agent files (Python is disabled by default, see [Enabling Auto-Instrumentation for Python](#enabling-auto-instrumentation-for-python))
    - `RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the Ruby auto-instrumentation gem bundle
    - `OTEL_INJECTOR_INCLUDE_PATHS`: a comma-separated list of glob patterns to match executable paths
    - `OTEL_INJECTOR_EXCLUDE_PATHS`: a comma-separated list of glob patterns to exclude executable paths

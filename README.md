@@ -348,6 +348,11 @@ nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/nodejs/node_module
 auto_instrumentation_disabled=dotnet,python
 ```
 
+You can also disable a specific runtime by setting its agent-path environment variable (or configuration-file key)
+to the empty string. For example, `RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=` disables Ruby auto-instrumentation
+for a single process without touching the shared configuration. The same applies to `PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`,
+`DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`, `JVM_AUTO_INSTRUMENTATION_AGENT_PATH`, and `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH`.
+
 Note that the injector might still add additional resource attributes to applications, by adding or extending
 `OTEL_RESOURCE_ATTRIBUTES`, even when auto-instrumentation is disabled.
 See [Disabling the injector completely for specific workloads](#disabling-the-injector-completely-for-specific-workloads)

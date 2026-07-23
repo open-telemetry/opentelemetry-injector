@@ -61,14 +61,30 @@ pub fn checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(
 
 /// Returns the value for OTEL_RUBY_ADDITIONAL_GEM_PATH (the libc-specific gem directory) so the auto-instrumentation
 /// gem can locate its bundled OpenTelemetry dependencies. Returns null under the same conditions as
-/// checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue.
+/// checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue -- in particular, the entry file must exist. The
+/// two env vars share a gate so we never inject one without the other.
 ///
 /// The caller is responsible for freeing the returned string (unless it is passed on to setenv).
 pub fn getRubyAdditionalGemPath(
     gpa: std.mem.Allocator,
     configuration: config.InjectorConfiguration,
 ) ?[:0]u8 {
-    return determineLibcDir(gpa, configuration);
+    const libc_dir = determineLibcDir(gpa, configuration) orelse return null;
+
+    const entry_file = std.fmt.allocPrintSentinel(gpa, "{s}/{s}", .{ libc_dir, ruby_entry_file_relative_path }, 0) catch |err| {
+        print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ ruby_additional_gem_path_env_var_name, err });
+        gpa.free(libc_dir);
+        return null;
+    };
+    defer gpa.free(entry_file);
+
+    std.fs.cwd().access(entry_file, .{}) catch |err| {
+        print.printError("Skipping the injection of the Ruby OpenTelemetry auto-instrumentation in \"{s}\" because of an issue accessing the entry point at \"{s}\": {}", .{ ruby_additional_gem_path_env_var_name, entry_file, err });
+        gpa.free(libc_dir);
+        return null;
+    };
+
+    return libc_dir;
 }
 
 /// Resolves <prefix>/<libc flavor> and returns it, or null if disabled, unconfigured, or the libc flavor is unknown.
@@ -177,11 +193,20 @@ test "getRubyAdditionalGemPath: returns <prefix>/glibc for GNU libc" {
     _resetState();
     defer _resetState();
 
+    var tmp_dir = testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+    try tmp_dir.dir.makeDir("glibc");
+    (try tmp_dir.dir.createFile("glibc/" ++ ruby_entry_file_relative_path, .{})).close();
+    const prefix = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(prefix);
+
     libc_info = test_util.testLibcInfo(.GNU);
-    const configuration = testConfiguration("/usr/lib/opentelemetry/ruby", false);
+    const configuration = testConfiguration(prefix, false);
     const result = getRubyAdditionalGemPath(allocator, configuration);
     defer if (result) |v| allocator.free(v);
-    try testing.expectEqualStrings("/usr/lib/opentelemetry/ruby/glibc", result orelse "-");
+    const expected = try std.fmt.allocPrint(allocator, "{s}/glibc", .{prefix});
+    defer allocator.free(expected);
+    try testing.expectEqualStrings(expected, result orelse "-");
 }
 
 test "getRubyAdditionalGemPath: returns <prefix>/musl for musl libc" {
@@ -189,11 +214,31 @@ test "getRubyAdditionalGemPath: returns <prefix>/musl for musl libc" {
     _resetState();
     defer _resetState();
 
+    var tmp_dir = testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+    try tmp_dir.dir.makeDir("musl");
+    (try tmp_dir.dir.createFile("musl/" ++ ruby_entry_file_relative_path, .{})).close();
+    const prefix = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(prefix);
+
     libc_info = test_util.testLibcInfo(.MUSL);
-    const configuration = testConfiguration("/usr/lib/opentelemetry/ruby", false);
+    const configuration = testConfiguration(prefix, false);
     const result = getRubyAdditionalGemPath(allocator, configuration);
     defer if (result) |v| allocator.free(v);
-    try testing.expectEqualStrings("/usr/lib/opentelemetry/ruby/musl", result orelse "-");
+    const expected = try std.fmt.allocPrint(allocator, "{s}/musl", .{prefix});
+    defer allocator.free(expected);
+    try testing.expectEqualStrings(expected, result orelse "-");
+}
+
+test "getRubyAdditionalGemPath: returns null if entry file cannot be accessed" {
+    const allocator = testing.allocator;
+    _resetState();
+    defer _resetState();
+
+    libc_info = test_util.testLibcInfo(.GNU);
+    const configuration = testConfiguration("/invalid/path", false);
+    const result = getRubyAdditionalGemPath(allocator, configuration);
+    try test_util.expectWithMessage(result == null, "result == null");
 }
 
 test "getModifiedRubyoptValue: returns -r flag if original value is unset" {

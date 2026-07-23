@@ -90,8 +90,15 @@ pub fn getRubyAdditionalGemPath(
 /// Resolves <prefix>/<libc flavor> and returns it, or null if disabled, unconfigured, the prefix
 /// contains whitespace, or the libc flavor is unknown.
 fn determineLibcDir(gpa: std.mem.Allocator, configuration: config.InjectorConfiguration) ?[:0]u8 {
-    if (configuration.ruby_instrumentation_disabled or configuration.ruby_auto_instrumentation_agent_path_prefix.len == 0) {
+    if (configuration.ruby_instrumentation_disabled) {
         print.printInfo("Skipping the injection of the Ruby OpenTelemetry auto-instrumentation because it has been explicitly disabled.", .{});
+        return null;
+    }
+    if (configuration.ruby_auto_instrumentation_agent_path_prefix.len == 0) {
+        // The default state on hosts that have the injector but no ruby.conf drop-in. This runs for every
+        // process on the host, so keep the log at debug to avoid flooding operator logs with an intentional
+        // no-op.
+        print.printDebug("Skipping the injection of the Ruby OpenTelemetry auto-instrumentation because it has not been configured (no path prefix set).", .{});
         return null;
     }
 

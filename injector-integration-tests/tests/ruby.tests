@@ -79,7 +79,7 @@ run_test_case \
   "app" \
   "ruby app.rb rubyopt" \
   "RUBYOPT: -" \
-  "RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/opt/OpenTelemetry Injector/ruby"
+  "RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX='/opt/OpenTelemetry Injector/ruby'"
 
 # When the user has pre-set OTEL_RUBY_ADDITIONAL_GEM_PATH, the injector stands down for both env vars (RUBYOPT is
 # skipped and OTEL_RUBY_ADDITIONAL_GEM_PATH is left untouched) to avoid a hybrid boot where our entry file loads

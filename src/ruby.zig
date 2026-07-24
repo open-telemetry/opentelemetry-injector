@@ -107,7 +107,7 @@ fn determineLibcDir(gpa: std.mem.Allocator, configuration: config.InjectorConfig
     // an attacker inject additional Ruby switches such as `-I<dir>` to hijack $LOAD_PATH (security). Reject
     // whitespace at composition time and stand down.
     for (configuration.ruby_auto_instrumentation_agent_path_prefix) |c| {
-        if (c == ' ' or c == '\t' or c == '\n' or c == '\r') {
+        if (std.ascii.isWhitespace(c)) {
             print.printError("Skipping the injection of the Ruby OpenTelemetry auto-instrumentation because the configured path prefix \"{s}\" contains a whitespace character; whitespace in the prefix would break Ruby's RUBYOPT tokenization.", .{configuration.ruby_auto_instrumentation_agent_path_prefix});
             return null;
         }
@@ -256,6 +256,17 @@ test "checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue: returns null 
     try test_util.expectWithMessage(
         checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration_cr) == null,
         "cr in prefix -> null",
+    );
+    // Vertical tab and form feed round out ASCII whitespace.
+    const configuration_vt = testConfiguration("/opt/otel\x0binjector/ruby", false);
+    try test_util.expectWithMessage(
+        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration_vt) == null,
+        "vertical tab in prefix -> null",
+    );
+    const configuration_ff = testConfiguration("/opt/otel\x0cinjector/ruby", false);
+    try test_util.expectWithMessage(
+        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration_ff) == null,
+        "form feed in prefix -> null",
     );
 }
 

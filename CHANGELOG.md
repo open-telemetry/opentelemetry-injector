@@ -4,6 +4,27 @@
 
 <!-- next version -->
 
+## v0.10.0
+
+### 🛑 Breaking changes 🛑
+
+- `packaging`: The DEB and RPM system packages for the OpenTelemetry Injector have moved to open-telemetry/opentelemetry-packaging. This repository no longer builds or releases .deb / .rpm artifacts; tagged releases from here now contain only the raw libotelinject_<arch>.so shared library. (#395)
+  Download the DEB and RPM packages from https://github.com/open-telemetry/opentelemetry-packaging/releases.
+  Packaging bugs and feature requests should be filed at https://github.com/open-telemetry/opentelemetry-packaging.
+  The port over was tracked in open-telemetry/opentelemetry-packaging#5.
+  
+
+### 💡 Enhancements 💡
+
+- `ruby`: Add support for injecting the Ruby OpenTelemetry auto-instrumentation via RUBYOPT. (#367)
+  When a Ruby auto-instrumentation agent path is configured (via ruby_auto_instrumentation_agent_path_prefix
+  or the RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX environment variable), the injector sets RUBYOPT to
+  require the agent's entry file and OTEL_RUBY_ADDITIONAL_GEM_PATH so the gem can locate its bundled
+  dependencies. The path is resolved per libc flavor (glibc/musl).
+  
+
+<!-- previous-version -->
+
 ## v0.9.2
 
 ### 🧰 Bug fixes 🧰

@@ -83,6 +83,12 @@ This method requires `root` privileges.
    The values set in the configuration file can be overridden with environment variables.
    - `DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the .NET auto-instrumentation
      agent files
+   - `DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION`: the minimum .NET major version an application (as
+     determined by inspecting its `*.runtimeconfig.json` file) needs to target to be eligible for .NET
+     auto-instrumentation; can also be set via the configuration file key
+     `dotnet_auto_instrumentation_minimum_dotnet_major_version`. The default is `8`, matching the .NET versions
+     supported by the upstream OpenTelemetry .NET auto-instrumentation. Distributions of the .NET
+     auto-instrumentation that support older .NET versions can lower this threshold accordingly.
    - `JVM_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Java auto-instrumentation agent JAR file
    - `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Node.js auto-instrumentation agent registration file
    - `PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the Python auto-instrumentation agent files (Python is disabled by default, see [Enabling Auto-Instrumentation for Python](#enabling-auto-instrumentation-for-python))
@@ -168,7 +174,11 @@ Here is an overview of the modifications that the injector will apply:
       In contrast to other runtimes, .NET does not support adding multiple agents.
     * The injector first inspects the adjacent `*.runtimeconfig.json` file of the target application when it is
       available.
-    * The injector stands down if the specified runtime version does not target `net8.0` or later.
+    * The injector stands down if the specified runtime version does not target a supported .NET version. By
+      default, the minimum supported .NET major version is 8, matching the .NET versions supported by the upstream
+      OpenTelemetry .NET auto-instrumentation; it can be changed via the configuration file key
+      `dotnet_auto_instrumentation_minimum_dotnet_major_version` or the environment variable
+      `DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION`.
     * If the `.runtimeconfig.json` file is missing, unreadable, malformed, or missing the expected fields, the
       injector proceeds with additional .NET checks.
     * To reduce the risk of double-instrumentation, the injector then inspects the adjacent `*.deps.json` file of the

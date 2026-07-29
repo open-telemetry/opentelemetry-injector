@@ -24,6 +24,7 @@ const default_config_dir_path = "/etc/opentelemetry/injector/conf.d";
 const config_dir_path_env_var = "OTEL_INJECTOR_CONFIG_DIR";
 
 const dotnet_path_prefix_key = "dotnet_auto_instrumentation_agent_path_prefix";
+const dotnet_minimum_dotnet_major_version_key = "dotnet_auto_instrumentation_minimum_dotnet_major_version";
 const jvm_path_key = "jvm_auto_instrumentation_agent_path";
 const nodejs_path_key = "nodejs_auto_instrumentation_agent_path";
 const python_path_prefix_key = "python_auto_instrumentation_agent_path_prefix";
@@ -33,6 +34,7 @@ const all_agents_env_path_key = "all_auto_instrumentation_agents_env_path";
 const auto_instrumentation_disabled_key = "auto_instrumentation_disabled";
 
 const dotnet_agent_path_prefix_env_var = "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
+const dotnet_minimum_dotnet_major_version_env_var = "DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION";
 const jvm_agent_path_env_var = "JVM_AUTO_INSTRUMENTATION_AGENT_PATH";
 const nodejs_agent_path_env_var = "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
 const python_agent_path_prefix_env_var = "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
@@ -66,6 +68,7 @@ pub const InjectorConfiguration = struct {
     exclude_paths: [][]const u8,
     include_args: [][]const u8,
     exclude_args: [][]const u8,
+    dotnet_auto_instrumentation_minimum_dotnet_major_version: u32,
     dotnet_instrumentation_disabled: bool,
     jvm_instrumentation_disabled: bool,
     nodejs_instrumentation_disabled: bool,
@@ -95,6 +98,11 @@ pub const InjectorConfiguration = struct {
 const ConfigApplier = fn (gpa: std.mem.Allocator, key: []const u8, value: []u8, file_path: []const u8, configuration: *InjectorConfiguration) void;
 
 const default_dotnet_auto_instrumentation_agent_path_prefix = "";
+
+// The upstream OpenTelemetry .NET auto-instrumentation supports .NET 8 or later. Distributions of the .NET
+// auto-instrumentation that support older .NET versions can lower this threshold via the configuration file key
+// dotnet_auto_instrumentation_minimum_dotnet_major_version or the corresponding environment variable.
+pub const default_dotnet_auto_instrumentation_minimum_dotnet_major_version: u32 = 8;
 const default_jvm_auto_instrumentation_agent_path = "";
 const default_nodejs_auto_instrumentation_agent_path = "";
 
@@ -152,6 +160,7 @@ fn createEmptyConfiguration(allocator: std.mem.Allocator) InjectorConfiguration 
         .exclude_paths = &.{},
         .include_args = &.{},
         .exclude_args = &.{},
+        .dotnet_auto_instrumentation_minimum_dotnet_major_version = default_dotnet_auto_instrumentation_minimum_dotnet_major_version,
         .dotnet_instrumentation_disabled = false,
         .jvm_instrumentation_disabled = false,
         .nodejs_instrumentation_disabled = false,
@@ -260,6 +269,7 @@ test "readConfigurationFromPath: loads from the specified path" {
         "/custom/path/to/dotnet/instrumentation",
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
+    try testing.expectEqual(@as(u32, 6), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
     try testing.expectEqualStrings(
         "/custom/path/to/jvm/javaagent.jar",
         configuration.jvm_auto_instrumentation_agent_path,
@@ -300,6 +310,10 @@ test "readConfigurationFromPath: file does not exist, no environment variables" 
     try testing.expectEqual(0, configuration.exclude_paths.len);
     try testing.expectEqual(0, configuration.include_args.len);
     try testing.expectEqual(0, configuration.exclude_args.len);
+    try testing.expectEqual(
+        default_dotnet_auto_instrumentation_minimum_dotnet_major_version,
+        configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version,
+    );
     try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
     try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
     try test_util.expectWithMessage(!configuration.nodejs_instrumentation_disabled, "!configuration.nodejs_instrumentation_disabled");
@@ -309,8 +323,9 @@ test "readConfigurationFromPath: file does not exist, no environment variables" 
 test "readConfigurationFromPath: file does not exist, environment variables are set" {
     const allocator = testing.allocator;
 
-    const original_environ = try test_util.setStdCEnviron(&[8][]const u8{
+    const original_environ = try test_util.setStdCEnviron(&[9][]const u8{
         "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/dotnet",
+        "DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION=6",
         "JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/jvm",
         "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/nodejs",
         "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/python",
@@ -328,6 +343,7 @@ test "readConfigurationFromPath: file does not exist, environment variables are 
         "/path/from/env/var/dotnet",
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
+    try testing.expectEqual(@as(u32, 6), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
     try testing.expectEqualStrings(
         "/path/from/env/var/jvm",
         configuration.jvm_auto_instrumentation_agent_path,
@@ -381,6 +397,7 @@ test "readConfigurationFromPath: all configuration values from file, no environm
         "/custom/path/to/dotnet/instrumentation",
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
+    try testing.expectEqual(@as(u32, 6), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
     try testing.expectEqualStrings(
         "/custom/path/to/jvm/javaagent.jar",
         configuration.jvm_auto_instrumentation_agent_path,
@@ -429,8 +446,9 @@ test "readConfigurationFromPath: override some configuration values from file wi
         try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/all_values.conf" });
     defer allocator.free(absolute_path_to_config_file);
 
-    const original_environ = try test_util.setStdCEnviron(&[5][]const u8{
+    const original_environ = try test_util.setStdCEnviron(&[6][]const u8{
         "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/dotnet",
+        "DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION=9",
         "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/nodejs",
         "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=python",
         "OTEL_INJECTOR_INCLUDE_PATHS=/path/from/env/var/include1,/path/from/env/var/include2",
@@ -445,6 +463,7 @@ test "readConfigurationFromPath: override some configuration values from file wi
         "/path/from/env/var/dotnet",
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
+    try testing.expectEqual(@as(u32, 9), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
     try testing.expectEqualStrings(
         "/custom/path/to/jvm/javaagent.jar",
         configuration.jvm_auto_instrumentation_agent_path,
@@ -496,6 +515,7 @@ fn createDefaultConfiguration(arena_allocator: std.mem.Allocator) std.mem.Alloca
         .exclude_paths = &.{},
         .include_args = &.{},
         .exclude_args = &.{},
+        .dotnet_auto_instrumentation_minimum_dotnet_major_version = default_dotnet_auto_instrumentation_minimum_dotnet_major_version,
         .dotnet_instrumentation_disabled = false,
         .jvm_instrumentation_disabled = false,
         .nodejs_instrumentation_disabled = false,
@@ -544,6 +564,48 @@ fn applyAutoInstrumentationDisabledValue(trimmed_value: []const u8, source: []co
     }
 }
 
+fn applyDotnetMinimumDotnetMajorVersionValue(value: []const u8, source: []const u8, configuration: *InjectorConfiguration) void {
+    const trimmed_value = std.mem.trim(u8, value, " \t");
+    const parsed_version = std.fmt.parseUnsigned(u32, trimmed_value, 10) catch {
+        print.printWarn(
+            "Ignoring invalid value for {s} from {s}: \"{s}\" - a non-negative integer is required.",
+            .{ dotnet_minimum_dotnet_major_version_key, source, trimmed_value },
+        );
+        return;
+    };
+    configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version = parsed_version;
+}
+
+test "applyDotnetMinimumDotnetMajorVersionValue: parses a valid value" {
+    var configuration = createEmptyConfiguration(testing.allocator);
+    defer configuration.all_auto_instrumentation_agents_env_vars.deinit();
+
+    applyDotnetMinimumDotnetMajorVersionValue("6", "test", &configuration);
+
+    try testing.expectEqual(@as(u32, 6), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
+}
+
+test "applyDotnetMinimumDotnetMajorVersionValue: trims whitespace" {
+    var configuration = createEmptyConfiguration(testing.allocator);
+    defer configuration.all_auto_instrumentation_agents_env_vars.deinit();
+
+    applyDotnetMinimumDotnetMajorVersionValue(" 7\t", "test", &configuration);
+
+    try testing.expectEqual(@as(u32, 7), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
+}
+
+test "applyDotnetMinimumDotnetMajorVersionValue: ignores an invalid value and keeps the default" {
+    var configuration = createEmptyConfiguration(testing.allocator);
+    defer configuration.all_auto_instrumentation_agents_env_vars.deinit();
+
+    applyDotnetMinimumDotnetMajorVersionValue("not-a-number", "test", &configuration);
+
+    try testing.expectEqual(
+        default_dotnet_auto_instrumentation_minimum_dotnet_major_version,
+        configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version,
+    );
+}
+
 fn applyCommaSeparatedPatternsOption(arena_allocator: std.mem.Allocator, setting: *[][]const u8, value: []u8, pattern_name: []const u8, cfg_file_path: []const u8) void {
     const new_patterns = patterns_util.splitByComma(arena_allocator, value) catch |err| {
         print.printError("error parsing {s} value from configuration file {s}: {}", .{ pattern_name, cfg_file_path, err });
@@ -558,6 +620,8 @@ fn applyCommaSeparatedPatternsOption(arena_allocator: std.mem.Allocator, setting
 fn applyKeyValueToGeneralOptions(arena_allocator: std.mem.Allocator, key: []const u8, value: []u8, _cfg_file_path: []const u8, _configuration: *InjectorConfiguration) void {
     if (std.mem.eql(u8, key, dotnet_path_prefix_key)) {
         _configuration.dotnet_auto_instrumentation_agent_path_prefix = value;
+    } else if (std.mem.eql(u8, key, dotnet_minimum_dotnet_major_version_key)) {
+        applyDotnetMinimumDotnetMajorVersionValue(value, _cfg_file_path, _configuration);
     } else if (std.mem.eql(u8, key, jvm_path_key)) {
         _configuration.jvm_auto_instrumentation_agent_path = value;
     } else if (std.mem.eql(u8, key, nodejs_path_key)) {
@@ -778,6 +842,7 @@ fn copyToPermanentlyAllocatedHeap(
         .exclude_paths = try copyStringArray(allocator, preliminary_configuration.exclude_paths),
         .include_args = try copyStringArray(allocator, preliminary_configuration.include_args),
         .exclude_args = try copyStringArray(allocator, preliminary_configuration.exclude_args),
+        .dotnet_auto_instrumentation_minimum_dotnet_major_version = preliminary_configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version,
         .dotnet_instrumentation_disabled = preliminary_configuration.dotnet_instrumentation_disabled,
         .jvm_instrumentation_disabled = preliminary_configuration.jvm_instrumentation_disabled,
         .nodejs_instrumentation_disabled = preliminary_configuration.nodejs_instrumentation_disabled,
@@ -2028,6 +2093,9 @@ fn readConfigurationFromEnvironment(arena_allocator: std.mem.Allocator, configur
         };
         configuration.dotnet_auto_instrumentation_agent_path_prefix = dotnet_value;
     }
+    if (getenv_fn(arena_allocator, dotnet_minimum_dotnet_major_version_env_var)) |value| {
+        applyDotnetMinimumDotnetMajorVersionValue(value, dotnet_minimum_dotnet_major_version_env_var, configuration);
+    }
     if (getenv_fn(arena_allocator, jvm_agent_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         const jvm_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
@@ -2156,8 +2224,9 @@ test "readConfigurationFromEnvironment: all values" {
     defer arena.deinit();
     const arena_allocator = arena.allocator();
 
-    const original_environ = try test_util.setStdCEnviron(&[8][]const u8{
+    const original_environ = try test_util.setStdCEnviron(&[9][]const u8{
         "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/dotnet",
+        "DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION=6",
         "JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/jvm",
         "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/env/var/nodejs",
         "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/env/var/python",
@@ -2175,6 +2244,7 @@ test "readConfigurationFromEnvironment: all values" {
         "/path/from/env/var/dotnet",
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
+    try testing.expectEqual(@as(u32, 6), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
     try testing.expectEqualStrings(
         "/path/from/env/var/jvm",
         configuration.jvm_auto_instrumentation_agent_path,

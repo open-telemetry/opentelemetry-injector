@@ -395,6 +395,7 @@ fn testConfiguration(path_prefix: []const u8, disabled: bool) config.InjectorCon
         .exclude_paths = &.{},
         .include_args = &.{},
         .exclude_args = &.{},
+        .dotnet_auto_instrumentation_minimum_dotnet_major_version = config.default_dotnet_auto_instrumentation_minimum_dotnet_major_version,
         .dotnet_instrumentation_disabled = false,
         .jvm_instrumentation_disabled = false,
         .nodejs_instrumentation_disabled = false,

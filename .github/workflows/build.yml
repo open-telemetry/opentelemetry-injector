@@ -70,7 +70,10 @@ jobs:
           cp so/libotelinject.so dist/libotelinject_s390x.so
 
       - name: Run Injector integration tests
-        run: make injector-integration-tests-for-one-architecture ARCH=s390x
+        run: |
+          TEST_SETS=default,binary-validation \
+            ARCHITECTURES=s390x \
+            injector-integration-tests/scripts/test-all.sh
 
       - name: Upload binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -106,7 +109,10 @@ jobs:
           cp so/libotelinject.so dist/libotelinject_ppc64le.so
 
       - name: Run Injector integration tests
-        run: make injector-integration-tests-for-one-architecture ARCH=ppc64le
+        run: |
+          TEST_SETS=default,binary-validation \
+            ARCHITECTURES=ppc64le \
+            injector-integration-tests/scripts/test-all.sh
 
       - name: Upload binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

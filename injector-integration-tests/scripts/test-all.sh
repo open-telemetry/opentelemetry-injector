@@ -127,6 +127,8 @@ run_tests_for_architecture_and_libc_flavor() {
 declare -a all_architectures=(
   "arm64"
   "amd64"
+  "s390x"
+  "ppc64le"
 )
 declare -a all_libc_flavors=(
   "glibc"

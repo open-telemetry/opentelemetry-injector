@@ -166,7 +166,14 @@ pub const ElfDynLib = struct {
             }
 
             const bucket_index = hash % gnu_hash_header.nbuckets;
-            const chain_index = gnu_hash_section.buckets[bucket_index] - gnu_hash_header.symoffset;
+            const bucket_value = gnu_hash_section.buckets[bucket_index];
+            if (bucket_value < gnu_hash_header.symoffset) {
+                // Empty bucket (value 0) or any value below symoffset: no symbol in this bucket.
+                // Mirrors glibc's dl-lookup check. Without this guard, the subtraction below
+                // would underflow as u32 and trigger a ReleaseSafe panic (issue #399).
+                return null;
+            }
+            const chain_index = bucket_value - gnu_hash_header.symoffset;
 
             const chains = gnu_hash_section.chain;
             const hash_as_entry: std.elf.gnu_hash.ChainEntry = @bitCast(hash);

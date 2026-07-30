@@ -1,0 +1,35 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+# Regression test for issue #399:
+# panic: integer overflow in ElfDynLib.lookupAddress on empty GNU hash bucket.
+#
+# On glibc < 2.34 (e.g. Debian Bullseye / glibc 2.31), /proc/self/maps shows
+# "libc-2.31.so" not "libc.so.6". The injector's first pass (which matches by
+# libc name) therefore finds nothing and falls through to the second pass, which
+# scans every mapped .so.
+#
+# trigger.so is a crafted ELF shared library with a .gnu.hash section where:
+#   - The bloom filter passes (false positive) for "setenv" (hash 0x1b85483a)
+#   - The corresponding bucket value is 0 (empty)
+#   - chain_index = 0 - symoffset(1) wraps as u32 → panic in ReleaseSafe
+#
+# premapper.so maps trigger.so at 0x1000000 (below the ASLR range) in its
+# constructor, so the second-pass scan encounters it before libc. With
+# LD_PRELOAD="/injector/libotelinject.so:/premapper.so", premapper's constructor
+# runs first (the dynamic linker initialises later-listed entries first when
+# there are no interdependencies), ensuring trigger.so is already mapped when
+# the injector's initEnviron reads /proc/self/maps.
+#
+# This test is glibc-specific; musl uses a different libc-detection path.
+if [ "${LIBC_FLAVOR:-}" != "glibc" ]; then
+  echo "Skipping empty-gnu-hash-bucket tests: these tests are glibc-specific (LIBC_FLAVOR=${LIBC_FLAVOR:-unset})"
+  return 0 2>/dev/null || true
+fi
+
+run_test_case \
+  "empty GNU hash bucket: process survives lookup on empty bucket in second pass" \
+  "app" \
+  "./printenv OTEL_RESOURCE_ATTRIBUTES" \
+  "OTEL_RESOURCE_ATTRIBUTES: k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app" \
+  "LD_PRELOAD=/injector/libotelinject.so:/premapper.so"

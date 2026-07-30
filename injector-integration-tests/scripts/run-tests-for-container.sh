@@ -58,6 +58,9 @@ fi
 if [[ "$TEST_SET" = "copy-reloc.tests" ]]; then
   test_app="copy-reloc"
 fi
+if [[ "$TEST_SET" = "empty-gnu-hash-bucket.tests" ]]; then
+  test_app="empty-gnu-hash-bucket"
+fi
 
 # We also use the Node.js test app for non-runtime specific tests (e.g. injector-integration-tests/tests/default.tests
 # etc.), so this is the default Dockerfile.
@@ -127,6 +130,12 @@ case "$test_app" in
     # /usr/local/bin/node carries an R_*_COPY relocation on __environ. We do not provide a musl variant
     # because the tests themselves skip for LIBC=musl: the bug is in the glibc-specific fallback path.
     base_image_run=node:16-bullseye-slim
+    ;;
+  "empty-gnu-hash-bucket")
+    dockerfile_name="injector-integration-tests/apps/empty-gnu-hash-bucket/Dockerfile"
+    base_image_run=debian:bullseye-slim
+    # We do not provide a different base image depending on the libc flavor: the tests themselves skip for
+    # LIBC=musl because musl uses a different libc-detection path that is not affected by this bug.
     ;;
   *)
     echo "Unknown test app: $test_app"

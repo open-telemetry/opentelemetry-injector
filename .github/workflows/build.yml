@@ -112,6 +112,7 @@ jobs:
         run: |
           TEST_SETS=default,binary-validation \
             ARCHITECTURES=ppc64le \
+            LIBC_FLAVORS=glibc \
             injector-integration-tests/scripts/test-all.sh
 
       - name: Upload binary

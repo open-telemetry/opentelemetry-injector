@@ -63,8 +63,11 @@ jobs:
       - name: Run Zig unit tests
         run: make zig-unit-tests ARCH=s390x
 
-      - name: Build binary
-        run: make dist ARCH=s390x
+      - name: Build binary via cross-compilation
+        run: |
+          make all ARCH=s390x
+          mkdir -p dist
+          cp so/libotelinject.so dist/libotelinject_s390x.so
 
       - name: Run Injector integration tests
         run: make injector-integration-tests-for-one-architecture ARCH=s390x
@@ -96,8 +99,11 @@ jobs:
       - name: Run Zig unit tests
         run: make zig-unit-tests ARCH=ppc64le
 
-      - name: Build binary
-        run: make dist ARCH=ppc64le
+      - name: Build binary via cross-compilation
+        run: |
+          make all ARCH=ppc64le
+          mkdir -p dist
+          cp so/libotelinject.so dist/libotelinject_ppc64le.so
 
       - name: Run Injector integration tests
         run: make injector-integration-tests-for-one-architecture ARCH=ppc64le

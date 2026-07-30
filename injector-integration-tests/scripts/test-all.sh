@@ -135,7 +135,7 @@ declare -a all_libc_flavors=(
   "musl"
 )
 
-# build injector binary for both architectures
+# build injector binary for all architectures
 echo ----------------------------------------
 echo building the injector binary locally from source
 echo ----------------------------------------

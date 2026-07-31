@@ -1,0 +1,15 @@
+change_type: enhancement
+
+component: injector
+
+note: Remove architecture gate from .NET injection; delegate SDK availability checks to downstream adopters.
+
+issues: [411]
+
+subtext: |
+  Previously the injector refused to inject .NET on any architecture other than `amd64` and `arm64`.
+  The injector now constructs the expected SDK path for any architecture and relies on the existing
+  file-existence check to skip injection when the SDK is absent, consistent with how every other
+  runtime (Node.js, Python, JVM, Ruby) behaves.
+  Downstream adopters (system packages, the OpenTelemetry Operator) can install a .NET SDK for any
+  architecture under the standard path and have it picked up automatically.

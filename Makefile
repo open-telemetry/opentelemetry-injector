@@ -33,7 +33,7 @@ clean:
 	rm -rf so $(DIST_DIR_BINARY) zig-out .zig-cache
 
 so/$(BINARY_NAME_NO_ARCH): so
-	zig build -Dcpu-arch=${ARCH} -Dallowed-env-var-prefixes='$(ALLOWED_ENV_VAR_PREFIXES)' --prominent-compile-errors --summary none
+	zig build -Dcpu-arch=$(ARCH) -Dallowed-env-var-prefixes='$(ALLOWED_ENV_VAR_PREFIXES)' --prominent-compile-errors --summary none
 
 $(DIST_TARGET): $(DIST_SRCS)
 	@echo building the injector binary for architecture $(ARCH)
@@ -43,6 +43,8 @@ $(DIST_TARGET): $(DIST_SRCS)
 	  ZIG_ARCHITECTURE=aarch64; \
 	elif [[ "$(ARCH)" = amd64 ]]; then \
 	  ZIG_ARCHITECTURE=x86_64; \
+	else \
+	  ZIG_ARCHITECTURE=$(ARCH); \
 	fi; \
 	docker buildx build --platform linux/$(ARCH) --build-arg DOCKER_REPO=$(DOCKER_REPO) --build-arg ZIG_ARCHITECTURE=$$ZIG_ARCHITECTURE -o type=image,name=libotelinject-builder:$(ARCH),push=false .
 	docker rm -f libotelinject-builder 2>/dev/null || true

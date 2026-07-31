@@ -8,7 +8,7 @@ const std = @import("std");
 // runner.
 pub fn build(b: *std.Build) !void {
     const optimize = std.builtin.OptimizeMode.ReleaseSafe;
-    const target_cpu = b.option(SupportedCpuArch, "cpu-arch", "The system architecture to compile the injector for; valid options are 'amd64' and 'arm64' (default)") orelse .arm64;
+    const target_cpu = b.option(SupportedCpuArch, "cpu-arch", "The system architecture to compile the injector for; valid options are 'amd64', 'arm64' (default), 's390x', 'ppc64le'") orelse .arm64;
     const allowed_env_var_prefixes = b.option(
         []const u8,
         "allowed-env-var-prefixes",
@@ -113,6 +113,8 @@ fn copyInjectorFile(step: *std.Build.Step, _: std.Build.Step.MakeOptions) anyerr
 const SupportedCpuArch = enum {
     amd64,
     arm64,
+    s390x,
+    ppc64le,
 
     const Self = @This();
 
@@ -120,12 +122,16 @@ const SupportedCpuArch = enum {
         return switch (self) {
             .amd64 => std.Target.Cpu.Arch.x86_64,
             .arm64 => std.Target.Cpu.Arch.aarch64,
+            .s390x => std.Target.Cpu.Arch.s390x,
+            .ppc64le => std.Target.Cpu.Arch.powerpc64le,
         };
     }
     fn model(self: Self) *const std.Target.Cpu.Model {
         return switch (self) {
             .amd64 => std.Target.Cpu.Model.generic(std.Target.Cpu.Arch.x86_64),
             .arm64 => std.Target.Cpu.Model.generic(std.Target.Cpu.Arch.aarch64),
+            .s390x => std.Target.Cpu.Model.generic(std.Target.Cpu.Arch.s390x),
+            .ppc64le => std.Target.Cpu.Model.generic(std.Target.Cpu.Arch.powerpc64le),
         };
     }
 };

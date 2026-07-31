@@ -45,7 +45,6 @@ pub const CachedDotnetValues = struct {
 
 const DotnetError = error{
     UnknownLibCFlavor,
-    UnsupportedCpuArchitecture,
     OutOfMemory,
 };
 
@@ -779,26 +778,28 @@ fn determineDotnetValues(
     libc_f: types.LibCFlavor,
     architecture: std.Target.Cpu.Arch,
 ) DotnetError!DotnetValues {
-    const libc_flavor_prefix =
+    const libc_flavor_prefix: []const u8 =
         switch (libc_f) {
             .GNU => "glibc",
             .MUSL => "musl",
             else => return error.UnknownLibCFlavor,
         };
-    const platform =
-        switch (libc_f) {
-            .GNU => switch (architecture) {
-                .x86_64 => "linux-x64",
-                .aarch64 => "linux-arm64",
-                else => return error.UnsupportedCpuArchitecture,
-            },
-            .MUSL => switch (architecture) {
-                .x86_64 => "linux-musl-x64",
-                .aarch64 => "linux-musl-arm64",
-                else => return error.UnsupportedCpuArchitecture,
-            },
-            else => return error.UnknownLibCFlavor,
-        };
+
+    // Map known architectures to their .NET RID names; for everything else fall
+    // through to Zig's tag name so that downstream adopters can place their SDK at
+    // the expected path without the injector hard-blocking unknown architectures.
+    const arch_dotnet_name: []const u8 = switch (architecture) {
+        .x86_64 => "x64",
+        .aarch64 => "arm64",
+        else => |arch| @tagName(arch),
+    };
+    const platform = switch (libc_f) {
+        .GNU => try std.fmt.allocPrint(gpa, "linux-{s}", .{arch_dotnet_name}),
+        .MUSL => try std.fmt.allocPrint(gpa, "linux-musl-{s}", .{arch_dotnet_name}),
+        else => return error.UnknownLibCFlavor,
+    };
+    defer gpa.free(platform);
+
     const coreclr_profiler_path = try std.fmt.allocPrintSentinel(gpa, "{s}/{s}/{s}/OpenTelemetry.AutoInstrumentation.Native.so", .{
         dotnet_path_prefix, libc_flavor_prefix, platform,
     }, 0);
@@ -828,13 +829,40 @@ fn determineDotnetValues(
     };
 }
 
-test "determineDotnetValues: should return error for unsupported CPU architecture" {
-    try testing.expectError(error.UnsupportedCpuArchitecture, determineDotnetValues(
-        testing.allocator,
-        "",
-        .GNU,
-        .powerpc64le,
-    ));
+test "determineDotnetValues: returns values for glibc/s390x using Zig arch tag name" {
+    const allocator = testing.allocator;
+    const path = try std.fmt.allocPrint(allocator, "/usr/lib/opentelemetry/dotnet", .{});
+    defer allocator.free(path);
+
+    const dotnet_values = try determineDotnetValues(allocator, path, .GNU, .s390x);
+    defer dotnet_values.freeAll(allocator);
+
+    try testing.expectEqualStrings(
+        "/usr/lib/opentelemetry/dotnet/glibc/linux-s390x/OpenTelemetry.AutoInstrumentation.Native.so",
+        dotnet_values.coreclr_profiler_path,
+    );
+    try testing.expectEqualStrings(
+        "/usr/lib/opentelemetry/dotnet/glibc",
+        dotnet_values.otel_auto_home,
+    );
+}
+
+test "determineDotnetValues: returns values for musl/s390x using Zig arch tag name" {
+    const allocator = testing.allocator;
+    const path = try std.fmt.allocPrint(allocator, "/usr/lib/opentelemetry/dotnet", .{});
+    defer allocator.free(path);
+
+    const dotnet_values = try determineDotnetValues(allocator, path, .MUSL, .s390x);
+    defer dotnet_values.freeAll(allocator);
+
+    try testing.expectEqualStrings(
+        "/usr/lib/opentelemetry/dotnet/musl/linux-musl-s390x/OpenTelemetry.AutoInstrumentation.Native.so",
+        dotnet_values.coreclr_profiler_path,
+    );
+    try testing.expectEqualStrings(
+        "/usr/lib/opentelemetry/dotnet/musl",
+        dotnet_values.otel_auto_home,
+    );
 }
 
 test "determineDotnetValues: should return error for unknown libc flavor" {

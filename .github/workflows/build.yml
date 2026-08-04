@@ -43,10 +43,92 @@ jobs:
           path: ./dist/*.so
           if-no-files-found: error
 
+  verify-and-build-binary-s390x:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the codebase.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+        with:
+          platforms: s390x
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+
+      - name: lint source code
+        run: |
+          make lint
+
+      - name: Run Zig unit tests
+        run: make zig-unit-tests ARCH=s390x
+
+      - name: Build binary via cross-compilation
+        run: |
+          make all ARCH=s390x
+          mkdir -p dist
+          cp so/libotelinject.so dist/libotelinject_s390x.so
+
+      - name: Run Injector integration tests
+        run: |
+          TEST_SETS=default,binary-validation \
+            ARCHITECTURES=s390x \
+            injector-integration-tests/scripts/test-all.sh
+
+      - name: Upload binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: libotelinject-s390x
+          path: ./dist/*.so
+          if-no-files-found: error
+
+  verify-and-build-binary-ppc64le:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the codebase.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+        with:
+          platforms: ppc64le
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+
+      - name: lint source code
+        run: |
+          make lint
+
+      - name: Run Zig unit tests
+        run: make zig-unit-tests ARCH=ppc64le
+
+      - name: Build binary via cross-compilation
+        run: |
+          make all ARCH=ppc64le
+          mkdir -p dist
+          cp so/libotelinject.so dist/libotelinject_ppc64le.so
+
+      - name: Run Injector integration tests
+        run: |
+          TEST_SETS=default,binary-validation \
+            ARCHITECTURES=ppc64le \
+            LIBC_FLAVORS=glibc \
+            injector-integration-tests/scripts/test-all.sh
+
+      - name: Upload binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: libotelinject-ppc64le
+          path: ./dist/*.so
+          if-no-files-found: error
+
   publish-stable:
     runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/') && github.repository == 'open-telemetry/opentelemetry-injector'
-    needs: verify-and-build-binary
+    needs:
+      - verify-and-build-binary
+      - verify-and-build-binary-s390x
+      - verify-and-build-binary-ppc64le
     permissions:
       contents: write
     steps:

@@ -4,6 +4,30 @@
 
 <!-- next version -->
 
+## v0.11.0
+
+### 💡 Enhancements 💡
+
+- `dotnet`: Make the minimum .NET major version required for injection configurable. (#409)
+  The injector inspects the `*.runtimeconfig.json` file of the target application and skips the injection of the
+  .NET auto-instrumentation if the application does not target a supported .NET version. The minimum supported .NET
+  major version (previously hardcoded to 8) can now be configured via the configuration file key
+  `dotnet_auto_instrumentation_minimum_dotnet_major_version` or the environment variable
+  `DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION`. The default remains 8, matching the .NET versions
+  supported by the upstream OpenTelemetry .NET auto-instrumentation. Distributions of the .NET auto-instrumentation
+  that support older .NET versions can lower this threshold accordingly.
+  
+- `injector`: Remove architecture gate from .NET injection; delegate SDK availability checks to downstream adopters. (#411)
+  Previously the injector refused to inject .NET on any architecture other than `amd64` and `arm64`.
+  The injector now constructs the expected SDK path for any architecture and relies on the existing
+  file-existence check to skip injection when the SDK is absent, consistent with how every other
+  runtime (Node.js, Python, JVM, Ruby) behaves.
+  Downstream adopters (system packages, the OpenTelemetry Operator) can install a .NET SDK for any
+  architecture under the standard path and have it picked up automatically.
+  
+
+<!-- previous-version -->
+
 ## v0.10.1
 
 ### 🧰 Bug fixes 🧰

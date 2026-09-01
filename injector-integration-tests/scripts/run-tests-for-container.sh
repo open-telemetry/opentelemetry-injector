@@ -18,6 +18,14 @@ elif [ "$ARCH" = amd64 ]; then
   docker_platform=linux/amd64
   expected_cpu_architecture=x86_64
   injector_binary=libotelinject_amd64.so
+elif [ "$ARCH" = s390x ]; then
+  docker_platform=linux/s390x
+  expected_cpu_architecture=s390x
+  injector_binary=libotelinject_s390x.so
+elif [ "$ARCH" = ppc64le ]; then
+  docker_platform=linux/ppc64le
+  expected_cpu_architecture=ppc64le
+  injector_binary=libotelinject_ppc64le.so
 else
   echo "The architecture $ARCH is not supported."
   exit 1

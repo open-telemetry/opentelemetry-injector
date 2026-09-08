@@ -95,6 +95,7 @@ run_tests_for_architecture_and_libc_flavor() {
   echo ----------------------------------------
 
   test_exit_code=0
+  local failed_test_sets=()
   for test_set in "${all_test_sets[@]}"; do
     local test_set_name="${test_set%.tests}"
     if [[ -n "${test_sets[0]}" ]]; then
@@ -105,6 +106,9 @@ run_tests_for_architecture_and_libc_flavor() {
     fi
 
     run_test_set_for_architecture_and_libc_flavor "$arch" "$libc" "$test_set"
+    if [[ $test_exit_code_last_test_set -ne 0 ]]; then
+      failed_test_sets+=("$test_set_name")
+    fi
     if [[ $test_exit_code_last_test_set -gt $test_exit_code ]]; then
       test_exit_code=$test_exit_code_last_test_set
     fi
@@ -113,9 +117,15 @@ run_tests_for_architecture_and_libc_flavor() {
   echo
   echo ----------------------------------------
   if [ $test_exit_code != 0 ]; then
-    printf "${RED}tests for %s/%s failed (see above for details)${NC}\n" "$arch" "$libc"
+    printf "${RED}Tests for %s/%s have failed, test sets with failures:${NC}\n" "$arch" "$libc"
+    for failed_test_set in "${failed_test_sets[@]}"; do
+      printf "${RED}- %s${NC}\n" "$failed_test_set"
+    done
+    printf "${RED}\nSee above for details.${NC}\n"
     global_exit_code=1
-    summary="$summary\n$arch/$libc:\t${RED}failed${NC}"
+    local failed_test_sets_joined
+    failed_test_sets_joined=$(printf ", %s" "${failed_test_sets[@]}")
+    summary="$summary\n$arch/$libc:\t${RED}failed (failed test sets: ${failed_test_sets_joined:2})${NC}"
   else
     printf "${GREEN}tests for %s/%s were successful${NC}\n" "$arch" "$libc"
     summary="$summary\n$arch/$libc:\t${GREEN}ok${NC}"

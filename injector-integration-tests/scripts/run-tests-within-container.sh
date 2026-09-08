@@ -44,6 +44,19 @@ if [ ! -f $injector_binary ]; then
   exit 1
 fi
 
+exit_code=0
+
+# Collects the labels of all failed test cases, one per line, so that they can be listed at the end of the test set.
+failed_test_cases=""
+
+# Marks the test set as failed and remembers the label of the failed test case for the summary at the end of the test
+# set.
+record_failed_test_case() {
+  exit_code=1
+  failed_test_cases="$failed_test_cases$1
+"
+}
+
 # Runs one test case. Usage:
 #
 #   run_test_case $test_case_label $working_dir $test_app_command $expected_output $env_vars
@@ -195,21 +208,21 @@ run_test_case() {
     echo "received exit code: $test_exit_code"
     echo "output: $test_output"
     echo "--- end of output"
-    exit_code=1
+    record_failed_test_case "$test_case_label (crashed)"
   elif [ "$test_output" != "$expected" ]; then
     printf "${RED}test \"%s\" failed:${NC}\n" "$test_case_label"
     echo "test command: $full_command"
     echo "expected: $expected"
     echo "actual:   $test_output"
     echo "--- end of output"
-    exit_code=1
+    record_failed_test_case "$test_case_label"
   elif [ "$check_stderr" = "true" ] && [ "$test_stderr" != "$expected_stderr" ]; then
     printf "${RED}test \"%s\" failed (stderr mismatch):${NC}\n" "$test_case_label"
     echo "test command: $full_command"
     echo "expected stderr: $expected_stderr"
     echo "actual stderr:   $test_stderr"
     echo "--- end of output"
-    exit_code=1
+    record_failed_test_case "$test_case_label (stderr mismatch)"
   else
     printf "${GREEN}test \"%s\" successful${NC}\n" "$test_case_label"
     if [ "${VERBOSE:-}" = "true" ]; then
@@ -220,10 +233,16 @@ run_test_case() {
   fi
 }
 
-exit_code=0
-
 # shellcheck source=injector-integration-tests/tests/default.tests
 . "tests/${TEST_SET:-default.tests}"
+
+if [ $exit_code != 0 ]; then
+  echo
+  printf "${RED}Test cases with failures in test set %s:${NC}\n" "${TEST_SET:-default.tests}"
+  printf '%s' "$failed_test_cases" | while IFS= read -r failed_test_case; do
+    printf "${RED}- %s${NC}\n" "$failed_test_case"
+  done
+fi
 
 exit $exit_code
 

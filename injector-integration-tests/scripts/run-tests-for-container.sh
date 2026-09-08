@@ -116,7 +116,8 @@ case "$test_app" in
     ;;
   "no-libdl")
     dockerfile_name="injector-integration-tests/apps/no-libdl/Dockerfile"
-    base_image_run=debian:bullseye-slim
+    # UBI 8 provides glibc 2.28 (i.e. < 2.34, where libdl was still separate from libc), see the Dockerfile.
+    base_image_run=registry.access.redhat.com/ubi8/ubi:8.10
     # We do not provide a different base image depending on the libc flavor: the tests themselves skip for LIBC=musl
     # because musl uses a different libc-detection path that is not affected by this bug.
     ;;
@@ -133,7 +134,8 @@ case "$test_app" in
     ;;
   "empty-gnu-hash-bucket")
     dockerfile_name="injector-integration-tests/apps/empty-gnu-hash-bucket/Dockerfile"
-    base_image_run=debian:bullseye-slim
+    # UBI 8 provides glibc 2.28 (i.e. < 2.34, so /proc/self/maps shows libc-2.28.so, not libc.so.6), see the Dockerfile.
+    base_image_run=registry.access.redhat.com/ubi8/ubi:8.10
     # We do not provide a different base image depending on the libc flavor: the tests themselves skip for
     # LIBC=musl because musl uses a different libc-detection path that is not affected by this bug.
     ;;

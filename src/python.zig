@@ -25,11 +25,13 @@ pub fn setLibcInfo(info: types.LibCInfo) void {
 /// stay in memory).
 pub fn checkPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
     gpa: std.mem.Allocator,
+    io: std.Io,
     original_value_optional: ?[:0]const u8,
     configuration: config.InjectorConfiguration,
 ) ?[:0]u8 {
     return doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
         gpa,
+        io,
         original_value_optional,
         configuration.python_auto_instrumentation_agent_path_prefix,
         configuration.python_instrumentation_disabled,
@@ -38,6 +40,7 @@ pub fn checkPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
 
 fn doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
     gpa: std.mem.Allocator,
+    io: std.Io,
     original_value_optional: ?[:0]const u8,
     python_auto_instrumentation_agent_path_prefix: []u8,
     python_instrumentation_disabled: bool,
@@ -70,7 +73,7 @@ fn doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
             );
         if (python_auto_instrumentation_agent_path_optional) |python_auto_instrumentation_agent_path| {
             // Check the existence of the Python directory, stand down if it does not exist.
-            std.fs.cwd().access(python_auto_instrumentation_agent_path, .{}) catch |err| {
+            std.Io.Dir.cwd().access(io, python_auto_instrumentation_agent_path, .{}) catch |err| {
                 defer gpa.free(python_auto_instrumentation_agent_path);
                 print.printError("Skipping the injection of the Python OpenTelemetry auto-instrumentation in \"{s}\" because of an issue accessing the directory at \"{s}\": {}", .{ pythonpath_env_var_name, python_auto_instrumentation_agent_path, err });
                 return null;
@@ -99,6 +102,7 @@ test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should
     const modified_pythonpath_value =
         doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
             allocator,
+            testing.io,
             null,
             path_prefix,
             false,
@@ -118,6 +122,7 @@ test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should
     const modified_pythonpath_value =
         doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
             allocator,
+            testing.io,
             null,
             path_prefix,
             false,
@@ -137,6 +142,7 @@ test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should
     const modified_pythonpath_value =
         doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
             allocator,
+            testing.io,
             null,
             path_prefix,
             true,
@@ -156,6 +162,7 @@ test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should
     const modified_pythonpath_value =
         doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
             allocator,
+            testing.io,
             null,
             path_prefix,
             false,
@@ -175,6 +182,7 @@ test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should
     const modified_pythonpath_value =
         doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
             allocator,
+            testing.io,
             null,
             path_prefix,
             false,
@@ -194,6 +202,7 @@ test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should
     const modified_pythonpath_value =
         doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
             allocator,
+            testing.io,
             "/another/path"[0.. :0],
             path_prefix,
             false,

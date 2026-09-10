@@ -19,11 +19,13 @@ pub const node_options_env_var_name = "NODE_OPTIONS";
 /// stay in memory).
 pub fn checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
     gpa: std.mem.Allocator,
+    io: std.Io,
     original_value_optional: ?[:0]const u8,
     configuration: config.InjectorConfiguration,
 ) ?[:0]u8 {
     return doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
         gpa,
+        io,
         original_value_optional,
         configuration.nodejs_auto_instrumentation_agent_path,
         configuration.nodejs_instrumentation_disabled,
@@ -32,6 +34,7 @@ pub fn checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
 
 fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
     gpa: std.mem.Allocator,
+    io: std.Io,
     original_value_optional: ?[:0]const u8,
     nodejs_auto_instrumentation_agent_path: []u8,
     nodejs_instrumentation_disabled: bool,
@@ -44,7 +47,7 @@ fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
     // Check the existence of the Node module: requiring or importing a module
     // that does not exist or cannot be opened will crash the Node.js process
     // with an 'ERR_MODULE_NOT_FOUND' error.
-    std.fs.cwd().access(nodejs_auto_instrumentation_agent_path, .{}) catch |err| {
+    std.Io.Dir.cwd().access(io, nodejs_auto_instrumentation_agent_path, .{}) catch |err| {
         print.printError("Skipping the injection of the Node.js OpenTelemetry auto-instrumentation in \"{s}\" because of an issue accessing the Node.js module at \"{s}\": {}", .{ node_options_env_var_name, nodejs_auto_instrumentation_agent_path, err });
         return null;
     };
@@ -67,6 +70,7 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
     const modified_node_options_value =
         doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
             testing.allocator,
+            testing.io,
             null,
             path,
             true,
@@ -80,6 +84,7 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
     const modified_node_options_value =
         doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
             testing.allocator,
+            testing.io,
             null,
             path,
             false,
@@ -93,6 +98,7 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
     const modified_node_options_value =
         doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
             testing.allocator,
+            testing.io,
             null,
             path,
             false,
@@ -106,6 +112,7 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
     const modified_node_options_value =
         doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
             testing.allocator,
+            testing.io,
             "--abort-on-uncaught-exception"[0.. :0],
             path,
             false,

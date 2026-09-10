@@ -33,6 +33,7 @@ pub fn setLibcInfo(info: types.LibCInfo) void {
 /// stay in memory).
 pub fn checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(
     gpa: std.mem.Allocator,
+    io: std.Io,
     original_value_optional: ?[:0]const u8,
     configuration: config.InjectorConfiguration,
 ) ?[:0]u8 {
@@ -46,7 +47,7 @@ pub fn checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(
     defer gpa.free(entry_file);
 
     // Stand down if the entry file does not exist; requiring a missing file would crash the Ruby process at startup.
-    std.fs.cwd().access(entry_file, .{}) catch |err| {
+    std.Io.Dir.cwd().access(io, entry_file, .{}) catch |err| {
         print.printError("Skipping the injection of the Ruby OpenTelemetry auto-instrumentation in \"{s}\" because of an issue accessing the entry point at \"{s}\": {}", .{ rubyopt_env_var_name, entry_file, err });
         return null;
     };
@@ -67,6 +68,7 @@ pub fn checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(
 /// The caller is responsible for freeing the returned string (unless it is passed on to setenv).
 pub fn getRubyAdditionalGemPath(
     gpa: std.mem.Allocator,
+    io: std.Io,
     configuration: config.InjectorConfiguration,
 ) ?[:0]u8 {
     const libc_dir = determineLibcDir(gpa, configuration) orelse return null;
@@ -78,7 +80,7 @@ pub fn getRubyAdditionalGemPath(
     };
     defer gpa.free(entry_file);
 
-    std.fs.cwd().access(entry_file, .{}) catch |err| {
+    std.Io.Dir.cwd().access(io, entry_file, .{}) catch |err| {
         print.printError("Skipping the injection of the Ruby OpenTelemetry auto-instrumentation in \"{s}\" because of an issue accessing the entry point at \"{s}\": {}", .{ ruby_additional_gem_path_env_var_name, entry_file, err });
         gpa.free(libc_dir);
         return null;
@@ -192,7 +194,7 @@ test "checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue: returns null 
 
     libc_info = test_util.testLibcInfo(.GNU);
     const configuration = testConfiguration("/some/valid/path", true);
-    const result = checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration);
+    const result = checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, testing.io, null, configuration);
     try test_util.expectWithMessage(result == null, "result == null");
 }
 
@@ -203,7 +205,7 @@ test "checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue: returns null 
 
     libc_info = test_util.testLibcInfo(.GNU);
     const configuration = testConfiguration("", false);
-    const result = checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration);
+    const result = checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, testing.io, null, configuration);
     try test_util.expectWithMessage(result == null, "result == null");
 }
 
@@ -214,7 +216,7 @@ test "checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue: returns null 
 
     libc_info = test_util.testLibcInfo(.UNKNOWN);
     const configuration = testConfiguration("/some/valid/path", false);
-    const result = checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration);
+    const result = checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, testing.io, null, configuration);
     try test_util.expectWithMessage(result == null, "result == null");
 }
 
@@ -225,7 +227,7 @@ test "checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue: returns null 
 
     libc_info = test_util.testLibcInfo(.GNU);
     const configuration = testConfiguration("/invalid/path", false);
-    const result = checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration);
+    const result = checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, testing.io, null, configuration);
     try test_util.expectWithMessage(result == null, "result == null");
 }
 
@@ -238,34 +240,34 @@ test "checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue: returns null 
     // Rejected because a space in the prefix would let Ruby's RUBYOPT tokenizer parse additional switches.
     const configuration_space = testConfiguration("/opt/OpenTelemetry Injector/ruby", false);
     try test_util.expectWithMessage(
-        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration_space) == null,
+        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, testing.io, null, configuration_space) == null,
         "space in prefix -> null",
     );
     // Tab, newline, and carriage return also break RUBYOPT tokenization.
     const configuration_tab = testConfiguration("/opt/otel\tinjector/ruby", false);
     try test_util.expectWithMessage(
-        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration_tab) == null,
+        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, testing.io, null, configuration_tab) == null,
         "tab in prefix -> null",
     );
     const configuration_newline = testConfiguration("/opt/otel\ninjector/ruby", false);
     try test_util.expectWithMessage(
-        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration_newline) == null,
+        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, testing.io, null, configuration_newline) == null,
         "newline in prefix -> null",
     );
     const configuration_cr = testConfiguration("/opt/otel\rinjector/ruby", false);
     try test_util.expectWithMessage(
-        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration_cr) == null,
+        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, testing.io, null, configuration_cr) == null,
         "cr in prefix -> null",
     );
     // Vertical tab and form feed round out ASCII whitespace.
     const configuration_vt = testConfiguration("/opt/otel\x0binjector/ruby", false);
     try test_util.expectWithMessage(
-        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration_vt) == null,
+        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, testing.io, null, configuration_vt) == null,
         "vertical tab in prefix -> null",
     );
     const configuration_ff = testConfiguration("/opt/otel\x0cinjector/ruby", false);
     try test_util.expectWithMessage(
-        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, null, configuration_ff) == null,
+        checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(allocator, testing.io, null, configuration_ff) == null,
         "form feed in prefix -> null",
     );
 }
@@ -277,14 +279,14 @@ test "getRubyAdditionalGemPath: returns <prefix>/glibc for GNU libc" {
 
     var tmp_dir = testing.tmpDir(.{});
     defer tmp_dir.cleanup();
-    try tmp_dir.dir.makeDir("glibc");
-    (try tmp_dir.dir.createFile("glibc/" ++ ruby_entry_file_relative_path, .{})).close();
-    const prefix = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    try tmp_dir.dir.createDir(testing.io, "glibc", .default_dir);
+    (try tmp_dir.dir.createFile(testing.io, "glibc/" ++ ruby_entry_file_relative_path, .{})).close(testing.io);
+    const prefix = try tmp_dir.dir.realPathFileAlloc(testing.io, ".", allocator);
     defer allocator.free(prefix);
 
     libc_info = test_util.testLibcInfo(.GNU);
     const configuration = testConfiguration(prefix, false);
-    const result = getRubyAdditionalGemPath(allocator, configuration);
+    const result = getRubyAdditionalGemPath(allocator, testing.io, configuration);
     defer if (result) |v| allocator.free(v);
     const expected = try std.fmt.allocPrint(allocator, "{s}/glibc", .{prefix});
     defer allocator.free(expected);
@@ -298,14 +300,14 @@ test "getRubyAdditionalGemPath: returns <prefix>/musl for musl libc" {
 
     var tmp_dir = testing.tmpDir(.{});
     defer tmp_dir.cleanup();
-    try tmp_dir.dir.makeDir("musl");
-    (try tmp_dir.dir.createFile("musl/" ++ ruby_entry_file_relative_path, .{})).close();
-    const prefix = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    try tmp_dir.dir.createDir(testing.io, "musl", .default_dir);
+    (try tmp_dir.dir.createFile(testing.io, "musl/" ++ ruby_entry_file_relative_path, .{})).close(testing.io);
+    const prefix = try tmp_dir.dir.realPathFileAlloc(testing.io, ".", allocator);
     defer allocator.free(prefix);
 
     libc_info = test_util.testLibcInfo(.MUSL);
     const configuration = testConfiguration(prefix, false);
-    const result = getRubyAdditionalGemPath(allocator, configuration);
+    const result = getRubyAdditionalGemPath(allocator, testing.io, configuration);
     defer if (result) |v| allocator.free(v);
     const expected = try std.fmt.allocPrint(allocator, "{s}/musl", .{prefix});
     defer allocator.free(expected);
@@ -319,7 +321,7 @@ test "getRubyAdditionalGemPath: returns null if entry file cannot be accessed" {
 
     libc_info = test_util.testLibcInfo(.GNU);
     const configuration = testConfiguration("/invalid/path", false);
-    const result = getRubyAdditionalGemPath(allocator, configuration);
+    const result = getRubyAdditionalGemPath(allocator, testing.io, configuration);
     try test_util.expectWithMessage(result == null, "result == null");
 }
 

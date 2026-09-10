@@ -19,11 +19,13 @@ pub const java_tool_options_env_var_name = "JAVA_TOOL_OPTIONS";
 /// stay in memory).
 pub fn checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
     gpa: std.mem.Allocator,
+    io: std.Io,
     original_value_optional: ?[:0]const u8,
     configuration: config.InjectorConfiguration,
 ) ?[:0]u8 {
     return doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
         gpa,
+        io,
         original_value_optional,
         configuration.jvm_auto_instrumentation_agent_path,
         configuration.jvm_instrumentation_disabled,
@@ -32,6 +34,7 @@ pub fn checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
 
 fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
     gpa: std.mem.Allocator,
+    io: std.Io,
     original_value_optional: ?[:0]const u8,
     jvm_auto_instrumentation_agent_path: []u8,
     jvm_instrumentation_disabled: bool,
@@ -43,7 +46,7 @@ fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
 
     // Check the existence of the Jar file: by passing a `-javaagent` to a
     // jar file that does not exist or cannot be opened will crash the JVM
-    std.fs.cwd().access(jvm_auto_instrumentation_agent_path, .{}) catch |err| {
+    std.Io.Dir.cwd().access(io, jvm_auto_instrumentation_agent_path, .{}) catch |err| {
         print.printError("Skipping the injection of the OpenTelemetry Java agent in \"JAVA_TOOL_OPTIONS\" because of an issue accessing the Jar file at \"{s}\": {}", .{ jvm_auto_instrumentation_agent_path, err });
         return null;
     };
@@ -66,6 +69,7 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return n
     const modified_java_tool_options =
         doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
             testing.allocator,
+            testing.io,
             null,
             path,
             true,
@@ -79,6 +83,7 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return n
     const modified_java_tool_options =
         doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
             testing.allocator,
+            testing.io,
             null,
             path,
             false,
@@ -92,6 +97,7 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return n
     const modified_java_tool_options =
         doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
             testing.allocator,
+            testing.io,
             null,
             path,
             false,
@@ -105,6 +111,7 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return n
     const modified_java_tool_options =
         doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
             testing.allocator,
+            testing.io,
             "original value",
             path,
             false,

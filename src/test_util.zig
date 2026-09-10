@@ -69,7 +69,7 @@ pub fn cEnvironGet(name: []const u8) ?[:0]const u8 {
 }
 
 /// A GetenvFn-compatible wrapper around cEnvironGet for use in tests.
-pub fn posixGetenv(allocator: std.mem.Allocator, _: std.Io, name: []const u8) ?[]u8 {
+pub fn posixGetenv(_: std.Io, allocator: std.mem.Allocator, name: []const u8) ?[]u8 {
     const val = cEnvironGet(name) orelse return null;
     return allocator.dupe(u8, val) catch unreachable;
 }

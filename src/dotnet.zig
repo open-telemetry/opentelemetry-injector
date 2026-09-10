@@ -96,13 +96,13 @@ pub fn setLibcInfo(info: types.LibCInfo) void {
 /// The caller is responsible for freeing the returned strings (unless the results are passed on to setenv and need to
 /// stay in memory).
 pub fn getDotnetValues(
-    gpa: std.mem.Allocator,
     io: std.Io,
+    gpa: std.mem.Allocator,
     configuration: config.InjectorConfiguration,
 ) ?DotnetValues {
     return doGetDotnetValues(
-        gpa,
         io,
+        gpa,
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
         configuration.dotnet_instrumentation_disabled,
         configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version,
@@ -110,8 +110,8 @@ pub fn getDotnetValues(
 }
 
 fn doGetDotnetValues(
-    gpa: std.mem.Allocator,
     io: std.Io,
+    gpa: std.mem.Allocator,
     dotnet_path_prefix: []u8,
     dotnet_instrumentation_disabled: bool,
     minimum_dotnet_major_version: u32,
@@ -134,7 +134,7 @@ fn doGetDotnetValues(
         return cached_dotnet_values.values;
     }
 
-    if (!shouldInjectDotnet(gpa, io, minimum_dotnet_major_version)) {
+    if (!shouldInjectDotnet(io, gpa, minimum_dotnet_major_version)) {
         cached_dotnet_values = .{
             .values = null,
             .done = true,
@@ -206,7 +206,7 @@ fn doGetDotnetValues(
     unreachable;
 }
 
-fn shouldInjectDotnet(allocator: std.mem.Allocator, io: std.Io, minimum_dotnet_major_version: u32) bool {
+fn shouldInjectDotnet(io: std.Io, allocator: std.mem.Allocator, minimum_dotnet_major_version: u32) bool {
     if (findConflictingPreExistingDotnetEnvVar()) |conflicting_env_var_name| {
         print.printInfo(
             "Skipping the injection of the .NET OpenTelemetry instrumentation because {s} is already set.",
@@ -215,7 +215,7 @@ fn shouldInjectDotnet(allocator: std.mem.Allocator, io: std.Io, minimum_dotnet_m
         return false;
     }
 
-    const cmdline_args = args_parser.cmdLineForPID(allocator, io) catch |err| {
+    const cmdline_args = args_parser.cmdLineForPID(io, allocator) catch |err| {
         print.printDebug("Proceeding with the injection of the .NET OpenTelemetry instrumentation. Could not read the process command line: {}", .{err});
         return true;
     };
@@ -246,7 +246,7 @@ fn shouldInjectDotnet(allocator: std.mem.Allocator, io: std.Io, minimum_dotnet_m
     };
     defer metadata_paths.freeAll(allocator);
 
-    const runtimeconfig_content = readSmallTextFileAlloc(allocator, io, metadata_paths.runtimeconfig_path) catch |err| {
+    const runtimeconfig_content = readSmallTextFileAlloc(io, allocator, metadata_paths.runtimeconfig_path) catch |err| {
         print.printDebug("Proceeding with the injection of the .NET OpenTelemetry instrumentation. Could not read {s}: {}", .{ metadata_paths.runtimeconfig_path, err });
         return true;
     };
@@ -261,7 +261,7 @@ fn shouldInjectDotnet(allocator: std.mem.Allocator, io: std.Io, minimum_dotnet_m
         return false;
     }
 
-    const deps_content = readSmallTextFileAlloc(allocator, io, metadata_paths.deps_path) catch |err| {
+    const deps_content = readSmallTextFileAlloc(io, allocator, metadata_paths.deps_path) catch |err| {
         print.printDebug("Proceeding with the injection of the .NET OpenTelemetry instrumentation. Could not read {s}: {}", .{ metadata_paths.deps_path, err });
         return true;
     };
@@ -328,7 +328,7 @@ fn createDotnetMetadataPaths(allocator: std.mem.Allocator, app_path: []const u8)
     };
 }
 
-fn readSmallTextFileAlloc(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ![]u8 {
+fn readSmallTextFileAlloc(io: std.Io, allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(max_dotnet_metadata_file_size));
 }
 
@@ -425,7 +425,7 @@ test "doGetDotnetValues: should return null value if the libc flavor has not bee
     defer allocator.free(path);
 
     // libc_info is null after _resetState()
-    const dotnet_values = doGetDotnetValues(allocator, testing.io, path, false, 8);
+    const dotnet_values = doGetDotnetValues(testing.io, allocator, path, false, 8);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
 
@@ -438,7 +438,7 @@ test "doGetDotnetValues: should return null value if dotnet_instrumentation_disa
     defer allocator.free(path);
 
     libc_info = test_util.testLibcInfo(.GNU);
-    const dotnet_values = doGetDotnetValues(allocator, testing.io, path, true, 8);
+    const dotnet_values = doGetDotnetValues(testing.io, allocator, path, true, 8);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
 
@@ -451,7 +451,7 @@ test "doGetDotnetValues: should return null value if dotnet_path_prefix is the e
     defer allocator.free(path);
 
     libc_info = test_util.testLibcInfo(.GNU);
-    const dotnet_values = doGetDotnetValues(allocator, testing.io, path, false, 8);
+    const dotnet_values = doGetDotnetValues(testing.io, allocator, path, false, 8);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
 
@@ -464,7 +464,7 @@ test "doGetDotnetValues: should return null value if the profiler path cannot be
     defer allocator.free(path);
 
     libc_info = test_util.testLibcInfo(.GNU);
-    const dotnet_values = doGetDotnetValues(allocator, testing.io, path, false, 8);
+    const dotnet_values = doGetDotnetValues(testing.io, allocator, path, false, 8);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
 
@@ -480,7 +480,7 @@ test "doGetDotnetValues: should return null value if conflicting .NET env var al
     defer allocator.free(path);
 
     libc_info = test_util.testLibcInfo(.GNU);
-    const dotnet_values = doGetDotnetValues(allocator, testing.io, path, false, 8);
+    const dotnet_values = doGetDotnetValues(testing.io, allocator, path, false, 8);
     try test_util.expectWithMessage(dotnet_values == null, "dotnet_values == null");
 }
 

@@ -45,8 +45,8 @@ pub const DlsymLookupFn = *const fn (LibCNameAndFlavor, usize, usize) @typeInfo(
 ///    We use a simplified version of the ELF support in Zig's std library (`dynamic_library`) because we do not want to
 ///    have to support the infinite number of corner cases of the various libc flavors and versions.
 /// 3. Use the loaded libc's `dlsym` function to look up the symbols we need (getenv, setenv).
-pub fn getLibCInfo(gpa: std.mem.Allocator, io: std.Io) !types.LibCInfo {
-    const libc_name_and_flavor = try getLibCNameAndFlavor(gpa, io, proc_self_exe_path);
+pub fn getLibCInfo(io: std.Io, gpa: std.mem.Allocator) !types.LibCInfo {
+    const libc_name_and_flavor = try getLibCNameAndFlavor(io, gpa, proc_self_exe_path);
     defer if (libc_name_and_flavor.flavor != .UNKNOWN) gpa.free(libc_name_and_flavor.name);
     const libc_info = getLibCMemoryLocations(
         io,
@@ -79,7 +79,7 @@ pub fn getLibCInfo(gpa: std.mem.Allocator, io: std.Io) !types.LibCInfo {
 /// libraries that must be linked. We use the executable's file instead of its in-memory mapping to avoid annoyances
 /// with looking up the in-memory location of the ELF header (it is never in memory at location 0 is the virtual memory
 /// space of the program, is is usually offset by 40 bytes).
-fn getLibCNameAndFlavor(gpa: std.mem.Allocator, io: std.Io, self_exe_path: []const u8) !LibCNameAndFlavor {
+fn getLibCNameAndFlavor(io: std.Io, gpa: std.mem.Allocator, self_exe_path: []const u8) !LibCNameAndFlavor {
     // TODO MM: Rewrite this to use in-memory, finding u=out the ELF header location using auxv? If that would work, we
     // could make this logic allocation-free.
     const self_exe_file =
@@ -238,7 +238,7 @@ fn getLibCNameAndFlavor(gpa: std.mem.Allocator, io: std.Io, self_exe_path: []con
 
 test "getLibCNameAndFlavor: should return libc flavor unknown when file does not exist" {
     const allocator = std.testing.allocator;
-    const lib_c = try getLibCNameAndFlavor(allocator, testing.io, "/does/not/exist");
+    const lib_c = try getLibCNameAndFlavor(testing.io, allocator, "/does/not/exist");
     defer allocator.free(lib_c.name);
     try testing.expectEqual(.UNKNOWN, lib_c.flavor);
 }
@@ -249,7 +249,7 @@ test "getLibCNameAndFlavor: should return libc flavor unknown when file is not a
     defer allocator.free(cwd_path);
     const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/libc/not-an-elf-binary" });
     defer allocator.free(absolute_path_to_binary);
-    const lib_c = try getLibCNameAndFlavor(allocator, testing.io, absolute_path_to_binary);
+    const lib_c = try getLibCNameAndFlavor(testing.io, allocator, absolute_path_to_binary);
     defer allocator.free(lib_c.name);
     try testing.expectEqual(.UNKNOWN, lib_c.flavor);
 }
@@ -260,7 +260,7 @@ test "getLibCNameAndFlavor: should identify glibc libc flavor (x86_64)" {
     defer allocator.free(cwd_path);
     const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/libc/dotnet-app-x86_64-glibc" });
     defer allocator.free(absolute_path_to_binary);
-    const lib_c = try getLibCNameAndFlavor(allocator, testing.io, absolute_path_to_binary);
+    const lib_c = try getLibCNameAndFlavor(testing.io, allocator, absolute_path_to_binary);
     defer allocator.free(lib_c.name);
     try testing.expectEqual(.GNU, lib_c.flavor);
 }
@@ -271,7 +271,7 @@ test "getLibCNameAndFlavor: should identify glibc libc flavor (arm64)" {
     defer allocator.free(cwd_path);
     const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/libc/dotnet-app-arm64-glibc" });
     defer allocator.free(absolute_path_to_binary);
-    const lib_c = try getLibCNameAndFlavor(allocator, testing.io, absolute_path_to_binary);
+    const lib_c = try getLibCNameAndFlavor(testing.io, allocator, absolute_path_to_binary);
     defer allocator.free(lib_c.name);
     try testing.expectEqual(.GNU, lib_c.flavor);
 }
@@ -282,7 +282,7 @@ test "getLibCNameAndFlavor: should identify musl libc flavor (x86_64)" {
     defer allocator.free(cwd_path);
     const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/libc/dotnet-app-x86_64-musl" });
     defer allocator.free(absolute_path_to_binary);
-    const lib_c = try getLibCNameAndFlavor(allocator, testing.io, absolute_path_to_binary);
+    const lib_c = try getLibCNameAndFlavor(testing.io, allocator, absolute_path_to_binary);
     defer allocator.free(lib_c.name);
     try testing.expectEqual(.MUSL, lib_c.flavor);
 }
@@ -293,7 +293,7 @@ test "getLibCNameAndFlavor: should identify musl libc flavor (arm64)" {
     defer allocator.free(cwd_path);
     const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/libc/dotnet-app-arm64-musl" });
     defer allocator.free(absolute_path_to_binary);
-    const lib_c = try getLibCNameAndFlavor(allocator, testing.io, absolute_path_to_binary);
+    const lib_c = try getLibCNameAndFlavor(testing.io, allocator, absolute_path_to_binary);
     defer allocator.free(lib_c.name);
     try testing.expectEqual(.MUSL, lib_c.flavor);
 }

@@ -18,14 +18,14 @@ pub const node_options_env_var_name = "NODE_OPTIONS";
 /// The caller is responsible for freeing the returned string (unless the result is passed on to setenv and needs to
 /// stay in memory).
 pub fn checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
-    gpa: std.mem.Allocator,
     io: std.Io,
+    gpa: std.mem.Allocator,
     original_value_optional: ?[:0]const u8,
     configuration: config.InjectorConfiguration,
 ) ?[:0]u8 {
     return doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
-        gpa,
         io,
+        gpa,
         original_value_optional,
         configuration.nodejs_auto_instrumentation_agent_path,
         configuration.nodejs_instrumentation_disabled,
@@ -33,8 +33,8 @@ pub fn checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
 }
 
 fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
-    gpa: std.mem.Allocator,
     io: std.Io,
+    gpa: std.mem.Allocator,
     original_value_optional: ?[:0]const u8,
     nodejs_auto_instrumentation_agent_path: []u8,
     nodejs_instrumentation_disabled: bool,
@@ -69,8 +69,8 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
     defer testing.allocator.free(path);
     const modified_node_options_value =
         doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
-            testing.allocator,
             testing.io,
+            testing.allocator,
             null,
             path,
             true,
@@ -83,8 +83,8 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
     defer testing.allocator.free(path);
     const modified_node_options_value =
         doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
-            testing.allocator,
             testing.io,
+            testing.allocator,
             null,
             path,
             false,
@@ -97,8 +97,8 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
     defer testing.allocator.free(path);
     const modified_node_options_value =
         doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
-            testing.allocator,
             testing.io,
+            testing.allocator,
             null,
             path,
             false,
@@ -111,8 +111,8 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
     defer testing.allocator.free(path);
     const modified_node_options_value =
         doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
-            testing.allocator,
             testing.io,
+            testing.allocator,
             "--abort-on-uncaught-exception"[0.. :0],
             path,
             false,

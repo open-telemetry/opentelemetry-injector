@@ -7,7 +7,7 @@ const std = @import("std");
 /// Returns the slice of the arguments including the executable as the first argument.
 /// The cmdline file contains null-separated arguments.
 /// Caller owns the returned memory and must free it.
-pub fn cmdLineForPID(allocator: std.mem.Allocator, io: std.Io) ![]const []const u8 {
+pub fn cmdLineForPID(io: std.Io, allocator: std.mem.Allocator) ![]const []const u8 {
     // Read the entire file (typically small, < 4KB for most processes)
     const max_size = 64 * 1024; // 64KB should be more than enough
     const file = try std.Io.Dir.openFileAbsolute(io, "/proc/self/cmdline", .{});

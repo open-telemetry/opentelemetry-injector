@@ -19,7 +19,7 @@ const max_getenv_buffer_len = max_getenv_entry_length * 2;
 
 /// Function type for reading environment variables, abstracting over reading from
 /// /proc/self/environ (production) vs std.c.environ (tests).
-pub const GetenvFn = *const fn (allocator: std.mem.Allocator, io: std.Io, name: []const u8) ?[]u8;
+pub const GetenvFn = *const fn (io: std.Io, allocator: std.mem.Allocator, name: []const u8) ?[]u8;
 
 /// Looks up an environment variable by reading /proc/self/environ directly,
 /// without depending on libc.
@@ -29,11 +29,11 @@ pub const GetenvFn = *const fn (allocator: std.mem.Allocator, io: std.Io, name: 
 /// will silently fall back to their defaults. This is intentional — initFromProcSelfEnviron
 /// runs earlier and will have already surfaced any read failure at a higher log level.
 /// The caller is responsible for freeing the returned slice.
-pub fn getenv(allocator: std.mem.Allocator, io: std.Io, name: []const u8) ?[]u8 {
-    return getenvFromFile(allocator, io, proc_self_environ_path, name) catch null;
+pub fn getenv(io: std.Io, allocator: std.mem.Allocator, name: []const u8) ?[]u8 {
+    return getenvFromFile(io, allocator, proc_self_environ_path, name) catch null;
 }
 
-fn getenvFromFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8, name: []const u8) !?[]u8 {
+fn getenvFromFile(io: std.Io, allocator: std.mem.Allocator, path: []const u8, name: []const u8) !?[]u8 {
     var environ_file = try std.Io.Dir.openFileAbsolute(io, path, .{});
     defer environ_file.close(io);
     var buf: [max_getenv_buffer_len]u8 = undefined;
@@ -83,7 +83,7 @@ fn initFromEnvironFile(io: std.Io, self_environ_path: []const u8) !void {
 
     const allocator = std.heap.page_allocator;
 
-    const log_level_value = getenvFromFile(allocator, io, self_environ_path, otel_injector_log_level_env_var_name) catch |err| switch (err) {
+    const log_level_value = getenvFromFile(io, allocator, self_environ_path, otel_injector_log_level_env_var_name) catch |err| switch (err) {
         // AccessDenied happens when the host process has dropped privileges before the injector runs
         // (e.g. a package postinst script that switches to a service user before starting a daemon).
         // Both errors mean the same thing here: we cannot read /proc/self/environ, so we fall back to defaults.
@@ -95,7 +95,7 @@ fn initFromEnvironFile(io: std.Io, self_environ_path: []const u8) !void {
     };
     defer if (log_level_value) |v| allocator.free(v);
 
-    const disabled_value = getenvFromFile(allocator, io, self_environ_path, otel_injector_disabled_env_var_name) catch |err| switch (err) {
+    const disabled_value = getenvFromFile(io, allocator, self_environ_path, otel_injector_disabled_env_var_name) catch |err| switch (err) {
         error.ReadFailed, error.AccessDenied => null,
         else => return err,
     };
@@ -364,7 +364,7 @@ test "getenvFromFile: variable found at start of file" {
     const allocator = testing.allocator;
     const path = try resolveTestAssetPath(allocator, "unit-test-assets/proc-self-environ/environ-log-level-debug");
     defer allocator.free(path);
-    const value = try getenvFromFile(allocator, testing.io, path, "ENV_VAR_1");
+    const value = try getenvFromFile(testing.io, allocator, path, "ENV_VAR_1");
     defer if (value) |v| allocator.free(v);
     try testing.expectEqualStrings("value_1", value.?);
 }
@@ -373,7 +373,7 @@ test "getenvFromFile: variable found in middle of file" {
     const allocator = testing.allocator;
     const path = try resolveTestAssetPath(allocator, "unit-test-assets/proc-self-environ/environ-log-level-debug");
     defer allocator.free(path);
-    const value = try getenvFromFile(allocator, testing.io, path, "OTEL_INJECTOR_LOG_LEVEL");
+    const value = try getenvFromFile(testing.io, allocator, path, "OTEL_INJECTOR_LOG_LEVEL");
     defer if (value) |v| allocator.free(v);
     try testing.expectEqualStrings("debug", value.?);
 }
@@ -382,7 +382,7 @@ test "getenvFromFile: variable found at end of file" {
     const allocator = testing.allocator;
     const path = try resolveTestAssetPath(allocator, "unit-test-assets/proc-self-environ/environ-log-level-debug");
     defer allocator.free(path);
-    const value = try getenvFromFile(allocator, testing.io, path, "ENV_VAR_2");
+    const value = try getenvFromFile(testing.io, allocator, path, "ENV_VAR_2");
     defer if (value) |v| allocator.free(v);
     try testing.expectEqualStrings("value_2", value.?);
 }
@@ -391,7 +391,7 @@ test "getenvFromFile: variable not found returns null" {
     const allocator = testing.allocator;
     const path = try resolveTestAssetPath(allocator, "unit-test-assets/proc-self-environ/environ-log-level-debug");
     defer allocator.free(path);
-    const value = try getenvFromFile(allocator, testing.io, path, "DOES_NOT_EXIST");
+    const value = try getenvFromFile(testing.io, allocator, path, "DOES_NOT_EXIST");
     try testing.expectEqual(null, value);
 }
 
@@ -400,7 +400,7 @@ test "getenvFromFile: prefix of variable name does not match" {
     const path = try resolveTestAssetPath(allocator, "unit-test-assets/proc-self-environ/environ-log-level-debug");
     defer allocator.free(path);
     // "ENV_VAR" is a prefix of "ENV_VAR_1" and "ENV_VAR_2" but should not match either
-    const value = try getenvFromFile(allocator, testing.io, path, "ENV_VAR");
+    const value = try getenvFromFile(testing.io, allocator, path, "ENV_VAR");
     try testing.expectEqual(null, value);
 }
 
@@ -427,7 +427,7 @@ test "getenvFromFile: overlong entry is skipped, subsequent entries still found"
     const path = try tmp_dir.dir.realPathFileAlloc(testing.io, "environ", allocator);
     defer allocator.free(path);
 
-    const value = try getenvFromFile(allocator, testing.io, path, "TARGET_VAR");
+    const value = try getenvFromFile(testing.io, allocator, path, "TARGET_VAR");
     defer if (value) |v| allocator.free(v);
     try testing.expectEqualStrings("found_after_overlong", value.?);
 }

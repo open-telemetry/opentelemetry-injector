@@ -18,14 +18,14 @@ pub const java_tool_options_env_var_name = "JAVA_TOOL_OPTIONS";
 /// The caller is responsible for freeing the returned string (unless the result is passed on to setenv and needs to
 /// stay in memory).
 pub fn checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
-    gpa: std.mem.Allocator,
     io: std.Io,
+    gpa: std.mem.Allocator,
     original_value_optional: ?[:0]const u8,
     configuration: config.InjectorConfiguration,
 ) ?[:0]u8 {
     return doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
-        gpa,
         io,
+        gpa,
         original_value_optional,
         configuration.jvm_auto_instrumentation_agent_path,
         configuration.jvm_instrumentation_disabled,
@@ -33,8 +33,8 @@ pub fn checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
 }
 
 fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
-    gpa: std.mem.Allocator,
     io: std.Io,
+    gpa: std.mem.Allocator,
     original_value_optional: ?[:0]const u8,
     jvm_auto_instrumentation_agent_path: []u8,
     jvm_instrumentation_disabled: bool,
@@ -68,8 +68,8 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return n
     defer testing.allocator.free(path);
     const modified_java_tool_options =
         doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
-            testing.allocator,
             testing.io,
+            testing.allocator,
             null,
             path,
             true,
@@ -82,8 +82,8 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return n
     defer testing.allocator.free(path);
     const modified_java_tool_options =
         doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
-            testing.allocator,
             testing.io,
+            testing.allocator,
             null,
             path,
             false,
@@ -96,8 +96,8 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return n
     defer testing.allocator.free(path);
     const modified_java_tool_options =
         doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
-            testing.allocator,
             testing.io,
+            testing.allocator,
             null,
             path,
             false,
@@ -110,8 +110,8 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return n
     defer testing.allocator.free(path);
     const modified_java_tool_options =
         doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
-            testing.allocator,
             testing.io,
+            testing.allocator,
             "original value",
             path,
             false,

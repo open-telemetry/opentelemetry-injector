@@ -37,7 +37,7 @@ fn getenvFromFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8, na
     var environ_file = try std.Io.Dir.openFileAbsolute(io, path, .{});
     defer environ_file.close(io);
     var buf: [max_getenv_buffer_len]u8 = undefined;
-    var reader = environ_file.reader(io, &buf);
+    var reader = environ_file.readerStreaming(io, &buf);
     while (takeSentinelOrDiscardOverlyLongLine(&reader)) |environ_entry| {
         if (matchEntry(environ_entry, name)) |value| {
             return try allocator.dupe(u8, value);

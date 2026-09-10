@@ -364,7 +364,7 @@ fn findGlibcMemoryRangeAndLookupMemoryLocations(
 
     // Find the end of the memory range of the linker using /proc/self/maps
     var reader_buf: [reader_buffer_len]u8 = undefined;
-    var reader = maps_file.reader(io, &reader_buf);
+    var reader = maps_file.readerStreaming(io, &reader_buf);
 
     // On a lot of modern distributions, the name returned by getLibCNameAndFlavor (e.g. "libc.so.6") will appear
     // verbatim in /proc/self/maps. But on other (older) distributions (Debian Bullseye for example), libc.so.6
@@ -412,7 +412,9 @@ fn findGlibcMemoryRangeAndLookupMemoryLocations(
 
     // Second pass: try the dlsym lookup for all /proc/self/maps memory ranges with matching permissions and file names
     // that could be shared objects.
-    try reader.seekTo(0);
+    maps_file.close(io);
+    maps_file = try std.Io.Dir.openFileAbsolute(io, self_maps_path, .{});
+    reader = maps_file.readerStreaming(io, &reader_buf);
     while (takeSentinelOrDiscardOverlyLongLine(&reader)) |line| {
         if (try processOneGlibcProcSelfMapsLine(
             self_maps_path,
@@ -717,7 +719,7 @@ fn findMuslMemoryRangeAndLookupMemoryLocations(
 
     // Find the end of the memory range of the linker using /proc/self/maps
     var reader_buf: [reader_buffer_len]u8 = undefined;
-    var reader = maps_file.reader(io, &reader_buf);
+    var reader = maps_file.readerStreaming(io, &reader_buf);
 
     while (takeSentinelOrDiscardOverlyLongLine(&reader)) |line| {
         if (try processOneMuslProcSelfMapsLine(
@@ -1075,7 +1077,7 @@ fn logProcSelfMaps(io: std.Io, self_maps_path: []const u8) !void {
     var maps_file = try std.Io.Dir.openFileAbsolute(io, self_maps_path, .{});
     defer maps_file.close(io);
     var reader_buf: [reader_buffer_len]u8 = undefined;
-    var reader = maps_file.reader(io, &reader_buf);
+    var reader = maps_file.readerStreaming(io, &reader_buf);
     while (takeSentinelOrDiscardOverlyLongLine(&reader)) |line| {
         print.printDebug("{s}", .{line});
     } else |err| switch (err) {

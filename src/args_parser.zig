@@ -10,7 +10,11 @@ const std = @import("std");
 pub fn cmdLineForPID(allocator: std.mem.Allocator, io: std.Io) ![]const []const u8 {
     // Read the entire file (typically small, < 4KB for most processes)
     const max_size = 64 * 1024; // 64KB should be more than enough
-    const content = try std.Io.Dir.cwd().readFileAlloc(io, "/proc/self/cmdline", allocator, .limited(max_size));
+    const file = try std.Io.Dir.openFileAbsolute(io, "/proc/self/cmdline", .{});
+    defer file.close(io);
+    // procfs reports a file size of 0, so a positional reader would return nothing; stream instead.
+    var reader = file.readerStreaming(io, &.{});
+    const content = try reader.interface.allocRemaining(allocator, .limited(max_size));
     defer allocator.free(content);
 
     return getCmdLineFromContent(allocator, content);

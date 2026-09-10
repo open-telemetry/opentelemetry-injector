@@ -103,11 +103,7 @@ pub fn build(b: *std.Build) !void {
 fn copyInjectorFile(step: *std.Build.Step, _: std.Build.Step.MakeOptions) anyerror!void {
     const source_path = step.owner.pathFromRoot("./zig-out/libinjector.so");
     const dest_path = step.owner.pathFromRoot("so/libotelinject.so");
-    const dest_dir = step.owner.pathFromRoot("so");
-    std.fs.cwd().makePath(dest_dir) catch |err| {
-        if (err != error.PathAlreadyExists) return err;
-    };
-    try std.fs.copyFileAbsolute(source_path, dest_path, .{});
+    try std.Io.Dir.copyFileAbsolute(source_path, dest_path, step.owner.graph.io, .{ .make_path = true });
 }
 
 const SupportedCpuArch = enum {

@@ -7,20 +7,14 @@ const std = @import("std");
 /// Returns the slice of the arguments including the executable as the first argument.
 /// The cmdline file contains null-separated arguments.
 /// Caller owns the returned memory and must free it.
-pub fn cmdLineForPID(allocator: std.mem.Allocator) ![]const []const u8 {
-    const cmdline_path = "/proc/self/cmdline";
-    return getCmdLineForPID(allocator, cmdline_path);
-}
-
-fn getCmdLineForPID(allocator: std.mem.Allocator, path: []const u8) ![]const []const u8 {
-    const file = std.fs.openFileAbsolute(path, .{}) catch |err| {
-        return err;
-    };
-    defer file.close();
-
+pub fn cmdLineForPID(io: std.Io, allocator: std.mem.Allocator) ![]const []const u8 {
     // Read the entire file (typically small, < 4KB for most processes)
     const max_size = 64 * 1024; // 64KB should be more than enough
-    const content = try file.readToEndAlloc(allocator, max_size);
+    const file = try std.Io.Dir.openFileAbsolute(io, "/proc/self/cmdline", .{});
+    defer file.close(io);
+    // procfs reports a file size of 0, so a positional reader would return nothing; stream instead.
+    var reader = file.readerStreaming(io, &.{});
+    const content = try reader.interface.allocRemaining(allocator, .limited(max_size));
     defer allocator.free(content);
 
     return getCmdLineFromContent(allocator, content);

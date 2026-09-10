@@ -76,7 +76,6 @@ pub fn getModifiedOtelResourceAttributesValue(gpa: std.mem.Allocator) !?[:0]u8 {
     }
     const getenv_fn = libc_info.?.getenv_fn_ptr;
     var result_list = try std.ArrayList(u8).initCapacity(gpa, std.heap.pageSize());
-    const result_writer = result_list.writer(gpa);
 
     // Key-value pairs from the original environment variable value have the highest priority. We write them first, and
     // then later, when processing OTEL_INJECTOR_RESOURCE_ATTRIBUTES or any of the mappings, we check for each key if
@@ -85,7 +84,7 @@ pub fn getModifiedOtelResourceAttributesValue(gpa: std.mem.Allocator) !?[:0]u8 {
     if (getenv_fn(otel_resource_attributes_env_var_name)) |original_ptr| {
         const original_value = std.mem.span(original_ptr);
         if (std.mem.trim(u8, original_value, " \t\r\n").len > 0) {
-            try result_writer.writeAll(original_value);
+            try result_list.appendSlice(gpa, original_value);
         }
     }
 
@@ -140,13 +139,13 @@ pub fn getModifiedOtelResourceAttributesValue(gpa: std.mem.Allocator) !?[:0]u8 {
             // We have not written this key before, let's write the key-value pair now:
             if (result_list.items.len > 0) {
                 // write leading comma if we have already written key-value pairs
-                try result_writer.writeAll(",");
+                try result_list.appendSlice(gpa, ",");
             }
 
             // write key-value pair
-            try result_writer.writeAll(key);
-            try result_writer.writeAll("=");
-            try result_writer.writeAll(value);
+            try result_list.appendSlice(gpa, key);
+            try result_list.appendSlice(gpa, "=");
+            try result_list.appendSlice(gpa, value);
 
             has_modified_value = true;
         }
@@ -183,12 +182,12 @@ pub fn getModifiedOtelResourceAttributesValue(gpa: std.mem.Allocator) !?[:0]u8 {
         }
 
         if (result_list.items.len > 0) {
-            try result_writer.writeAll(",");
+            try result_list.appendSlice(gpa, ",");
         }
 
-        try result_writer.writeAll(key);
-        try result_writer.writeAll("=");
-        try result_writer.writeAll(value);
+        try result_list.appendSlice(gpa, key);
+        try result_list.appendSlice(gpa, "=");
+        try result_list.appendSlice(gpa, value);
 
         has_modified_value = true;
     }

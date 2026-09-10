@@ -12,19 +12,20 @@ pub const proc_self_auxv_path: []const u8 = "/proc/self/auxv";
 // we do not export any _global_ symbols, only local symbols, and in particular, getauxval is only exported locally.
 // Executables requiring getauxval will bind to libc's getauxval, not the symbol exported here.
 pub export fn getauxval(auxv_type: u32) callconv(.c) usize {
-    return readAuxValFromFile(auxv_type, proc_self_auxv_path);
+    // C ABI entry point: no caller can hand us an Io, so use the global single-threaded one.
+    return readAuxValFromFile(std.Io.Threaded.global_single_threaded.io(), auxv_type, proc_self_auxv_path);
 }
 
-fn readAuxValFromFile(auxv_type: u32, auxv_path: []const u8) usize {
-    var auxv_file = std.fs.openFileAbsolute(auxv_path, .{}) catch |err| {
+fn readAuxValFromFile(io: std.Io, auxv_type: u32, auxv_path: []const u8) usize {
+    var auxv_file = std.Io.Dir.openFileAbsolute(io, auxv_path, .{}) catch |err| {
         print.printError("Failed to open {s}: {}", .{ auxv_path, err });
         return 0;
     };
-    defer auxv_file.close();
+    defer auxv_file.close(io);
 
     while (true) {
         var auxv_symbol: std.elf.Elf64_auxv_t = undefined;
-        const bytes_read = auxv_file.read(std.mem.asBytes(&auxv_symbol)) catch |err| {
+        const bytes_read = auxv_file.readStreaming(io, &.{std.mem.asBytes(&auxv_symbol)}) catch |err| {
             print.printError("Failed to read from {s}: {}", .{ auxv_path, err });
             return 0;
         };
@@ -58,14 +59,14 @@ test "readAuxValFromFile: should read value" {
 
     for (auxv_files) |auxv_file| {
         const allocator = std.testing.allocator;
-        const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+        const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
         defer allocator.free(cwd_path);
         const absolute_path_to_auxv_file = try std.fs.path.resolve(allocator, &.{
             cwd_path,
             auxv_file,
         });
         defer allocator.free(absolute_path_to_auxv_file);
-        const auxv_result = readAuxValFromFile(std.elf.AT_BASE, absolute_path_to_auxv_file);
+        const auxv_result = readAuxValFromFile(testing.io, std.elf.AT_BASE, absolute_path_to_auxv_file);
         try test_util.expectWithMessage(auxv_result > 0, "readAuxValFromFile(AT_BASE) should return > 0");
     }
 }

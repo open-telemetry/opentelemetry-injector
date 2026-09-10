@@ -45,10 +45,11 @@ pub const DlsymLookupFn = *const fn (LibCNameAndFlavor, usize, usize) @typeInfo(
 ///    We use a simplified version of the ELF support in Zig's std library (`dynamic_library`) because we do not want to
 ///    have to support the infinite number of corner cases of the various libc flavors and versions.
 /// 3. Use the loaded libc's `dlsym` function to look up the symbols we need (getenv, setenv).
-pub fn getLibCInfo(gpa: std.mem.Allocator) !types.LibCInfo {
-    const libc_name_and_flavor = try getLibCNameAndFlavor(gpa, proc_self_exe_path);
+pub fn getLibCInfo(io: std.Io, gpa: std.mem.Allocator) !types.LibCInfo {
+    const libc_name_and_flavor = try getLibCNameAndFlavor(io, gpa, proc_self_exe_path);
     defer if (libc_name_and_flavor.flavor != .UNKNOWN) gpa.free(libc_name_and_flavor.name);
     const libc_info = getLibCMemoryLocations(
+        io,
         proc_self_maps_path,
         libc_name_and_flavor,
         tryToFindSymbolsInMemoryRange,
@@ -57,7 +58,7 @@ pub fn getLibCInfo(gpa: std.mem.Allocator) !types.LibCInfo {
             // The error will be properly logged in the code calling getLibCInfo, but for this specific error, let's
             // include a dump of /proc/self/maps in the log output if the log level is debug.
             print.printDebug("printing content of {s} below as debugging information", .{proc_self_maps_path});
-            logProcSelfMaps(proc_self_maps_path) catch {
+            logProcSelfMaps(io, proc_self_maps_path) catch {
                 // ignore errors from logProcSelfMaps deliberately
             };
         }
@@ -78,18 +79,18 @@ pub fn getLibCInfo(gpa: std.mem.Allocator) !types.LibCInfo {
 /// libraries that must be linked. We use the executable's file instead of its in-memory mapping to avoid annoyances
 /// with looking up the in-memory location of the ELF header (it is never in memory at location 0 is the virtual memory
 /// space of the program, is is usually offset by 40 bytes).
-fn getLibCNameAndFlavor(gpa: std.mem.Allocator, self_exe_path: []const u8) !LibCNameAndFlavor {
+fn getLibCNameAndFlavor(io: std.Io, gpa: std.mem.Allocator, self_exe_path: []const u8) !LibCNameAndFlavor {
     // TODO MM: Rewrite this to use in-memory, finding u=out the ELF header location using auxv? If that would work, we
     // could make this logic allocation-free.
     const self_exe_file =
-        std.fs.openFileAbsolute(self_exe_path, .{ .mode = .read_only }) catch |err| {
+        std.Io.Dir.openFileAbsolute(io, self_exe_path, .{ .mode = .read_only }) catch |err| {
             print.printError("Cannot open \"{s}\": {}", .{ self_exe_path, err });
             return UnknownLibC;
         };
-    defer self_exe_file.close();
+    defer self_exe_file.close(io);
 
     var reader_buf: [reader_buffer_len]u8 = undefined;
-    var reader = self_exe_file.reader(&reader_buf);
+    var reader = self_exe_file.reader(io, &reader_buf);
     const elf_header = std.elf.Header.read(&reader.interface) catch |err| {
         print.printError("Cannot read ELF header from  \"{s}\": {}", .{ self_exe_path, err });
         return UnknownLibC;
@@ -103,10 +104,10 @@ fn getLibCNameAndFlavor(gpa: std.mem.Allocator, self_exe_path: []const u8) !LibC
     var dynamic_symbols_table_offset: u64 = 0;
     var dynamic_symbols_table_size: u64 = 0;
 
-    try self_exe_file.seekTo(elf_header.shoff);
+    try reader.seekTo(elf_header.shoff);
     const section_headers = try gpa.alloc(std.elf.Elf64_Shdr, elf_header.shnum);
     defer gpa.free(section_headers);
-    _ = try self_exe_file.read(std.mem.sliceAsBytes(section_headers));
+    try reader.interface.readSliceAll(std.mem.sliceAsBytes(section_headers));
 
     for (section_headers) |section_header| {
         switch (section_header.sh_type) {
@@ -146,11 +147,11 @@ fn getLibCNameAndFlavor(gpa: std.mem.Allocator, self_exe_path: []const u8) !LibC
     //  0x0000000000000001 (NEEDED)             Shared library: [libc.musl-aarch64.so.1]
 
     // read dynamic section
-    try self_exe_file.seekTo(dynamic_symbols_table_offset);
+    try reader.seekTo(dynamic_symbols_table_offset);
     const dynamic_symbol_count = dynamic_symbols_table_size / @sizeOf(std.elf.Elf64_Dyn);
     const dynamic_symbols = try gpa.alloc(std.elf.Elf64_Dyn, dynamic_symbol_count);
     defer gpa.free(dynamic_symbols);
-    _ = try self_exe_file.read(std.mem.sliceAsBytes(dynamic_symbols));
+    try reader.interface.readSliceAll(std.mem.sliceAsBytes(dynamic_symbols));
 
     // find string table address (DT_STRTAB)
     var strtab_addr: u64 = 0;
@@ -177,10 +178,10 @@ fn getLibCNameAndFlavor(gpa: std.mem.Allocator, self_exe_path: []const u8) !LibC
 
     if (string_table_offset == 0) {
         // Fallback: Use program headers if section headers don’t map it
-        try self_exe_file.seekTo(elf_header.phoff);
+        try reader.seekTo(elf_header.phoff);
         const phdrs = try gpa.alloc(std.elf.Elf64_Phdr, elf_header.phnum);
         defer gpa.free(phdrs);
-        _ = try self_exe_file.read(std.mem.sliceAsBytes(phdrs));
+        try reader.interface.readSliceAll(std.mem.sliceAsBytes(phdrs));
         for (phdrs) |phdr| {
             if (phdr.p_type == std.elf.PT_LOAD and phdr.p_vaddr <= strtab_addr and strtab_addr < phdr.p_vaddr + phdr.p_filesz) {
                 string_table_offset = phdr.p_offset + (strtab_addr - phdr.p_vaddr);
@@ -201,12 +202,12 @@ fn getLibCNameAndFlavor(gpa: std.mem.Allocator, self_exe_path: []const u8) !LibC
 
         if (dynamic_symbol.d_tag == std.elf.DT_NEEDED) {
             const string_offset = string_table_offset + dynamic_symbol.d_val;
-            try self_exe_file.seekTo(string_offset);
+            try reader.seekTo(string_offset);
 
             var lib_name_buf: [256]u8 = undefined;
             var len: usize = 0;
             while (len < lib_name_buf.len) : (len += 1) {
-                const bytes_read = try self_exe_file.read(lib_name_buf[len .. len + 1]);
+                const bytes_read = try reader.interface.readSliceShort(lib_name_buf[len .. len + 1]);
                 if (bytes_read == 0 or lib_name_buf[len] == 0) break;
             }
             const lib_name = lib_name_buf[0..len];
@@ -237,70 +238,71 @@ fn getLibCNameAndFlavor(gpa: std.mem.Allocator, self_exe_path: []const u8) !LibC
 
 test "getLibCNameAndFlavor: should return libc flavor unknown when file does not exist" {
     const allocator = std.testing.allocator;
-    const lib_c = try getLibCNameAndFlavor(allocator, "/does/not/exist");
+    const lib_c = try getLibCNameAndFlavor(testing.io, allocator, "/does/not/exist");
     defer allocator.free(lib_c.name);
     try testing.expectEqual(.UNKNOWN, lib_c.flavor);
 }
 
 test "getLibCNameAndFlavor: should return libc flavor unknown when file is not an ELF binary" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/libc/not-an-elf-binary" });
     defer allocator.free(absolute_path_to_binary);
-    const lib_c = try getLibCNameAndFlavor(allocator, absolute_path_to_binary);
+    const lib_c = try getLibCNameAndFlavor(testing.io, allocator, absolute_path_to_binary);
     defer allocator.free(lib_c.name);
     try testing.expectEqual(.UNKNOWN, lib_c.flavor);
 }
 
 test "getLibCNameAndFlavor: should identify glibc libc flavor (x86_64)" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/libc/dotnet-app-x86_64-glibc" });
     defer allocator.free(absolute_path_to_binary);
-    const lib_c = try getLibCNameAndFlavor(allocator, absolute_path_to_binary);
+    const lib_c = try getLibCNameAndFlavor(testing.io, allocator, absolute_path_to_binary);
     defer allocator.free(lib_c.name);
     try testing.expectEqual(.GNU, lib_c.flavor);
 }
 
 test "getLibCNameAndFlavor: should identify glibc libc flavor (arm64)" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/libc/dotnet-app-arm64-glibc" });
     defer allocator.free(absolute_path_to_binary);
-    const lib_c = try getLibCNameAndFlavor(allocator, absolute_path_to_binary);
+    const lib_c = try getLibCNameAndFlavor(testing.io, allocator, absolute_path_to_binary);
     defer allocator.free(lib_c.name);
     try testing.expectEqual(.GNU, lib_c.flavor);
 }
 
 test "getLibCNameAndFlavor: should identify musl libc flavor (x86_64)" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/libc/dotnet-app-x86_64-musl" });
     defer allocator.free(absolute_path_to_binary);
-    const lib_c = try getLibCNameAndFlavor(allocator, absolute_path_to_binary);
+    const lib_c = try getLibCNameAndFlavor(testing.io, allocator, absolute_path_to_binary);
     defer allocator.free(lib_c.name);
     try testing.expectEqual(.MUSL, lib_c.flavor);
 }
 
 test "getLibCNameAndFlavor: should identify musl libc flavor (arm64)" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_binary = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/libc/dotnet-app-arm64-musl" });
     defer allocator.free(absolute_path_to_binary);
-    const lib_c = try getLibCNameAndFlavor(allocator, absolute_path_to_binary);
+    const lib_c = try getLibCNameAndFlavor(testing.io, allocator, absolute_path_to_binary);
     defer allocator.free(lib_c.name);
     try testing.expectEqual(.MUSL, lib_c.flavor);
 }
 
-fn getLibCMemoryLocations(self_maps_path: []const u8, libc_name_and_flavor: LibCNameAndFlavor, dlsym_lookup_fn: DlsymLookupFn) !types.LibCInfo {
+fn getLibCMemoryLocations(io: std.Io, self_maps_path: []const u8, libc_name_and_flavor: LibCNameAndFlavor, dlsym_lookup_fn: DlsymLookupFn) !types.LibCInfo {
     switch (libc_name_and_flavor.flavor) {
         types.LibCFlavor.GNU => {
             return findGlibcMemoryRangeAndLookupMemoryLocations(
+                io,
                 self_maps_path,
                 libc_name_and_flavor,
                 dlsym_lookup_fn,
@@ -313,6 +315,7 @@ fn getLibCMemoryLocations(self_maps_path: []const u8, libc_name_and_flavor: LibC
                 return error.CannotFindAtBase;
             }
             return findMuslMemoryRangeAndLookupMemoryLocations(
+                io,
                 self_maps_path,
                 libc_name_and_flavor,
                 at_base,
@@ -325,7 +328,7 @@ fn getLibCMemoryLocations(self_maps_path: []const u8, libc_name_and_flavor: LibC
 
 test "getLibCMemoryLocations: glibc" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_maps_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-maps/maps-glibc-x86_64" });
     defer allocator.free(absolute_path_to_maps_file);
@@ -333,6 +336,7 @@ test "getLibCMemoryLocations: glibc" {
     __test_find_symbol_actual_attempts = 0;
     __test_find_symbol_succeed_on_attempt = 2;
     const libc_info = try getLibCMemoryLocations(
+        testing.io,
         absolute_path_to_maps_file,
         .{
             .flavor = .GNU,
@@ -350,16 +354,17 @@ test "getLibCMemoryLocations: glibc" {
 // the auxv.getauxval() function. There are tests for findMuslMemoryRangeAndLookupMemoryLocations, see below.
 
 fn findGlibcMemoryRangeAndLookupMemoryLocations(
+    io: std.Io,
     self_maps_path: []const u8,
     libc_name_and_flavor: LibCNameAndFlavor,
     dlsym_lookup_fn: DlsymLookupFn,
 ) !types.LibCInfo {
-    var maps_file = try std.fs.openFileAbsolute(self_maps_path, .{});
-    defer maps_file.close();
+    var maps_file = try std.Io.Dir.openFileAbsolute(io, self_maps_path, .{});
+    defer maps_file.close(io);
 
     // Find the end of the memory range of the linker using /proc/self/maps
     var reader_buf: [reader_buffer_len]u8 = undefined;
-    var reader = maps_file.reader(&reader_buf);
+    var reader = maps_file.readerStreaming(io, &reader_buf);
 
     // On a lot of modern distributions, the name returned by getLibCNameAndFlavor (e.g. "libc.so.6") will appear
     // verbatim in /proc/self/maps. But on other (older) distributions (Debian Bullseye for example), libc.so.6
@@ -407,8 +412,9 @@ fn findGlibcMemoryRangeAndLookupMemoryLocations(
 
     // Second pass: try the dlsym lookup for all /proc/self/maps memory ranges with matching permissions and file names
     // that could be shared objects.
-    try maps_file.seekTo(0);
-    reader = maps_file.reader(&reader_buf);
+    maps_file.close(io);
+    maps_file = try std.Io.Dir.openFileAbsolute(io, self_maps_path, .{});
+    reader = maps_file.readerStreaming(io, &reader_buf);
     while (takeSentinelOrDiscardOverlyLongLine(&reader)) |line| {
         if (try processOneGlibcProcSelfMapsLine(
             self_maps_path,
@@ -519,7 +525,7 @@ fn processOneGlibcProcSelfMapsLine(
 
 test "findGlibcMemoryRangeAndLookupMemoryLocations: x86_64" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_maps_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-maps/maps-glibc-x86_64" });
     defer allocator.free(absolute_path_to_maps_file);
@@ -527,6 +533,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: x86_64" {
     __test_find_symbol_actual_attempts = 0;
     __test_find_symbol_succeed_on_attempt = 2;
     const libc_info = try findGlibcMemoryRangeAndLookupMemoryLocations(
+        testing.io,
         absolute_path_to_maps_file,
         .{
             .flavor = .GNU,
@@ -542,14 +549,14 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: x86_64" {
 
 test "findGlibcMemoryRangeAndLookupMemoryLocations: arm64" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_maps_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-maps/maps-glibc-arm64" });
     defer allocator.free(absolute_path_to_maps_file);
 
     __test_find_symbol_actual_attempts = 0;
     __test_find_symbol_succeed_on_attempt = 1;
-    const libc_info = try findGlibcMemoryRangeAndLookupMemoryLocations(absolute_path_to_maps_file, .{
+    const libc_info = try findGlibcMemoryRangeAndLookupMemoryLocations(testing.io, absolute_path_to_maps_file, .{
         .flavor = .GNU,
         .name = glibc_name,
     }, mockFindSymbolsInMemoryRange);
@@ -561,7 +568,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: arm64" {
 
 test "findGlibcMemoryRangeAndLookupMemoryLocation: x86_64/Debian 11" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_maps_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-maps/maps-glibc-x86_64-bullseye" });
     defer allocator.free(absolute_path_to_maps_file);
@@ -569,6 +576,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocation: x86_64/Debian 11" {
     __test_find_symbol_actual_attempts = 0;
     __test_find_symbol_succeed_on_attempt = 2;
     const libc_info = try findGlibcMemoryRangeAndLookupMemoryLocations(
+        testing.io,
         absolute_path_to_maps_file,
         .{
             .flavor = .GNU,
@@ -584,14 +592,14 @@ test "findGlibcMemoryRangeAndLookupMemoryLocation: x86_64/Debian 11" {
 
 test "findGlibcMemoryRangeAndLookupMemoryLocations: arm64/Debian 11" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_maps_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-maps/maps-glibc-arm64-bullseye" });
     defer allocator.free(absolute_path_to_maps_file);
 
     __test_find_symbol_actual_attempts = 0;
     __test_find_symbol_succeed_on_attempt = 1;
-    const libc_info = try findGlibcMemoryRangeAndLookupMemoryLocations(absolute_path_to_maps_file, .{
+    const libc_info = try findGlibcMemoryRangeAndLookupMemoryLocations(testing.io, absolute_path_to_maps_file, .{
         .flavor = .GNU,
         .name = glibc_name,
     }, mockFindSymbolsInMemoryRange);
@@ -603,7 +611,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: arm64/Debian 11" {
 
 test "findGlibcMemoryRangeAndLookupMemoryLocations: continue to read after discarding overly long line in first pass" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_maps_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-maps/maps-glibc-first-pass-overly-long-line" });
     defer allocator.free(absolute_path_to_maps_file);
@@ -611,6 +619,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: continue to read after disca
     __test_find_symbol_actual_attempts = 0;
     __test_find_symbol_succeed_on_attempt = 2;
     const libc_info = try findGlibcMemoryRangeAndLookupMemoryLocations(
+        testing.io,
         absolute_path_to_maps_file,
         .{
             .flavor = .GNU,
@@ -626,7 +635,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: continue to read after disca
 
 test "findGlibcMemoryRangeAndLookupMemoryLocations: continue to read after discarding overly long line in second pass" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_maps_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-maps/maps-glibc-second-pass-overly-long-line" });
     defer allocator.free(absolute_path_to_maps_file);
@@ -634,6 +643,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: continue to read after disca
     __test_find_symbol_actual_attempts = 0;
     __test_find_symbol_succeed_on_attempt = 2;
     const libc_info = try findGlibcMemoryRangeAndLookupMemoryLocations(
+        testing.io,
         absolute_path_to_maps_file,
         .{
             .flavor = .GNU,
@@ -649,7 +659,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: continue to read after disca
 
 test "findGlibcMemoryRangeAndLookupMemoryLocations: read last line if not terminated by newline in first pass" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_maps_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-maps/maps-glibc-first-pass-no-terminating-newline" });
     defer allocator.free(absolute_path_to_maps_file);
@@ -657,6 +667,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: read last line if not termin
     __test_find_symbol_actual_attempts = 0;
     __test_find_symbol_succeed_on_attempt = 2;
     const libc_info = try findGlibcMemoryRangeAndLookupMemoryLocations(
+        testing.io,
         absolute_path_to_maps_file,
         .{
             .flavor = .GNU,
@@ -672,7 +683,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: read last line if not termin
 
 test "findGlibcMemoryRangeAndLookupMemoryLocations: read last line if not terminated by newline in second pass" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_maps_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-maps/maps-glibc-second-pass-no-terminating-newline" });
     defer allocator.free(absolute_path_to_maps_file);
@@ -680,6 +691,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: read last line if not termin
     __test_find_symbol_actual_attempts = 0;
     __test_find_symbol_succeed_on_attempt = 2;
     const libc_info = try findGlibcMemoryRangeAndLookupMemoryLocations(
+        testing.io,
         absolute_path_to_maps_file,
         .{
             .flavor = .GNU,
@@ -694,6 +706,7 @@ test "findGlibcMemoryRangeAndLookupMemoryLocations: read last line if not termin
 }
 
 fn findMuslMemoryRangeAndLookupMemoryLocations(
+    io: std.Io,
     self_maps_path: []const u8,
     libc_name_and_flavor: LibCNameAndFlavor,
     at_base: usize,
@@ -701,12 +714,12 @@ fn findMuslMemoryRangeAndLookupMemoryLocations(
 ) !types.LibCInfo {
     // musl bundles the linker and the libc itself in the same .so and it gets mapped in the same memory region. We can
     // find where the linker is, and so also the libc, we can look up the AT_BASE location in /proc/self/auxv.
-    var maps_file = try std.fs.openFileAbsolute(self_maps_path, .{});
-    defer maps_file.close();
+    var maps_file = try std.Io.Dir.openFileAbsolute(io, self_maps_path, .{});
+    defer maps_file.close(io);
 
     // Find the end of the memory range of the linker using /proc/self/maps
     var reader_buf: [reader_buffer_len]u8 = undefined;
-    var reader = maps_file.reader(&reader_buf);
+    var reader = maps_file.readerStreaming(io, &reader_buf);
 
     while (takeSentinelOrDiscardOverlyLongLine(&reader)) |line| {
         if (try processOneMuslProcSelfMapsLine(
@@ -800,7 +813,7 @@ fn processOneMuslProcSelfMapsLine(
 
 test "findMuslMemoryRangeAndLookupMemoryLocations: x86_64" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_maps_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-maps/maps-musl-x86_64" });
     defer allocator.free(absolute_path_to_maps_file);
@@ -808,6 +821,7 @@ test "findMuslMemoryRangeAndLookupMemoryLocations: x86_64" {
     __test_find_symbol_actual_attempts = 0;
     __test_find_symbol_succeed_on_attempt = 1;
     const libc_info = try findMuslMemoryRangeAndLookupMemoryLocations(
+        testing.io,
         absolute_path_to_maps_file,
         .{
             .flavor = .MUSL,
@@ -824,7 +838,7 @@ test "findMuslMemoryRangeAndLookupMemoryLocations: x86_64" {
 
 test "findMuslMemoryRangeAndLookupMemoryLocations: arm64" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_maps_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-maps/maps-musl-arm64" });
     defer allocator.free(absolute_path_to_maps_file);
@@ -832,6 +846,7 @@ test "findMuslMemoryRangeAndLookupMemoryLocations: arm64" {
     __test_find_symbol_actual_attempts = 0;
     __test_find_symbol_succeed_on_attempt = 1;
     const libc_info = try findMuslMemoryRangeAndLookupMemoryLocations(
+        testing.io,
         absolute_path_to_maps_file,
         .{
             .flavor = .MUSL,
@@ -848,7 +863,7 @@ test "findMuslMemoryRangeAndLookupMemoryLocations: arm64" {
 
 test "findMuslMemoryRangeAndLookupMemoryLocations: continue to read after discarding overly long line" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_maps_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-maps/maps-musl-overly-long-line" });
     defer allocator.free(absolute_path_to_maps_file);
@@ -856,6 +871,7 @@ test "findMuslMemoryRangeAndLookupMemoryLocations: continue to read after discar
     __test_find_symbol_actual_attempts = 0;
     __test_find_symbol_succeed_on_attempt = 1;
     const libc_info = try findMuslMemoryRangeAndLookupMemoryLocations(
+        testing.io,
         absolute_path_to_maps_file,
         .{
             .flavor = .MUSL,
@@ -872,7 +888,7 @@ test "findMuslMemoryRangeAndLookupMemoryLocations: continue to read after discar
 
 test "findMuslMemoryRangeAndLookupMemoryLocations: read last line if not terminated by newline" {
     const allocator = std.testing.allocator;
-    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_path);
     const absolute_path_to_maps_file = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/proc-self-maps/maps-musl-no-terminating-newline" });
     defer allocator.free(absolute_path_to_maps_file);
@@ -880,6 +896,7 @@ test "findMuslMemoryRangeAndLookupMemoryLocations: read last line if not termina
     __test_find_symbol_actual_attempts = 0;
     __test_find_symbol_succeed_on_attempt = 1;
     const libc_info = try findMuslMemoryRangeAndLookupMemoryLocations(
+        testing.io,
         absolute_path_to_maps_file,
         .{
             .flavor = .MUSL,
@@ -1042,7 +1059,7 @@ fn mockFindSymbolsInMemoryRange(
     return error.CannotFindSetenvSymbol;
 }
 
-fn takeSentinelOrDiscardOverlyLongLine(reader: *std.fs.File.Reader) ![]u8 {
+fn takeSentinelOrDiscardOverlyLongLine(reader: *std.Io.File.Reader) ![]u8 {
     if (reader.interface.takeSentinel('\n')) |slice| {
         return slice;
     } else |err| switch (err) {
@@ -1056,11 +1073,11 @@ fn takeSentinelOrDiscardOverlyLongLine(reader: *std.fs.File.Reader) ![]u8 {
     }
 }
 
-fn logProcSelfMaps(self_maps_path: []const u8) !void {
-    var maps_file = try std.fs.openFileAbsolute(self_maps_path, .{});
-    defer maps_file.close();
+fn logProcSelfMaps(io: std.Io, self_maps_path: []const u8) !void {
+    var maps_file = try std.Io.Dir.openFileAbsolute(io, self_maps_path, .{});
+    defer maps_file.close(io);
     var reader_buf: [reader_buffer_len]u8 = undefined;
-    var reader = maps_file.reader(&reader_buf);
+    var reader = maps_file.readerStreaming(io, &reader_buf);
     while (takeSentinelOrDiscardOverlyLongLine(&reader)) |line| {
         print.printDebug("{s}", .{line});
     } else |err| switch (err) {

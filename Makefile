@@ -33,7 +33,7 @@ clean:
 	rm -rf so $(DIST_DIR_BINARY) zig-out .zig-cache
 
 so/$(BINARY_NAME_NO_ARCH): so
-	zig build -Dcpu-arch=${ARCH} -Dallowed-env-var-prefixes='$(ALLOWED_ENV_VAR_PREFIXES)' --prominent-compile-errors --summary none
+	zig build -Dcpu-arch=${ARCH} -Dallowed-env-var-prefixes='$(ALLOWED_ENV_VAR_PREFIXES)' --error-style minimal --summary none
 
 $(DIST_TARGET): $(DIST_SRCS)
 	@echo building the injector binary for architecture $(ARCH)
@@ -90,7 +90,7 @@ check-zig-installed:
 .PHONY: zig-build
 zig-build: check-zig-installed
 	@mkdir -p so
-	@(zig build -Dcpu-arch=${ARCH} -Dallowed-env-var-prefixes='$(ALLOWED_ENV_VAR_PREFIXES)' --prominent-compile-errors --summary none && echo $(shell date) build successful) || (echo $(shell date) build failed && exit 1)
+	@(zig build -Dcpu-arch=${ARCH} -Dallowed-env-var-prefixes='$(ALLOWED_ENV_VAR_PREFIXES)' --error-style minimal --summary none && echo $(shell date) build successful) || (echo $(shell date) build failed && exit 1)
 
 .PHONY: watch-zig-build
 watch-zig-build: check-zig-installed
@@ -98,7 +98,7 @@ watch-zig-build: check-zig-installed
 
 .PHONY: zig-unit-tests
 zig-unit-tests: check-zig-installed
-	@(zig build test -Dcpu-arch=${ARCH} -Dallowed-env-var-prefixes='$(ALLOWED_ENV_VAR_PREFIXES)' --prominent-compile-errors --summary none && echo $(shell date) tests successful) || (echo $(shell date) tests failed && exit 1)
+	@(zig build test -Dcpu-arch=${ARCH} -Dallowed-env-var-prefixes='$(ALLOWED_ENV_VAR_PREFIXES)' --error-style minimal --summary none && echo $(shell date) tests successful) || (echo $(shell date) tests failed && exit 1)
 
 .PHONY: watch-zig-unit-tests
 watch-zig-unit-tests: check-zig-installed

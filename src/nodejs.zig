@@ -18,11 +18,13 @@ pub const node_options_env_var_name = "NODE_OPTIONS";
 /// The caller is responsible for freeing the returned string (unless the result is passed on to setenv and needs to
 /// stay in memory).
 pub fn checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+    io: std.Io,
     gpa: std.mem.Allocator,
     original_value_optional: ?[:0]const u8,
     configuration: config.InjectorConfiguration,
 ) ?[:0]u8 {
     return doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+        io,
         gpa,
         original_value_optional,
         configuration.nodejs_auto_instrumentation_agent_path,
@@ -31,6 +33,7 @@ pub fn checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
 }
 
 fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+    io: std.Io,
     gpa: std.mem.Allocator,
     original_value_optional: ?[:0]const u8,
     nodejs_auto_instrumentation_agent_path: []u8,
@@ -44,7 +47,7 @@ fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
     // Check the existence of the Node module: requiring or importing a module
     // that does not exist or cannot be opened will crash the Node.js process
     // with an 'ERR_MODULE_NOT_FOUND' error.
-    std.fs.cwd().access(nodejs_auto_instrumentation_agent_path, .{}) catch |err| {
+    std.Io.Dir.cwd().access(io, nodejs_auto_instrumentation_agent_path, .{}) catch |err| {
         print.printError("Skipping the injection of the Node.js OpenTelemetry auto-instrumentation in \"{s}\" because of an issue accessing the Node.js module at \"{s}\": {}", .{ node_options_env_var_name, nodejs_auto_instrumentation_agent_path, err });
         return null;
     };
@@ -66,6 +69,7 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
     defer testing.allocator.free(path);
     const modified_node_options_value =
         doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+            testing.io,
             testing.allocator,
             null,
             path,
@@ -79,6 +83,7 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
     defer testing.allocator.free(path);
     const modified_node_options_value =
         doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+            testing.io,
             testing.allocator,
             null,
             path,
@@ -92,6 +97,7 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
     defer testing.allocator.free(path);
     const modified_node_options_value =
         doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+            testing.io,
             testing.allocator,
             null,
             path,
@@ -105,6 +111,7 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
     defer testing.allocator.free(path);
     const modified_node_options_value =
         doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+            testing.io,
             testing.allocator,
             "--abort-on-uncaught-exception"[0.. :0],
             path,

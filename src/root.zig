@@ -33,8 +33,9 @@ export const init_array: [1]*const fn () callconv(.c) void linksection(init_sect
 
 fn initEnviron() callconv(.c) void {
     const allocator = std.heap.page_allocator;
+    const io = std.Io.Threaded.global_single_threaded.io();
 
-    proc_self_environ_parser.initFromProcSelfEnviron() catch |err| {
+    proc_self_environ_parser.initFromProcSelfEnviron(io) catch |err| {
         // If we fail to read the log level, we continue processing, using the default log level.
         print.printError("failed to read log level from environment: {}", .{err});
         print.printError("using default log level {}", .{print.getLogLevel()});
@@ -52,14 +53,14 @@ fn initEnviron() callconv(.c) void {
     // processes never attempt libc detection and never emit libc-related warnings.
     // config.readConfiguration uses proc_self_environ_parser.getenv internally, which
     // reads /proc/self/environ directly without requiring libc.
-    var configuration = config.readConfiguration(allocator, proc_self_environ_parser.getenv);
+    var configuration = config.readConfiguration(io, allocator, proc_self_environ_parser.getenv);
     defer configuration.deinit(allocator);
 
-    if (!evaluateAllowDeny(allocator, configuration)) {
+    if (!evaluateAllowDeny(io, allocator, configuration)) {
         return;
     }
 
-    const libc_info = libc.getLibCInfo(allocator) catch |err| {
+    const libc_info = libc.getLibCInfo(io, allocator) catch |err| {
         if (err == error.UnknownLibCFlavor) {
             print.printError("no libc found: {}", .{err});
         } else {
@@ -100,72 +101,84 @@ fn initEnviron() callconv(.c) void {
     }
 
     modifyEnvironmentVariable(
+        io,
         allocator,
         libc_info,
         nodejs.node_options_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
+        io,
         allocator,
         libc_info,
         jvm.java_tool_options_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
+        io,
         allocator,
         libc_info,
         python.pythonpath_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
+        io,
         allocator,
         libc_info,
         ruby.rubyopt_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
+        io,
         allocator,
         libc_info,
         ruby.ruby_additional_gem_path_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
+        io,
         allocator,
         libc_info,
         dotnet.coreclr_enable_profiling_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
+        io,
         allocator,
         libc_info,
         dotnet.coreclr_profiler_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
+        io,
         allocator,
         libc_info,
         dotnet.coreclr_profiler_path_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
+        io,
         allocator,
         libc_info,
         dotnet.dotnet_additional_deps_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
+        io,
         allocator,
         libc_info,
         dotnet.dotnet_shared_store_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
+        io,
         allocator,
         libc_info,
         dotnet.dotnet_startup_hooks_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
+        io,
         allocator,
         libc_info,
         dotnet.otel_dotnet_auto_home_env_var_name,
@@ -185,15 +198,15 @@ fn libcGetenv(getenv_fn: types.GetenvFnPtr, name: [:0]const u8) ?[:0]const u8 {
     return std.mem.span(getenv_fn(name) orelse return null);
 }
 
-fn evaluateAllowDeny(allocator: std.mem.Allocator, configuration: config.InjectorConfiguration) bool {
-    const exe_path = getExecutablePath(allocator) catch {
+fn evaluateAllowDeny(io: std.Io, allocator: std.mem.Allocator, configuration: config.InjectorConfiguration) bool {
+    const exe_path = getExecutablePath(io, allocator) catch {
         // Skip allow-deny evaluation if getting the executable path has failed. The error has already been logged in
         // getExecutablePath.
         return true;
     };
     defer allocator.free(exe_path);
 
-    const args = getCommandLineArgs(allocator) catch {
+    const args = getCommandLineArgs(io, allocator) catch {
         // Skip allow-deny evaluation if getting the arguments has failed. The error has already been logged in
         // getCommandLineArgs.
         return true;
@@ -239,11 +252,11 @@ fn evaluateAllowDeny(allocator: std.mem.Allocator, configuration: config.Injecto
     return true;
 }
 
-fn getCommandLineArgs(allocator: std.mem.Allocator) ![]const []const u8 {
+fn getCommandLineArgs(io: std.Io, allocator: std.mem.Allocator) ![]const []const u8 {
     // Get command line arguments.
     // Dynamically injected libraries don't get std.process.argsAlloc populated and
     // neither does std.os.argv. We read using the /proc/{pid}/cmdline.
-    const cmdline_args = args_parser.cmdLineForPID(allocator) catch |err| {
+    const cmdline_args = args_parser.cmdLineForPID(io, allocator) catch |err| {
         print.printDebug("failed to get executable arguments: {any}", .{err});
         return err;
     };
@@ -257,9 +270,9 @@ fn getCommandLineArgs(allocator: std.mem.Allocator) ![]const []const u8 {
     return cmdline_args;
 }
 
-fn getExecutablePath(allocator: std.mem.Allocator) ![]u8 {
+fn getExecutablePath(io: std.Io, allocator: std.mem.Allocator) ![]u8 {
     // Get the program full executable path
-    const executable_path = std.fs.selfExePathAlloc(allocator) catch |err| {
+    const executable_path = std.process.executablePathAlloc(io, allocator) catch |err| {
         print.printDebug("failed to get executable path: {any}", .{err});
         return err;
     };
@@ -270,12 +283,13 @@ fn getExecutablePath(allocator: std.mem.Allocator) ![]u8 {
 }
 
 fn modifyEnvironmentVariable(
+    io: std.Io,
     allocator: std.mem.Allocator,
     lci: types.LibCInfo,
     name: [:0]const u8,
     configuration: config.InjectorConfiguration,
 ) void {
-    if (getEnvValue(allocator, lci, name, configuration)) |value| {
+    if (getEnvValue(io, allocator, lci, name, configuration)) |value| {
         // Note: We must *not* free/deallocate the return value of getEnvValue after handing it over to setenv, or we
         // may cause a USE_AFTER_FREE memory corruption in the parent process.
         // Note: getEnvValue returns a sentinel-terminated slices, which can be coerced automatically into the
@@ -296,6 +310,7 @@ fn modifyEnvironmentVariable(
 }
 
 fn getEnvValue(
+    io: std.Io,
     allocator: std.mem.Allocator,
     lci: types.LibCInfo,
     name: [:0]const u8,
@@ -304,18 +319,21 @@ fn getEnvValue(
     const original_value = libcGetenv(lci.getenv_fn_ptr, name);
     if (std.mem.eql(u8, name, jvm.java_tool_options_env_var_name)) {
         return jvm.checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+            io,
             allocator,
             original_value,
             configuration,
         );
     } else if (std.mem.eql(u8, name, nodejs.node_options_env_var_name)) {
         return nodejs.checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+            io,
             allocator,
             original_value,
             configuration,
         );
     } else if (std.mem.eql(u8, name, python.pythonpath_env_var_name)) {
         return python.checkPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
+            io,
             allocator,
             original_value,
             configuration,
@@ -330,6 +348,7 @@ fn getEnvValue(
             return null;
         }
         return ruby.checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(
+            io,
             allocator,
             original_value,
             configuration,
@@ -338,21 +357,21 @@ fn getEnvValue(
         // Respect a user-provided value; only set it ourselves when Ruby injection is active. The RUBYOPT branch
         // above mirrors this decision by standing down when the user has already set this variable.
         if (original_value != null) return null;
-        return ruby.getRubyAdditionalGemPath(allocator, configuration);
+        return ruby.getRubyAdditionalGemPath(io, allocator, configuration);
     } else if (std.mem.eql(u8, name, dotnet.coreclr_enable_profiling_env_var_name)) {
-        if (dotnet.getDotnetValues(allocator, configuration)) |v| {
+        if (dotnet.getDotnetValues(io, allocator, configuration)) |v| {
             return v.coreclr_enable_profiling;
         }
     } else if (std.mem.eql(u8, name, dotnet.coreclr_profiler_env_var_name)) {
-        if (dotnet.getDotnetValues(allocator, configuration)) |v| {
+        if (dotnet.getDotnetValues(io, allocator, configuration)) |v| {
             return v.coreclr_profiler;
         }
     } else if (std.mem.eql(u8, name, dotnet.coreclr_profiler_path_env_var_name)) {
-        if (dotnet.getDotnetValues(allocator, configuration)) |v| {
+        if (dotnet.getDotnetValues(io, allocator, configuration)) |v| {
             return v.coreclr_profiler_path;
         }
     } else if (std.mem.eql(u8, name, dotnet.dotnet_additional_deps_env_var_name)) {
-        if (dotnet.getDotnetValues(allocator, configuration)) |v| {
+        if (dotnet.getDotnetValues(io, allocator, configuration)) |v| {
             if (v.additional_deps) |ad| {
                 return ad;
             } else {
@@ -361,7 +380,7 @@ fn getEnvValue(
             }
         }
     } else if (std.mem.eql(u8, name, dotnet.dotnet_shared_store_env_var_name)) {
-        if (dotnet.getDotnetValues(allocator, configuration)) |v| {
+        if (dotnet.getDotnetValues(io, allocator, configuration)) |v| {
             if (v.shared_store) |ss| {
                 return ss;
             } else {
@@ -370,11 +389,11 @@ fn getEnvValue(
             }
         }
     } else if (std.mem.eql(u8, name, dotnet.dotnet_startup_hooks_env_var_name)) {
-        if (dotnet.getDotnetValues(allocator, configuration)) |v| {
+        if (dotnet.getDotnetValues(io, allocator, configuration)) |v| {
             return v.startup_hooks;
         }
     } else if (std.mem.eql(u8, name, dotnet.otel_dotnet_auto_home_env_var_name)) {
-        if (dotnet.getDotnetValues(allocator, configuration)) |v| {
+        if (dotnet.getDotnetValues(io, allocator, configuration)) |v| {
             return v.otel_auto_home;
         }
     }

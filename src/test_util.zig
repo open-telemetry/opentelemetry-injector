@@ -34,11 +34,8 @@ pub fn clearStdCEnviron() anyerror![*:null]?[*:0]u8 {
 pub fn setStdCEnviron(env_vars: []const []const u8) anyerror![*:null]?[*:0]u8 {
     const original_environ = std.c.environ;
 
-    // For some reason, the tests run with builtin.link_libc=true although test_mod in build.zig is configured with
-    // .link_libc = false. This in turn makes makes std.posix.getenv use std.c.environ instead of std.os.environ.
-    // Hence, for tests that require certain environment variables to be set, we mess around with std.c.environ.
-    // Note: To manipulate std.os.environ instead of std.c.environ, use allocator.alloc([*:0]u8, n); instead of
-    // allocator.allocSentinel(?[*:0]u8, n, null).
+    // Tests read environment variables via cEnvironGet, which scans std.c.environ. Hence, for tests that require
+    // certain environment variables to be set, we mess around with std.c.environ.
     const new_environ = try environ_allocator.allocSentinel(?[*:0]u8, env_vars.len, null);
     for (env_vars, 0..) |env_var, i| {
         new_environ[i] = try std.fmt.allocPrintSentinel(
@@ -59,13 +56,28 @@ pub fn resetStdCEnviron(original_environ: [*:null]?[*:0]u8) void {
     std.c.environ = original_environ;
 }
 
-/// A GetenvFnPtr-compatible wrapper around std.posix.getenv for use in tests.
-/// Tests manipulate std.c.environ via setStdCEnviron/clearStdCEnviron, and std.posix.getenv
-/// reads from std.c.environ when link_libc is true (which is the case at test runtime).
+/// Looks up an environment variable in std.c.environ, which tests manipulate via setStdCEnviron/clearStdCEnviron.
+pub fn cEnvironGet(name: []const u8) ?[:0]const u8 {
+    var i: usize = 0;
+    while (std.c.environ[i]) |entry_ptr| : (i += 1) {
+        const entry = std.mem.span(entry_ptr);
+        if (entry.len > name.len and entry[name.len] == '=' and std.mem.startsWith(u8, entry, name)) {
+            return entry[name.len + 1 ..];
+        }
+    }
+    return null;
+}
+
+/// A GetenvFn-compatible wrapper around cEnvironGet for use in tests.
+pub fn posixGetenv(_: std.Io, allocator: std.mem.Allocator, name: []const u8) ?[]u8 {
+    const val = cEnvironGet(name) orelse return null;
+    return allocator.dupe(u8, val) catch unreachable;
+}
+
+/// A GetenvFnPtr-compatible wrapper around cEnvironGet for use in tests.
 pub fn testGetenvFnPtr(name: [*:0]const u8) ?[*:0]const u8 {
-    const val = std.posix.getenv(std.mem.span(name)) orelse return null;
-    // val.ptr points into a null-terminated string in std.c.environ, safe to cast.
-    return @ptrCast(val.ptr);
+    const val = cEnvironGet(std.mem.span(name)) orelse return null;
+    return val.ptr;
 }
 
 fn testNoopSetenvFnPtr(name: [*:0]const u8, value: [*:0]const u8, overwrite: bool) c_int {

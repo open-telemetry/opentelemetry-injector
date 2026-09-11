@@ -116,7 +116,15 @@ injector-integration-tests-for-all-architectures:
 	injector-integration-tests/scripts/test-all.sh
 
 .PHONY: lint
-lint: zig-fmt-check zig-validate-test-imports shellcheck-lint
+lint: zig-fmt-check zig-validate-test-imports zig-version-check shellcheck-lint
+
+# Verifies that ZIG_VERSION in zig-version and .minimum_zig_version in build.zig.zon are in sync. Both files ask for
+# this in a comment, but the two are consumed by different toolchains (the container builds vs. CI and "zig build"),
+# so a mismatch does not necessarily show up as a build failure.
+.PHONY: zig-version-check
+zig-version-check:
+	@zig_version=$$(scripts/zig-version-check.sh) && \
+	  echo "the Zig version references are in sync at $$zig_version"
 
 .PHONY: zig-fmt-check
 zig-fmt-check: check-zig-installed

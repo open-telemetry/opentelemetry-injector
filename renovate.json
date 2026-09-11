@@ -12,6 +12,7 @@
     {
       "groupName": "all",
       "matchUpdateTypes": ["minor", "major", "patch"],
+      "matchDepTypes": ["!language"],
       "schedule": ["before 8am on Monday"]
     },
     {
@@ -30,8 +31,34 @@
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["minor", "major", "patch", "digest"],
       "schedule": ["before 8am on Monday"]
+    },
+    {
+      "matchDepTypes":["language"],
+      "draft": true
     }
   ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["zig-version", "build.zig.zon"],
+      "matchStrings": [
+        "ZIG_VERSION=(?<currentValue>[0-9.]+)",
+        ".minimum_zig_version = \"(?<currentValue>[0-9.]+)\""
+      ],
+      "datasourceTemplate": "custom.zig",
+      "depNameTemplate": "zig",
+      "depTypeTemplate": "language",
+      "versioningTemplate": "semver"
+    }
+  ],
+  "customDatasources": {
+    "zig": {
+      "defaultRegistryUrlTemplate": "https://ziglang.org/download/index.json",
+      "transformTemplates": [
+        "{\"releases\":[{\"version\": $$.(data[id = 'stable'].latest),\"sourceUrl\":\"https://github.com/k3s-io/k3s\",\"changelogUrl\":$join([\"https://github.com/k3s-io/k3s/releases/tag/\",data[id = 'stable'].latest])}],\"sourceUrl\": \"https://github.com/k3s-io/k3s\",\"homepage\": \"https://k3s.io/\"}"
+      ]
+    }
+  },
   "labels": [
     "dependencies"
   ]

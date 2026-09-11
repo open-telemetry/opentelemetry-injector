@@ -26,28 +26,45 @@ jobs:
     permissions:
       contents: read # for actions/checkout
     steps:
+      # This workflow needs two app tokens, because neither otelbot app on its own can both push a branch and open a
+      # pull request:
+      #   * The main otelbot app grants "read and write access to pull requests", but no write access to contents, so
+      #     asking it for permission-contents: write fails the whole step with "The permissions requested are not
+      #     granted to this installation".
+      #   * The injector-specific otelbot app grants contents: write (it is what pushes the release tag in
+      #     create-tag-for-release.yml), but is not known to grant pull requests: write.
+      # Each step below therefore only requests the permission its app actually has. Collapsing them into one token
+      # would mean asking the OpenTelemetry admins to widen one of the two apps.
+      # See https://github.com/open-telemetry/community/blob/9eaa934620638a2f5537d3d74372b389098a8f5e/assets.md#otelbot.
+      #
+      # We are also deliberately not using the default secrets.GITHUB_TOKEN for either half, since events from that
+      # token do not trigger subsequent workflows, see
+      # https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow#triggering-a-workflow-from-a-workflow.
+      # That is, the pull request created by this workflow would not trigger .github/workflows/build.yml, and its
+      # (expected) failure is precisely the information the maintainers need to see here.
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: otelbot-injector-token
+        with:
+          client-id: ${{ vars.OTELBOT_INJECTOR_CLIENT_ID }}
+          private-key: ${{ secrets.OTELBOT_INJECTOR_PRIVATE_KEY }}
+          permission-contents: write
+
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: otelbot-token
         with:
-          # We are deliberately not using the default secrets.GITHUB_TOKEN here, since events from that token do not
-          # trigger subsequent workflows, see
-          # https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow#triggering-a-workflow-from-a-workflow.
-          # That is, the pull request created by this workflow would not trigger .github/workflows/build.yml, and its
-          # (expected) failure is precisely the information the maintainers need to see here.
-          # See https://github.com/open-telemetry/community/blob/9eaa934620638a2f5537d3d74372b389098a8f5e/assets.md#otelbot.
           client-id: ${{ vars.OTELBOT_CLIENT_ID }}
           private-key: ${{ secrets.OTELBOT_PRIVATE_KEY }}
-          permission-contents: write
           permission-pull-requests: write
 
       - name: Check out the codebase
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The App token is only passed to the script below, which creates the branch, the commit and the pull request
-          # via the GitHub API instead of via git, so the token does not need to be persisted in the git config.
+          # The App tokens are only passed to the script below, which creates the branch, the commit and the pull
+          # request via the GitHub API instead of via git, so no token needs to be persisted in the git config.
           persist-credentials: false
 
       - name: Check for a new Zig release and create a PR
         env:
-          GH_TOKEN: ${{ steps.otelbot-token.outputs.token }}
+          GH_TOKEN_CONTENTS: ${{ steps.otelbot-injector-token.outputs.token }}
+          GH_TOKEN_PULL_REQUESTS: ${{ steps.otelbot-token.outputs.token }}
         run: ./.github/workflows/scripts/update-zig.sh

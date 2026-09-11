@@ -11,6 +11,13 @@
 # release exists, and as a starting point for the migration. Its CI run will usually fail, that is expected.
 #
 # This is invoked from the update-zig.yaml workflow.
+#
+# It needs two separate GitHub tokens, because no single otelbot app can do both halves of the job:
+#   * GH_TOKEN_CONTENTS creates the branch and the commit on it. The injector-specific otelbot app grants
+#     contents: write, the main otelbot app does not.
+#   * GH_TOKEN_PULL_REQUESTS creates the pull request and its comment. The main otelbot app grants
+#     pull requests: write.
+# See the comments in update-zig.yaml for why the two cannot be collapsed into one token.
 
 set -euo pipefail
 
@@ -21,10 +28,22 @@ for executable in curl gh git jq; do
   fi
 done
 
-if [[ -z "${GITHUB_REPOSITORY:-}" ]]; then
-  echo "Error: the GITHUB_REPOSITORY environment variable is not set." >&2
-  exit 1
-fi
+for variable in GITHUB_REPOSITORY GH_TOKEN_CONTENTS GH_TOKEN_PULL_REQUESTS; do
+  if [[ -z "${!variable:-}" ]]; then
+    echo "Error: the $variable environment variable is not set." >&2
+    exit 1
+  fi
+done
+
+# Wrappers that make every gh call state which of the two tokens it needs. Using the wrong token here does not fail
+# with a helpful message, it fails with a plain 404 or 403 from the GitHub API.
+gh_contents() {
+  GH_TOKEN="$GH_TOKEN_CONTENTS" gh "$@"
+}
+
+gh_pull_requests() {
+  GH_TOKEN="$GH_TOKEN_PULL_REQUESTS" gh "$@"
+}
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 
@@ -70,7 +89,7 @@ branch_name="update-zig-${latest_version}"
 
 # An open pull request for this Zig version means that the maintainers have already been notified about this release
 # and there is nothing left to do, so stop here without failing the run.
-existing_pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch_name" --state open --json url --jq '.[0].url // empty')
+existing_pr=$(gh_pull_requests pr list --repo "$GITHUB_REPOSITORY" --head "$branch_name" --state open --json url --jq '.[0].url // empty')
 if [[ -n "$existing_pr" ]]; then
   echo "The pull request ${existing_pr} updates Zig to ${latest_version} already. Stopping here."
   exit 0
@@ -103,9 +122,9 @@ base_sha=$(git rev-parse HEAD)
 # have failed between creating the branch and creating the pull request, or a pull request for this version has been
 # closed without merging it. Creating a ref that already exists fails, so delete it and start over from the current
 # base commit.
-if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${branch_name}" > /dev/null 2>&1; then
+if gh_contents api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${branch_name}" > /dev/null 2>&1; then
   echo "Deleting the leftover branch \"${branch_name}\", which has no open pull request."
-  gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${branch_name}" > /dev/null
+  gh_contents api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${branch_name}" > /dev/null
 fi
 
 # Everything from here on can fail halfway through, leaving a branch without a pull request behind. Delete the branch
@@ -114,14 +133,14 @@ branch_created=false
 cleanup_branch() {
   if [[ "$branch_created" == true ]]; then
     echo "The run failed before the pull request has been created, deleting the branch \"${branch_name}\" again." >&2
-    gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${branch_name}" > /dev/null || true
+    gh_contents api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${branch_name}" > /dev/null || true
   fi
 }
 trap cleanup_branch EXIT
 
 # createCommitOnBranch can only commit onto a branch that already exists. Create the pull request branch at the base
 # commit; we have made sure above that the branch does not exist yet.
-gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+gh_contents api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
   -f ref="refs/heads/${branch_name}" \
   -f sha="${base_sha}" > /dev/null
 branch_created=true
@@ -161,11 +180,11 @@ jq -n \
         fileChanges:     { additions: $additions }
       }
     }
-  }' | gh api graphql --input - > /dev/null
+  }' | gh_contents api graphql --input - > /dev/null
 
 pr_body="Upgrade from Zig ${current_version} to ${latest_version}."
 pr_url=$(
-  gh pr create \
+  gh_pull_requests pr create \
     -B main \
     -H "$branch_name" \
     --title "$commit_message" \
@@ -200,5 +219,5 @@ Use it as a starting point for the migration. See the ${release_notes_link} for 
 This pull request has been created by the \`.github/workflows/update-zig.yaml\` workflow.
 EOF
 )
-gh pr comment "$pr_url" --body "$pr_comment" > /dev/null
+gh_pull_requests pr comment "$pr_url" --body "$pr_comment" > /dev/null
 echo "Added the comment explaining that this pull request is not a migration to Zig ${latest_version}."

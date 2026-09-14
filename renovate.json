@@ -12,6 +12,7 @@
     {
       "groupName": "all",
       "matchUpdateTypes": ["minor", "major", "patch"],
+      "matchDepTypes": ["!language"],
       "schedule": ["before 8am on Monday"]
     },
     {
@@ -30,6 +31,39 @@
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["minor", "major", "patch", "digest"],
       "schedule": ["before 8am on Monday"]
+    },
+    {
+      "matchDepTypes":["language"],
+      "draftPR": true
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["zig-version", "build.zig.zon"],
+      "matchStrings": [
+        "ZIG_VERSION=(?<currentValue>[0-9.]+)",
+        ".minimum_zig_version = \"(?<currentValue>[0-9.]+)\""
+      ],
+      "datasourceTemplate": "custom.zig",
+      "depNameTemplate": "zig",
+      "depTypeTemplate": "language",
+      "versioningTemplate": "semver-coerced"
+    }
+  ],
+  "customDatasources": {
+    "zig": {
+      "defaultRegistryUrlTemplate": "https://ziglang.org/download/index.json",
+      "format": "json",
+      "transformTemplates": [
+        "{ \"releases\": $keys($).{\"version\":($)} }"
+      ]
+    }
+  },
+  "hostRules": [
+    {
+      "timeout": 20000,
+      "abortOnError": false
     }
   ],
   "labels": [

@@ -34,7 +34,7 @@
     },
     {
       "matchDepTypes":["language"],
-      "draft": true
+      "draftPR": true
     }
   ],
   "customManagers": [
@@ -48,17 +48,24 @@
       "datasourceTemplate": "custom.zig",
       "depNameTemplate": "zig",
       "depTypeTemplate": "language",
-      "versioningTemplate": "semver"
+      "versioningTemplate": "semver-coerced"
     }
   ],
   "customDatasources": {
     "zig": {
       "defaultRegistryUrlTemplate": "https://ziglang.org/download/index.json",
+      "format": "json",
       "transformTemplates": [
-        "{\"releases\":[{\"version\": $$.(data[id = 'stable'].latest),\"sourceUrl\":\"https://github.com/k3s-io/k3s\",\"changelogUrl\":$join([\"https://github.com/k3s-io/k3s/releases/tag/\",data[id = 'stable'].latest])}],\"sourceUrl\": \"https://github.com/k3s-io/k3s\",\"homepage\": \"https://k3s.io/\"}"
+        "{ \"releases\": $keys($).{\"version\":($)} }"
       ]
     }
   },
+  "hostRules": [
+    {
+      "timeout": 20000,
+      "abortOnError": false
+    }
+  ],
   "labels": [
     "dependencies"
   ]

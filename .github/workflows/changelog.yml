@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   changelog:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: |
       github.actor != 'dependabot[bot]' &&
       !contains(github.event.pull_request.labels.*.name, 'dependencies') &&

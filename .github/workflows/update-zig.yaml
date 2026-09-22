@@ -20,7 +20,7 @@ permissions: {}
 jobs:
   check-for-new-zig-release:
     name: check for a new Zig release and create a PR
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     if: github.repository == 'open-telemetry/opentelemetry-injector'
     permissions:

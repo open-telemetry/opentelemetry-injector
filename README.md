@@ -34,6 +34,44 @@ services to capture and report distributed traces and metrics to the
 [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/).
 This repository publishes only the raw `libotelinject.so` shared library.
 
+## Verifying Release Artifacts
+
+New raw shared-library assets published by this repository are signed keylessly with
+[Sigstore Cosign](https://docs.sigstore.dev/cosign/). Each signed `libotelinject_<arch>.so` release asset is accompanied
+by a `.sigstore.json` bundle containing the material required to verify both the artifact bytes and the GitHub Actions
+identity that signed them. Releases created before signing was introduced do not contain these bundles.
+
+Install Cosign, choose a release tag and architecture, and download the artifact together with its bundle:
+
+```bash
+export REPOSITORY=open-telemetry/opentelemetry-injector
+export RELEASE_TAG=v0.0.0 # replace with the release you want to verify
+export ARCH=amd64         # or arm64
+
+export ARTIFACT="libotelinject_${ARCH}.so"
+export BUNDLE="${ARTIFACT}.sigstore.json"
+
+gh release download "${RELEASE_TAG}" \
+  --repo "${REPOSITORY}" \
+  --pattern "${ARTIFACT}" \
+  --pattern "${BUNDLE}"
+```
+
+Verify the artifact against the exact release workflow and tag:
+
+```bash
+export CERTIFICATE_IDENTITY="https://github.com/${REPOSITORY}/.github/workflows/build.yml@refs/tags/${RELEASE_TAG}"
+export CERTIFICATE_OIDC_ISSUER=https://token.actions.githubusercontent.com
+
+cosign verify-blob "${ARTIFACT}" \
+  --bundle "${BUNDLE}" \
+  --certificate-identity "${CERTIFICATE_IDENTITY}" \
+  --certificate-oidc-issuer "${CERTIFICATE_OIDC_ISSUER}"
+```
+
+If verification fails, do not load the artifact. Confirm that the artifact and bundle came from the same release and
+that `RELEASE_TAG` exactly matches that release tag.
+
 The `opentelemetry-injector` deb/rpm package installs and supports configuration of the following auto-instrumentation
 agents:
 

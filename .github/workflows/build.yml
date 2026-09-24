@@ -87,18 +87,19 @@ jobs:
           COSIGN_PUBLIC_KEY: cosign.pub
         run: ./.github/workflows/scripts/verify-release-artifacts.sh
 
-  sign-release-artifacts:
+  publish-stable:
     runs-on: ubuntu-26.04
     if: startsWith(github.ref, 'refs/tags/') && github.repository == 'open-telemetry/opentelemetry-injector'
     needs: verify-and-build-binary
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
-      - name: Check out the codebase.
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - run: mkdir -p artifacts
 
       - name: Download release artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -116,33 +117,6 @@ jobs:
           CERTIFICATE_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/build.yml@refs/tags/${{ github.ref_name }}
           CERTIFICATE_OIDC_ISSUER: https://token.actions.githubusercontent.com
         run: ./.github/workflows/scripts/verify-release-artifacts.sh
-
-      - name: Upload signed release artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: signed-release-artifacts
-          path: ./artifacts/
-          if-no-files-found: error
-          retention-days: 1
-
-  publish-stable:
-    runs-on: ubuntu-26.04
-    if: startsWith(github.ref, 'refs/tags/') && github.repository == 'open-telemetry/opentelemetry-injector'
-    needs: sign-release-artifacts
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - run: mkdir -p artifacts
-
-      - name: Download signed release artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: signed-release-artifacts
-          path: ./artifacts/
 
       - name: Prepare release notes
         run: ./.github/workflows/scripts/prepare-release-notes.sh

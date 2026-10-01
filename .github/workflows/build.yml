@@ -87,6 +87,21 @@ jobs:
           COSIGN_PUBLIC_KEY: cosign.pub
         run: ./.github/workflows/scripts/verify-release-artifacts.sh
 
+      - name: Verify tampered artifacts are rejected
+        env:
+          COSIGN_PUBLIC_KEY: cosign.pub
+        run: |
+          tampered_dir=$(mktemp -d)
+          trap 'rm -rf "${tampered_dir}"' EXIT
+          mapfile -d '' artifacts < <(find artifacts -type f -name 'libotelinject_*.so' -print0)
+          cp "${artifacts[0]}" "${tampered_dir}/libotelinject_test.so"
+          cp "${artifacts[0]}.sigstore.json" "${tampered_dir}/libotelinject_test.so.sigstore.json"
+          printf '\ntampered\n' >> "${tampered_dir}/libotelinject_test.so"
+          if ./.github/workflows/scripts/verify-release-artifacts.sh "${tampered_dir}"; then
+            echo "Verification unexpectedly accepted a tampered artifact."
+            exit 1
+          fi
+
   publish-stable:
     runs-on: ubuntu-26.04
     if: startsWith(github.ref, 'refs/tags/') && github.repository == 'open-telemetry/opentelemetry-injector'

@@ -14,7 +14,8 @@ if (( ${#artifacts[@]} == 0 )); then
 fi
 
 if [[ -n "${COSIGN_PUBLIC_KEY:-}" ]]; then
-  verification_args=(--key "${COSIGN_PUBLIC_KEY}")
+  # CI signs with an ephemeral key without uploading to a transparency log.
+  verification_args=(--key "${COSIGN_PUBLIC_KEY}" --insecure-ignore-tlog)
 else
   : "${CERTIFICATE_IDENTITY:?CERTIFICATE_IDENTITY must be set for keyless verification}"
   : "${CERTIFICATE_OIDC_ISSUER:?CERTIFICATE_OIDC_ISSUER must be set for keyless verification}"

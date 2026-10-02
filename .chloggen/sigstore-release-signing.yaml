@@ -1,0 +1,10 @@
+# Use this changelog template to create an entry for release notes.
+
+change_type: enhancement
+component: release
+note: Sign GitHub release artifacts with Sigstore Cosign.
+issues: [350]
+subtext: |
+  Each libotelinject_*.so release asset now includes a Sigstore bundle that can be
+  verified against the exact GitHub Actions release workflow and tag.
+change_logs: [user]

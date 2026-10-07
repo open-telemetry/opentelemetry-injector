@@ -7,8 +7,8 @@ const version = @import("jvm_version.zig");
 const testing = std.testing;
 
 /// The launcher maps libjli.so before our constructor, but loads libjvm afterwards.
-/// Find its native library directory and inspect the default bundled VM on disk before
-/// JAVA_TOOL_OPTIONS is changed.
+/// Find its native library directory and inspect bundled VMs on disk before
+/// JAVA_TOOL_OPTIONS is changed. The first recognized Java version wins.
 /// We skip detection when -XXaltjvm= appears in the command line or JDK_ALTERNATE_VM is set.
 /// Dealing with this would require adding logic to parse command line options for not just java, but the java
 /// tools (which prefix with -J).
@@ -101,7 +101,7 @@ fn runtimeLibraryDirectory(io: std.Io, allocator: std.mem.Allocator, launcher: L
     std.Io.Dir.cwd().access(io, libjava, .{}) catch |err| switch (err) {
         error.FileNotFound => {
             // Some JDK 8 launchers link JDK/lib/<arch>/jli/libjli.so,
-            // while their VM and jvm.cfg are in JDK/jre/lib/<arch>.
+            // while their VM is in JDK/jre/lib/<arch>.
             const lib = std.fs.path.dirname(launcher.directory) orelse return err;
             const home = std.fs.path.dirname(lib) orelse return err;
             const runtime = try std.fs.path.join(allocator, &.{ home, "jre", "lib", std.fs.path.basename(launcher.directory) });
@@ -117,76 +117,22 @@ fn runtimeLibraryDirectory(io: std.Io, allocator: std.mem.Allocator, launcher: L
 }
 
 fn detectLauncherVersion(io: std.Io, allocator: std.mem.Allocator, library_dir: []const u8) !?u32 {
-    const cfg_path = try std.fs.path.join(allocator, &.{ library_dir, "jvm.cfg" });
-    const cfg = try std.Io.Dir.cwd().readFileAlloc(io, cfg_path, allocator, .limited(64 * 1024));
+    const root_major = inspectVmDirectory(io, allocator, library_dir) catch null;
+    if (root_major) |major| return major;
 
-    const entries = try parseJVMConfiguration(allocator, cfg);
+    const dir = try std.Io.Dir.openDirAbsolute(io, library_dir, .{ .iterate = true });
+    defer dir.close(io);
 
-    for (entries) |entry| {
-        // We look for the first valid entryu in the list of JVM runtimes listed in the config.
-        if (!std.mem.eql(u8, entry.action, "KNOWN") and !std.mem.eql(u8, entry.action, "IF_SERVER_CLASS")) {
-            continue;
-        }
+    var iterator = dir.iterate();
+    while (try iterator.next(io)) |entry| {
+        if (entry.kind != .directory) continue;
 
         const directory = try std.fs.path.join(allocator, &.{ library_dir, entry.name });
-        return inspectVmDirectory(io, allocator, directory);
+        const candidate_major = inspectVmDirectory(io, allocator, directory) catch null;
+        if (candidate_major) |major| return major;
     }
 
-    return error.UnsupportedJvmSelection;
-}
-
-const Entry = struct { name: []const u8, action: []const u8, target: ?[]const u8 };
-
-fn parseJVMConfiguration(allocator: std.mem.Allocator, content: []const u8) ![]Entry {
-    var entries: std.ArrayList(Entry) = .empty;
-    var lines = std.mem.splitScalar(u8, content, '\n');
-
-    while (lines.next()) |line| {
-        const comment_start = std.mem.indexOfScalar(u8, line, '#') orelse line.len;
-        const line_without_comment = line[0..comment_start];
-
-        var words = std.mem.tokenizeAny(u8, line_without_comment, " \t\r");
-
-        const flag = words.next() orelse continue;
-        if (!std.mem.startsWith(u8, flag, "-") or !validVmName(flag[1..])) {
-            return error.InvalidJvmConfiguration;
-        }
-
-        const action = words.next() orelse return error.InvalidJvmConfiguration;
-
-        // The third field "target" is optional.
-        const target_flag = words.next();
-        var target: ?[]const u8 = null;
-        if (target_flag) |flag_value| {
-            if (!std.mem.startsWith(u8, flag_value, "-") or !validVmName(flag_value[1..])) {
-                return error.InvalidJvmConfiguration;
-            }
-
-            target = flag_value[1..];
-        }
-
-        if (words.next() != null) {
-            return error.InvalidJvmConfiguration;
-        }
-
-        try entries.append(allocator, .{ .name = flag[1..], .action = action, .target = target });
-    }
-
-    if (entries.items.len == 0) {
-        return error.InvalidJvmConfiguration;
-    }
-
-    return entries.toOwnedSlice(allocator);
-}
-
-fn validVmName(name: []const u8) bool {
-    if (name.len == 0) {
-        return false;
-    }
-
-    for (name) |c| if (!std.ascii.isAlphanumeric(c) and c != '_' and c != '-') return false;
-
-    return true;
+    return null;
 }
 
 fn inspectVmDirectory(io: std.Io, allocator: std.mem.Allocator, directory: []const u8) !?u32 {
@@ -272,71 +218,87 @@ test "JVM launcher: resolves a JDK 8 launcher library to its bundled JRE" {
     );
 }
 
-test "JVM launcher: inspects the default VM before it is loaded" {
+test "JVM launcher: finds the VM when jvm.cfg names a different directory" {
     const test_util = @import("test_util.zig");
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
 
     try tmp.dir.createDirPath(testing.io, "lib/server");
-    try tmp.dir.createDirPath(testing.io, "lib/client");
-    try tmp.dir.writeFile(
-        testing.io,
-        .{ .sub_path = "lib/jvm.cfg", .data = "-server KNOWN\n-client KNOWN\n-fast ALIASED_TO -client\n-ignored IGNORE\n" },
-    );
-    try test_util.writeElf(tmp.dir, "lib/server/libjvm.so", " JRE (1.6.0_45-b06)\x00", std.elf.PF_R | std.elf.PF_X);
-    try test_util.writeElf(tmp.dir, "lib/client/libjvm.so", " JRE (1.8.0_472-b08)\x00", std.elf.PF_R);
+    try tmp.dir.writeFile(testing.io, .{
+        .sub_path = "lib/jvm.cfg",
+        .data = "-custom KNOWN\n-server IGNORE\n-client IGNORE\n",
+    });
+    try test_util.writeElf(tmp.dir, "lib/server/libjvm.so", " JRE (21.0.9+1-LTS)\x00", std.elf.PF_R);
+
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const gpa = arena.allocator();
+    const library_dir = try tmp.dir.realPathFileAlloc(testing.io, "lib", gpa);
+
+    try testing.expectEqual(@as(?u32, 21), try detectLauncherVersion(testing.io, gpa, library_dir));
+}
+
+test "JVM launcher: scans immediate directories without jvm.cfg and skips unknown binaries" {
+    const test_util = @import("test_util.zig");
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try tmp.dir.createDirPath(testing.io, "lib/empty");
+    try tmp.dir.createDirPath(testing.io, "lib/unknown");
+    try tmp.dir.createDirPath(testing.io, "lib/nested/server");
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "lib/libjvm.so", .data = "invalid ELF" });
+    try test_util.writeElf(tmp.dir, "lib/unknown/libjvm.so", "no version banner\x00", std.elf.PF_R);
+    try test_util.writeElf(tmp.dir, "lib/nested/server/libjvm.so", " JRE (1.6.0_45-b06)\x00", std.elf.PF_R);
 
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const gpa = arena.allocator();
 
     const library_dir = try tmp.dir.realPathFileAlloc(testing.io, "lib", gpa);
-    try testing.expectEqual(
-        @as(?u32, 6),
-        try detectLauncherVersion(testing.io, gpa, library_dir),
-    );
+    try testing.expectEqual(@as(?u32, null), try detectLauncherVersion(testing.io, gpa, library_dir));
 
-    try tmp.dir.writeFile(
-        testing.io,
-        .{ .sub_path = "lib/jvm.cfg", .data = "# Default client VM\n\n-client KNOWN # first entry\n-server KNOWN\n" },
-    );
-    try testing.expectEqual(@as(?u32, 8), try detectLauncherVersion(testing.io, gpa, library_dir));
+    try tmp.dir.createDirPath(testing.io, "lib/vendor-vm");
+    try test_util.writeElf(tmp.dir, "lib/vendor-vm/libjvm.so", " JRE (21.0.9+1-LTS)\x00", std.elf.PF_R);
+    try testing.expectEqual(@as(?u32, 21), try detectLauncherVersion(testing.io, gpa, library_dir));
+}
 
-    try tmp.dir.writeFile(
-        testing.io,
-        .{ .sub_path = "lib/jvm.cfg", .data = "-ignored IGNORE\n-warned WARN\n-disabled ERROR\n-alias ALIASED_TO -server\n-client KNOWN\n-server KNOWN\n" },
-    );
-    try testing.expectEqual(
-        @as(?u32, 8),
-        try detectLauncherVersion(testing.io, gpa, library_dir),
-    );
+test "JVM launcher: ignores directory symlinks to another Java installation" {
+    const test_util = @import("test_util.zig");
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
 
-    try tmp.dir.writeFile(
-        testing.io,
-        .{ .sub_path = "lib/jvm.cfg", .data = "-server IF_SERVER_CLASS -client\n-client KNOWN\n" },
-    );
-    try testing.expectEqual(
-        @as(?u32, 6),
-        try detectLauncherVersion(testing.io, gpa, library_dir),
-    );
+    try tmp.dir.createDirPath(testing.io, "lib");
+    try tmp.dir.createDirPath(testing.io, "other-jdk/server");
+    try test_util.writeElf(tmp.dir, "other-jdk/server/libjvm.so", " JRE (1.6.0_45-b06)\x00", std.elf.PF_R);
+    try tmp.dir.symLink(testing.io, "../other-jdk/server", "lib/linked-vm", .{ .is_directory = true });
 
-    try tmp.dir.writeFile(
-        testing.io,
-        .{ .sub_path = "lib/jvm.cfg", .data = "-ignored IGNORE\n-warned WARN\n-disabled ERROR\n-alias ALIASED_TO -server\n" },
-    );
-    try testing.expectError(
-        error.UnsupportedJvmSelection,
-        detectLauncherVersion(testing.io, gpa, library_dir),
-    );
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const gpa = arena.allocator();
+    const library_dir = try tmp.dir.realPathFileAlloc(testing.io, "lib", gpa);
 
-    try tmp.dir.writeFile(
-        testing.io,
-        .{ .sub_path = "lib/jvm.cfg", .data = "# No default VM\n" },
-    );
-    try testing.expectError(
-        error.InvalidJvmConfiguration,
-        detectLauncherVersion(testing.io, gpa, library_dir),
-    );
+    try testing.expectEqual(@as(?u32, null), try detectLauncherVersion(testing.io, gpa, library_dir));
+
+    try tmp.dir.createDirPath(testing.io, "lib/server");
+    try test_util.writeElf(tmp.dir, "lib/server/libjvm.so", " JRE (21.0.9+1-LTS)\x00", std.elf.PF_R);
+    try testing.expectEqual(@as(?u32, 21), try detectLauncherVersion(testing.io, gpa, library_dir));
+}
+
+test "JVM launcher: returns the first recognized version without checking later candidates" {
+    const test_util = @import("test_util.zig");
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try tmp.dir.createDirPath(testing.io, "lib/server");
+    try test_util.writeElf(tmp.dir, "lib/libjvm.so", " JRE (1.6.0_45-b06)\x00", std.elf.PF_R | std.elf.PF_X);
+    try test_util.writeElf(tmp.dir, "lib/server/libjvm.so", " JRE (21.0.9+1-LTS)\x00", std.elf.PF_R);
+
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const gpa = arena.allocator();
+    const library_dir = try tmp.dir.realPathFileAlloc(testing.io, "lib", gpa);
+
+    try testing.expectEqual(@as(?u32, 6), try detectLauncherVersion(testing.io, gpa, library_dir));
 }
 
 test "JVM launcher: follows OpenJ9 forwarders to numbered and unnumbered VM libraries" {
@@ -347,7 +309,6 @@ test "JVM launcher: follows OpenJ9 forwarders to numbered and unnumbered VM libr
 
         try tmp.dir.createDirPath(testing.io, "lib/j9vm");
         try tmp.dir.createDirPath(testing.io, "lib/default");
-        try tmp.dir.writeFile(testing.io, .{ .sub_path = "lib/jvm.cfg", .data = "-j9vm KNOWN\n" });
 
         try test_util.writeElf(tmp.dir, "lib/j9vm/libjvm.so", "IBM_JAVA_OPTIONS\x00-Xjvm:\x00", std.elf.PF_R);
         try test_util.writeElf(tmp.dir, "lib/default/libj9vmchk29.so", "VM check helper\x00", std.elf.PF_R);
@@ -455,7 +416,6 @@ test "JVM launcher: ordinary command line still detects the bundled Java 6 VM" {
     defer tmp.cleanup();
 
     try tmp.dir.createDirPath(testing.io, "lib/server");
-    try tmp.dir.writeFile(testing.io, .{ .sub_path = "lib/jvm.cfg", .data = "-server KNOWN\n" });
     try test_util.writeElf(tmp.dir, "lib/server/libjvm.so", " JRE (1.6.0_45-b06)\x00", std.elf.PF_R);
     try tmp.dir.writeFile(testing.io, .{ .sub_path = "cmdline", .data = "java\x00-cp\x00classes\x00Main\x00" });
 

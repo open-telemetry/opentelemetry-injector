@@ -5,9 +5,12 @@
 pub const arg_parser = @import("args_parser.zig");
 pub const auxv = @import("auxv.zig");
 pub const config = @import("config.zig");
+pub const config_values = @import("config_values.zig");
 pub const dotnet = @import("dotnet.zig");
 pub const libc = @import("libc.zig");
 pub const jvm = @import("jvm.zig");
+pub const jvm_version = @import("jvm_version.zig");
+pub const jvm_launcher = @import("jvm_launcher.zig");
 pub const nodejs = @import("nodejs.zig");
 pub const patterns_matcher = @import("patterns_matcher.zig");
 pub const patterns_util = @import("patterns_util.zig");

@@ -13,6 +13,26 @@ run_test_case \
   "otel.injector.jvm.no_op_agent.has_been_loaded: true; some-property: some-value" \
   "JAVA_TOOL_OPTIONS=-Dsome-property=some-value"
 
+run_test_case \
+  "adds the Java agent when Java is launched through a shell" \
+  "app" \
+  "sh -c 'exec java -jar Main.jar verify-javaagent-has-been-injected'" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true"
+
+run_test_case \
+  "skips the Java agent when the configured minimum Java version is above Java 21" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: -" \
+  "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=22"
+
+run_test_case \
+  "preserves existing Java options when Java is launched through a shell" \
+  "app" \
+  "sh -c 'exec java -jar Main.jar verify-javaagent-has-been-injected-and-existing-property-is-still-in-place'" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true; some-property: some-value" \
+  "JAVA_TOOL_OPTIONS=-Dsome-property=some-value"
+
 # For test cases with the "default configuration file" substring in their label, run-tests-within-container.sh
 # will provide a configuration file in the expected location (/etc/opentelemetry/injector/injector.conf).
 run_test_case \

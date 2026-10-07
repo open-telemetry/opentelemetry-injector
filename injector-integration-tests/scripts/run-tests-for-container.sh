@@ -36,10 +36,14 @@ if [[ "$TEST_SET" = "jvm-legacy.tests" && ( "$ARCH" != "amd64" || "$LIBC" != "gl
   exit 0
 fi
 
-if [[ "$TEST_SET" = "jvm-openj9.tests" && "$LIBC" != "glibc" ]]; then
-  echo "skipping jvm-openj9.tests: the IBM Semeru OpenJ9 image uses glibc"
-  exit 0
-fi
+case "$TEST_SET" in
+  jvm-openj9.tests | jvm-graalvm.tests | jvm-zing.tests)
+    if [[ "$LIBC" != "glibc" ]]; then
+      echo "skipping $TEST_SET: this JVM image uses glibc"
+      exit 0
+    fi
+    ;;
+esac
 
 # Note: Runtime-independent test sets like default.tests, sdk-does-not-exist.tests, and sdk-cannot-be-accessed.tests
 # also use Node.js as the runtime for the container under test.
@@ -52,6 +56,12 @@ if [[ "$TEST_SET" = "jvm.tests" ]]; then
 fi
 if [[ "$TEST_SET" = "jvm-openj9.tests" ]]; then
   test_app="jvm-openj9"
+fi
+if [[ "$TEST_SET" = "jvm-graalvm.tests" ]]; then
+  test_app="jvm-graalvm"
+fi
+if [[ "$TEST_SET" = "jvm-zing.tests" ]]; then
+  test_app="jvm-zing"
 fi
 if [[ "$TEST_SET" = "jvm-legacy.tests" ]]; then
   test_app="jvm-legacy"
@@ -108,6 +118,16 @@ case "$test_app" in
     dockerfile_name="injector-integration-tests/apps/jvm/Dockerfile"
     base_image_build=maven:3.9-eclipse-temurin-21
     base_image_run=ibm-semeru-runtimes:open-21-jre-jammy
+    ;;
+  "jvm-graalvm")
+    dockerfile_name="injector-integration-tests/apps/jvm/Dockerfile"
+    base_image_build=maven:3.9-eclipse-temurin-21
+    base_image_run=ghcr.io/graalvm/jdk-community:21
+    ;;
+  "jvm-zing")
+    dockerfile_name="injector-integration-tests/apps/jvm/Dockerfile"
+    base_image_build=maven:3.9-eclipse-temurin-21
+    base_image_run=azul/prime:21
     ;;
   "jvm-legacy")
     dockerfile_name="injector-integration-tests/apps/jvm-legacy/Dockerfile"

@@ -67,7 +67,10 @@ pub fn inspectBinary(io: std.Io, path: []const u8) !BinaryVersion {
             }
 
             const bytes = buffer[0 .. carry + count];
-            if (scanBytes(bytes, .hotspot) orelse scanBytes(bytes, .openj9)) |major| {
+            const detected_major = scanBytes(bytes, .hotspot) orelse
+                scanBytes(bytes, .openj9) orelse
+                scanZingVersion(bytes);
+            if (detected_major) |major| {
                 return .{ .major = major, .openj9_forwarder = false };
             }
 
@@ -92,7 +95,8 @@ pub fn inspectBinary(io: std.Io, path: []const u8) !BinaryVersion {
 }
 
 fn scanBytes(bytes: []const u8, vm: Vm) ?u32 {
-    // HotSpot embeds its complete banner in the binary. OpenJ9 on the other hand formats its banner at runtime,
+    // HotSpot, including GraalVM's JVM, embeds its complete banner in the binary.
+    // OpenJ9 on the other hand formats its banner at runtime,
     // and its code can contain labels for several Java versions, i.e. they show the VM version and the
     // java classes version. OpenJ9 builds (at least for Java 8+) have a NULL
     // terminated OpenJDK version immediately after these internal-version/OS
@@ -112,6 +116,25 @@ fn scanBytes(bytes: []const u8, vm: Vm) ?u32 {
         const tail = bytes[position..];
         const bounded = tail[0..@min(tail.len, max_version_length)];
         const end = std.mem.indexOfScalar(u8, bounded, terminator) orelse continue;
+
+        if (parseJavaMajorVersion(bounded[0..end])) |major| return major;
+    }
+
+    return null;
+}
+
+fn scanZingVersion(bytes: []const u8) ?u32 {
+    // Zing has NULL delimited string like this: "1.8.0_481-zing_26.01.0.0-b11".
+    // The Java version comes before "-zing_", the numbers after it identify the Zing product release.
+    const marker = "-zing_";
+    var position: usize = 0;
+
+    while (std.mem.indexOfPos(u8, bytes, position, marker)) |index| {
+        position = index + marker.len;
+        const previous_terminator = std.mem.lastIndexOfScalar(u8, bytes[0..index], 0) orelse continue;
+        const tail = bytes[previous_terminator + 1 ..];
+        const bounded = tail[0..@min(tail.len, max_version_length)];
+        const end = std.mem.indexOfScalar(u8, bounded, 0) orelse continue;
 
         if (parseJavaMajorVersion(bounded[0..end])) |major| return major;
     }
@@ -202,10 +225,58 @@ test "JVM version: extracts legacy and modern majors and rejects invalid prefixe
     }) |case| try testing.expectEqual(case.major, parseJavaMajorVersion(case.text));
 }
 
-test "JVM version: HotSpot banners from JDK 6, 8 and 21" {
+test "JVM version: HotSpot and GraalVM banners from JDK 6, 8 and 21" {
     try testing.expectEqual(@as(?u32, 6), scanBytes("Java HotSpot(TM) 64-Bit Server VM (20.45-b01) for linux-amd64 JRE (1.6.0_45-b06), built on Mar 26 2013", .hotspot));
     try testing.expectEqual(@as(?u32, 8), scanBytes("OpenJDK 64-Bit Server VM (25.472-b08) for linux-amd64 JRE (1.8.0_472-b08), built on Oct 22 2025", .hotspot));
     try testing.expectEqual(@as(?u32, 21), scanBytes("OpenJDK 64-Bit Server VM (21.0.10+7-LTS) for linux-aarch64 JRE (21.0.10+7-LTS), built on 2026-01-20", .hotspot));
+
+    const graalvm_banner = "OpenJDK 64-Bit Server VM (21.0.2+13-jvmci-23.1-b30) " ++
+        "for linux-amd64 JRE (21.0.2+13-jvmci-23.1-b30), built on 2024-01-06T13:12:14Z";
+    try testing.expectEqual(@as(?u32, 21), scanBytes(graalvm_banner, .hotspot));
+}
+
+test "JVM version: Zing uses the Java major rather than the product release" {
+    const test_util = @import("test_util.zig");
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const path = try tmp.dir.realPathFileAlloc(testing.io, ".", testing.allocator);
+    defer testing.allocator.free(path);
+    const binary = try std.fs.path.join(testing.allocator, &.{ path, "libjvm.so" });
+    defer testing.allocator.free(binary);
+
+    const Case = struct { version: []const u8, major: u32 };
+    for ([_]Case{
+        .{ .version = "1.8.0_481-zing_26.01.0.0-b11\x00", .major = 8 },
+        .{ .version = "21.0.9.0.101-zing_26.01.0.0-b11\x00", .major = 21 },
+    }) |case| {
+        const content = try std.mem.concat(testing.allocator, u8, &.{ "26.01.0.0\x00", case.version });
+        defer testing.allocator.free(content);
+
+        try test_util.writeElf(tmp.dir, "libjvm.so", content, std.elf.PF_R);
+        try testing.expectEqual(@as(?u32, case.major), (try inspectBinary(testing.io, binary)).major);
+    }
+}
+
+test "JVM version: Zing requires a complete version string and skips format placeholders" {
+    for ([_][]const u8{
+        "",
+        "\x0026.01.0.0\x00",
+        "\x00%s-zing_%s\x00",
+        "\x00-zing_26.01.0.0-b11\x00",
+        "\x0021garbage-zing_26.01.0.0-b11\x00",
+        "\x0021.0.9-zing_26.01.0.0-b11",
+        "21.0.9-zing_26.01.0.0-b11\x00",
+        "\x0021." ++ "0" ** max_version_length ++ "-zing_26.01.0.0-b11\x00",
+    }) |bytes| {
+        try testing.expectEqual(@as(?u32, null), scanZingVersion(bytes));
+    }
+
+    const content = "\x00%s-zing_%s\x00" ++
+        "21.0.9.0.101-zing_26.01.0.0-b11\x00" ++
+        "1.8.0_481-zing_26.01.0.0-b11\x00";
+
+    try testing.expectEqual(@as(?u32, 21), scanZingVersion(content));
 }
 
 test "JVM version: OpenJ9 uses the Java build, not shared JRE labels or the VM release" {
@@ -236,6 +307,13 @@ test "JVM version: reads stripped ELF binaries and versions crossing file read b
     const path = try tmp.dir.realPathFileAlloc(testing.io, "libjvm.so", testing.allocator);
     defer testing.allocator.free(path);
     try testing.expectEqual(@as(?u32, 6), (try inspectBinary(testing.io, path)).major);
+
+    const zing = "x" ** (32 * 1024 - 16) ++ "\x0021.0.9.0.101-zing_26.01.0.0-b11\x00";
+    try test_util.writeElf(tmp.dir, "libjvm.so", zing, std.elf.PF_R | std.elf.PF_X);
+    try testing.expectEqual(@as(?u32, 21), (try inspectBinary(testing.io, path)).major);
+
+    try test_util.writeElf(tmp.dir, "libjvm.so", zing, std.elf.PF_R | std.elf.PF_W);
+    try testing.expectEqual(@as(?u32, null), (try inspectBinary(testing.io, path)).major);
 
     // Test without version signature
     try test_util.writeElf(tmp.dir, "libjvm.so", "no version signature", std.elf.PF_R);

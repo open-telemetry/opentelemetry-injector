@@ -31,6 +31,11 @@ if [ -z "${TEST_SET:-}" ]; then
   TEST_SET=default.tests
 fi
 
+if [[ "$TEST_SET" = "jvm-legacy.tests" && ( "$ARCH" != "amd64" || "$LIBC" != "glibc" ) ]]; then
+  echo "skipping jvm-legacy.tests: the pinned Java 6 image supports only amd64/glibc"
+  exit 0
+fi
+
 # Note: Runtime-independent test sets like default.tests, sdk-does-not-exist.tests, and sdk-cannot-be-accessed.tests
 # also use Node.js as the runtime for the container under test.
 test_app="nodejs"
@@ -39,6 +44,9 @@ if [[ "$TEST_SET" = "dotnet.tests" ]]; then
 fi
 if [[ "$TEST_SET" = "jvm.tests" ]]; then
   test_app="jvm"
+fi
+if [[ "$TEST_SET" = "jvm-legacy.tests" ]]; then
+  test_app="jvm-legacy"
 fi
 if [[ "$TEST_SET" = "no-getenv-symbol.tests" ]]; then
   test_app="no-getenv-symbol"
@@ -87,6 +95,11 @@ case "$test_app" in
       base_image_build=maven:3.9-eclipse-temurin-21-alpine
       base_image_run=eclipse-temurin:21-jre-alpine
     fi
+    ;;
+  "jvm-legacy")
+    dockerfile_name="injector-integration-tests/apps/jvm-legacy/Dockerfile"
+    base_image_build=eclipse-temurin:8-jdk
+    base_image_run=vulhub/openjdk:oracle-jdk-6
     ;;
   "nodejs")
     base_image_run=node:22.15.0-bookworm-slim
@@ -154,7 +167,7 @@ elif [[ "$TEST_SET" = "sdk-cannot-be-accessed.tests" ]]; then
   create_sdk_dummy_files_script="scripts/create-inaccessible-sdk-dummy-files.sh"
 fi
 
-docker rmi -f "$image_name" 2> /dev/null
+docker rmi -f "$image_name" 2> /dev/null || true
 
 set -x
 docker build \

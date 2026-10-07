@@ -8,4 +8,5 @@ subtext: |
   Skip Java agent injection in processes without a loaded JVM launcher, so shells do not pass it to unsupported Java children.
   Allow injection when we know it's Java and we cannot determine the version. 
   Does not handle JVM switching using -XXaltjvm=, when this is detected we allow injection.
-  A new environment variable OTEL_INJECTOR_JVM_VERSION_CHECK_DISABLED=true bypasses the check.
+  Configure the minimum Java major version with jvm_auto_instrumentation_minimum_java_major_version in the configuration file
+  or JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION in the environment (default: 8). Environment values take priority.

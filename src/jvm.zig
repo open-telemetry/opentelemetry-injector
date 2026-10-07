@@ -32,7 +32,7 @@ pub fn checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
         original_value_optional,
         configuration.jvm_auto_instrumentation_agent_path,
         configuration.jvm_instrumentation_disabled,
-        configuration.jvm_version_check_disabled,
+        configuration.jvm_auto_instrumentation_minimum_java_major_version,
         get_env,
         getJavaMajorVersion, // Passed in for testing reasons.
     );
@@ -44,7 +44,7 @@ fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
     original_value_optional: ?[:0]const u8,
     jvm_auto_instrumentation_agent_path: []u8,
     jvm_instrumentation_disabled: bool,
-    jvm_version_check_disabled: bool,
+    minimum_java_major_version: u32,
     get_env: environ.GetenvFn,
     comptime get_java_major_version: fn (std.Io, std.mem.Allocator, environ.GetenvFn) anyerror!?u32,
 ) ?[:0]u8 {
@@ -53,28 +53,29 @@ fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
         return null;
     }
 
-    if (!jvm_version_check_disabled) {
-        var major: ?u32 = null;
-        if (get_java_major_version(io, gpa, get_env)) |detected_major| {
-            major = detected_major;
-        } else |err| {
-            // We need to ignore processes that don't have Java because we'll inject into any shell that wraps a Java
-            // process, and then, like it or not, this environment variable will propagate to the JVM process.
-            if (err == error.JvmLauncherNotFound) {
-                print.printDebug("Skipping Java agent injection because no Java launcher is loaded.", .{});
-                return null;
-            }
-            print.printDebug("Cannot detect the JVM's Java version, allowing Java agent injection: {}", .{err});
+    var major: ?u32 = null;
+    if (get_java_major_version(io, gpa, get_env)) |detected_major| {
+        major = detected_major;
+    } else |err| {
+        // We need to ignore processes that don't have Java because we'll inject into any shell that wraps a Java
+        // process, and then, like it or not, this environment variable will propagate to the JVM process.
+        if (err == error.JvmLauncherNotFound) {
+            print.printDebug("Skipping Java agent injection because no Java launcher is loaded.", .{});
+            return null;
         }
-        if (major) |java_major| {
-            if (java_major < 8) {
-                print.printInfo("Skipping the injection of the OpenTelemetry Java agent because Java {d} is older than the minimum supported version 8.", .{java_major});
-                return null;
-            }
-            print.printDebug("Detected Java {d} in the JVM binary.", .{java_major});
-        } else {
-            print.printDebug("No JVM version detected, allowing Java agent injection.", .{});
+        print.printDebug("Cannot detect the JVM's Java version, allowing Java agent injection: {}", .{err});
+    }
+    if (major) |java_major| {
+        if (java_major < minimum_java_major_version) {
+            print.printInfo(
+                "Skipping the injection of the OpenTelemetry Java agent because Java {d} is older than the minimum supported version {d}.",
+                .{ java_major, minimum_java_major_version },
+            );
+            return null;
         }
+        print.printDebug("Detected Java {d} in the JVM binary.", .{java_major});
+    } else {
+        print.printDebug("No JVM version detected, allowing Java agent injection.", .{});
     }
 
     // Check the existence of the Jar file: by passing a `-javaagent` to a
@@ -110,7 +111,7 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return n
             null,
             path,
             true,
-            false,
+            config.default_jvm_auto_instrumentation_minimum_java_major_version,
             test_util.posixGetenv,
             getJavaMajorVersion,
         );
@@ -127,7 +128,7 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return n
             null,
             path,
             false,
-            false,
+            config.default_jvm_auto_instrumentation_minimum_java_major_version,
             test_util.posixGetenv,
             getJavaMajorVersion,
         );
@@ -144,7 +145,7 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return n
             null,
             path,
             false,
-            false,
+            config.default_jvm_auto_instrumentation_minimum_java_major_version,
             test_util.posixGetenv,
             getJavaMajorVersion,
         );
@@ -161,7 +162,7 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should return n
             "original value",
             path,
             false,
-            false,
+            config.default_jvm_auto_instrumentation_minimum_java_major_version,
             test_util.posixGetenv,
             getJavaMajorVersion,
         );
@@ -186,7 +187,7 @@ test "JVM version gate: skips Java 6 and 7 while preserving existing options" {
             "-Dexisting=preserved",
             jar,
             false,
-            false,
+            config.default_jvm_auto_instrumentation_minimum_java_major_version,
             test_util.posixGetenv,
             Detector.detect,
         );
@@ -194,7 +195,7 @@ test "JVM version gate: skips Java 6 and 7 while preserving existing options" {
     }
 }
 
-test "JVM version gate: injects for Java 8+, unknown versions, detection errors and bypass" {
+test "JVM version gate: injects for Java 8+, unknown versions and detection errors" {
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.writeFile(testing.io, .{ .sub_path = "agent.jar", .data = "" });
@@ -209,7 +210,16 @@ test "JVM version gate: injects for Java 8+, unknown versions, detection errors 
                 return major;
             }
         };
-        const result = doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(testing.io, testing.allocator, "-Dexisting=preserved", jar, false, false, test_util.posixGetenv, Detector.detect).?;
+        const result = doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+            testing.io,
+            testing.allocator,
+            "-Dexisting=preserved",
+            jar,
+            false,
+            config.default_jvm_auto_instrumentation_minimum_java_major_version,
+            test_util.posixGetenv,
+            Detector.detect,
+        ).?;
         defer testing.allocator.free(result);
         try testing.expectEqualStrings(expected, result);
     }
@@ -218,19 +228,18 @@ test "JVM version gate: injects for Java 8+, unknown versions, detection errors 
             return error.AccessDenied;
         }
     };
-    const on_error = doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(testing.io, testing.allocator, "-Dexisting=preserved", jar, false, false, test_util.posixGetenv, FailedDetector.detect).?;
+    const on_error = doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+        testing.io,
+        testing.allocator,
+        "-Dexisting=preserved",
+        jar,
+        false,
+        config.default_jvm_auto_instrumentation_minimum_java_major_version,
+        test_util.posixGetenv,
+        FailedDetector.detect,
+    ).?;
     defer testing.allocator.free(on_error);
     try testing.expectEqualStrings(expected, on_error);
-
-    const UnusedDetector = struct {
-        fn detect(_: std.Io, _: std.mem.Allocator, _: environ.GetenvFn) anyerror!?u32 {
-            // The bypass must avoid running version detection.
-            unreachable;
-        }
-    };
-    const bypassed = doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(testing.io, testing.allocator, "-Dexisting=preserved", jar, false, true, test_util.posixGetenv, UnusedDetector.detect).?;
-    defer testing.allocator.free(bypassed);
-    try testing.expectEqualStrings(expected, bypassed);
 }
 
 test "JVM version gate: leaves existing agents unchanged on Java 6 and 7" {
@@ -250,7 +259,16 @@ test "JVM version gate: leaves existing agents unchanged on Java 6 and 7" {
                 return major;
             }
         };
-        const result = doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(testing.io, testing.allocator, original, jar, false, false, test_util.posixGetenv, Detector.detect);
+        const result = doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+            testing.io,
+            testing.allocator,
+            original,
+            jar,
+            false,
+            config.default_jvm_auto_instrumentation_minimum_java_major_version,
+            test_util.posixGetenv,
+            Detector.detect,
+        );
         try testing.expectEqual(@as(?[:0]u8, null), result);
         try testing.expectEqualStrings(expected, original);
     }
@@ -360,17 +378,62 @@ test "JVM version gate: does not add a Java agent to a non-Java parent process" 
     };
     const original = try testing.allocator.dupeZ(u8, "-Dexisting=preserved -javaagent:/user-agent.jar");
     defer testing.allocator.free(original);
-    const result = doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
-        testing.io,
-        testing.allocator,
-        original,
-        jar,
-        false,
-        false,
-        test_util.posixGetenv,
-        NonJavaDetector.detect,
-    );
-    defer if (result) |value| testing.allocator.free(value);
-    try testing.expectEqual(@as(?[:0]u8, null), result);
-    try testing.expectEqualStrings("-Dexisting=preserved -javaagent:/user-agent.jar", original);
+    for ([_]u32{ 0, 6, 8 }) |minimum| {
+        const result = doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+            testing.io,
+            testing.allocator,
+            original,
+            jar,
+            false,
+            minimum,
+            test_util.posixGetenv,
+            NonJavaDetector.detect,
+        );
+        defer if (result) |value| testing.allocator.free(value);
+        try testing.expectEqual(@as(?[:0]u8, null), result);
+        try testing.expectEqualStrings("-Dexisting=preserved -javaagent:/user-agent.jar", original);
+    }
+}
+
+test "JVM version gate: respects the configured minimum Java major version" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "agent.jar", .data = "" });
+    const jar = try tmp.dir.realPathFileAlloc(testing.io, "agent.jar", testing.allocator);
+    defer testing.allocator.free(jar);
+    const expected = try std.fmt.allocPrint(testing.allocator, "-Dexisting=preserved -javaagent:{s}", .{jar});
+    defer testing.allocator.free(expected);
+    const Case = struct { major: u32, minimum: u32, inject: bool };
+    inline for (.{
+        Case{ .major = 6, .minimum = 0, .inject = true },
+        Case{ .major = 6, .minimum = 6, .inject = true },
+        Case{ .major = 6, .minimum = 7, .inject = false },
+        Case{ .major = 8, .minimum = 8, .inject = true },
+        Case{ .major = 8, .minimum = 9, .inject = false },
+        Case{ .major = 11, .minimum = 11, .inject = true },
+        Case{ .major = 11, .minimum = 21, .inject = false },
+        Case{ .major = 21, .minimum = 17, .inject = true },
+    }) |case| {
+        const Detector = struct {
+            fn detect(_: std.Io, _: std.mem.Allocator, _: environ.GetenvFn) anyerror!?u32 {
+                return case.major;
+            }
+        };
+        const result = doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+            testing.io,
+            testing.allocator,
+            "-Dexisting=preserved",
+            jar,
+            false,
+            case.minimum,
+            test_util.posixGetenv,
+            Detector.detect,
+        );
+        defer if (result) |value| testing.allocator.free(value);
+        if (case.inject) {
+            try testing.expectEqualStrings(expected, result orelse return error.TestUnexpectedResult);
+        } else {
+            try testing.expectEqual(@as(?[:0]u8, null), result);
+        }
+    }
 }

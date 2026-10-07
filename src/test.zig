@@ -5,7 +5,6 @@
 pub const arg_parser = @import("args_parser.zig");
 pub const auxv = @import("auxv.zig");
 pub const config = @import("config.zig");
-pub const config_values = @import("config_values.zig");
 pub const dotnet = @import("dotnet.zig");
 pub const libc = @import("libc.zig");
 pub const jvm = @import("jvm.zig");

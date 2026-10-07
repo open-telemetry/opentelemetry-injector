@@ -1,0 +1,11 @@
+change_type: enhancement
+component: jvm
+note: Detect incompatible Java versions during normal Java launches and skip Java agent injection.
+issues: []
+subtext: |
+  Inspect the JVM launcher default bundled JVM binary before the VM is loaded.
+  Leave existing Java options and agents unchanged when skipping injection.
+  Skip Java agent injection in processes without a loaded JVM launcher, so shells do not pass it to unsupported Java children.
+  Allow injection when we know it's Java and we cannot determine the version. 
+  Does not handle JVM switching using -XXaltjvm=, when this is detected we allow injection.
+  A new environment variable OTEL_INJECTOR_JVM_VERSION_CHECK_DISABLED=true bypasses the check.

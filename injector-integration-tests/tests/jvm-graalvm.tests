@@ -1,0 +1,14 @@
+# shellcheck shell=sh
+
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+run_test_case \
+  "uses the GraalVM VM" \
+  "app" \
+  "java -version 2>&1 | grep -m 1 -o 'GraalVM CE'" \
+  "GraalVM CE"
+
+# Run the same injection and minimum-version checks as HotSpot.
+# shellcheck source=injector-integration-tests/tests/jvm.tests
+. tests/jvm.tests

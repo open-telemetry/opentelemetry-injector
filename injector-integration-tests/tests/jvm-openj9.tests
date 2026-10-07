@@ -1,0 +1,14 @@
+# shellcheck shell=sh
+
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+run_test_case \
+  "uses the OpenJ9 VM" \
+  "app" \
+  "java -version 2>&1 | grep -o 'Eclipse OpenJ9 VM'" \
+  "Eclipse OpenJ9 VM"
+
+# Run the same injection and minimum-version checks as HotSpot.
+# shellcheck source=injector-integration-tests/tests/jvm.tests
+. tests/jvm.tests

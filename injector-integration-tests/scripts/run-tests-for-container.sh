@@ -36,6 +36,11 @@ if [[ "$TEST_SET" = "jvm-legacy.tests" && ( "$ARCH" != "amd64" || "$LIBC" != "gl
   exit 0
 fi
 
+if [[ "$TEST_SET" = "jvm-openj9.tests" && "$LIBC" != "glibc" ]]; then
+  echo "skipping jvm-openj9.tests: the IBM Semeru OpenJ9 image uses glibc"
+  exit 0
+fi
+
 # Note: Runtime-independent test sets like default.tests, sdk-does-not-exist.tests, and sdk-cannot-be-accessed.tests
 # also use Node.js as the runtime for the container under test.
 test_app="nodejs"
@@ -44,6 +49,9 @@ if [[ "$TEST_SET" = "dotnet.tests" ]]; then
 fi
 if [[ "$TEST_SET" = "jvm.tests" ]]; then
   test_app="jvm"
+fi
+if [[ "$TEST_SET" = "jvm-openj9.tests" ]]; then
+  test_app="jvm-openj9"
 fi
 if [[ "$TEST_SET" = "jvm-legacy.tests" ]]; then
   test_app="jvm-legacy"
@@ -95,6 +103,11 @@ case "$test_app" in
       base_image_build=maven:3.9-eclipse-temurin-21-alpine
       base_image_run=eclipse-temurin:21-jre-alpine
     fi
+    ;;
+  "jvm-openj9")
+    dockerfile_name="injector-integration-tests/apps/jvm/Dockerfile"
+    base_image_build=maven:3.9-eclipse-temurin-21
+    base_image_run=ibm-semeru-runtimes:open-21-jre-jammy
     ;;
   "jvm-legacy")
     dockerfile_name="injector-integration-tests/apps/jvm-legacy/Dockerfile"

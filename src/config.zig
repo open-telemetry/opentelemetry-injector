@@ -3,6 +3,7 @@
 
 const std = @import("std");
 const build_options = @import("build_options");
+const config_values = @import("config_values.zig");
 
 const print = @import("print.zig");
 const test_util = @import("test_util.zig");
@@ -36,6 +37,7 @@ const auto_instrumentation_disabled_key = "auto_instrumentation_disabled";
 const dotnet_agent_path_prefix_env_var = "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
 const dotnet_minimum_dotnet_major_version_env_var = "DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION";
 const jvm_agent_path_env_var = "JVM_AUTO_INSTRUMENTATION_AGENT_PATH";
+const jvm_version_check_disabled_env_var = "OTEL_INJECTOR_JVM_VERSION_CHECK_DISABLED";
 const nodejs_agent_path_env_var = "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
 const python_agent_path_prefix_env_var = "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
 const ruby_agent_path_prefix_env_var = "RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
@@ -71,6 +73,7 @@ pub const InjectorConfiguration = struct {
     dotnet_auto_instrumentation_minimum_dotnet_major_version: u32,
     dotnet_instrumentation_disabled: bool,
     jvm_instrumentation_disabled: bool,
+    jvm_version_check_disabled: bool = false,
     nodejs_instrumentation_disabled: bool,
     python_instrumentation_disabled: bool,
     ruby_instrumentation_disabled: bool,
@@ -849,6 +852,7 @@ fn copyToPermanentlyAllocatedHeap(
         .dotnet_auto_instrumentation_minimum_dotnet_major_version = preliminary_configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version,
         .dotnet_instrumentation_disabled = preliminary_configuration.dotnet_instrumentation_disabled,
         .jvm_instrumentation_disabled = preliminary_configuration.jvm_instrumentation_disabled,
+        .jvm_version_check_disabled = preliminary_configuration.jvm_version_check_disabled,
         .nodejs_instrumentation_disabled = preliminary_configuration.nodejs_instrumentation_disabled,
         .python_instrumentation_disabled = preliminary_configuration.python_instrumentation_disabled,
         .ruby_instrumentation_disabled = preliminary_configuration.ruby_instrumentation_disabled,
@@ -2108,6 +2112,10 @@ fn readConfigurationFromEnvironment(io: std.Io, arena_allocator: std.mem.Allocat
         };
         configuration.jvm_auto_instrumentation_agent_path = jvm_value;
     }
+    if (getenv_fn(io, arena_allocator, jvm_version_check_disabled_env_var)) |value| {
+        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
+        configuration.jvm_version_check_disabled = config_values.parseBooleanValue(trimmed_value);
+    }
     if (getenv_fn(io, arena_allocator, nodejs_agent_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         const nodejs_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
@@ -2179,6 +2187,42 @@ fn readConfigurationFromEnvironment(io: std.Io, arena_allocator: std.mem.Allocat
             print.printError("error parsing exclude_arguments value from the environment {s}: {}", .{ exclude_args_value, err });
             return;
         };
+    }
+}
+
+test "readConfigurationFromEnvironment: JVM version check bypass is opt-in and survives copying" {
+    const allocator = testing.allocator;
+    const Case = struct { value: []const u8, disabled: bool };
+    for ([_]Case{
+        .{ .value = "", .disabled = false },
+        .{ .value = "false", .disabled = false },
+        .{ .value = "0", .disabled = false },
+        .{ .value = "yes", .disabled = false },
+        .{ .value = "1", .disabled = true },
+        .{ .value = "t", .disabled = true },
+        .{ .value = "T", .disabled = true },
+        .{ .value = "true", .disabled = true },
+        .{ .value = " TRUE ", .disabled = true },
+    }) |case| {
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        defer arena.deinit();
+
+        var configuration = try createDefaultConfiguration(arena.allocator());
+        try testing.expect(!configuration.jvm_version_check_disabled);
+
+        const entry = try std.fmt.allocPrint(allocator, "{s}={s}", .{ jvm_version_check_disabled_env_var, case.value });
+        defer allocator.free(entry);
+
+        const original_environ = try test_util.setStdCEnviron(&.{entry});
+        defer test_util.resetStdCEnviron(original_environ);
+
+        readConfigurationFromEnvironment(testing.io, arena.allocator(), &configuration, test_util.posixGetenv);
+        try testing.expectEqual(case.disabled, configuration.jvm_version_check_disabled);
+
+        var copied = try copyToPermanentlyAllocatedHeap(allocator, configuration);
+        defer copied.deinit(allocator);
+
+        try testing.expectEqual(case.disabled, copied.jvm_version_check_disabled);
     }
 }
 

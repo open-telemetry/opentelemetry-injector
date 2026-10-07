@@ -3,6 +3,7 @@
 
 const builtin = @import("builtin");
 const std = @import("std");
+const config_values = @import("config_values.zig");
 
 const proc_self_environ_values = @import("proc_self_environ_values.zig");
 const print = @import("print.zig");
@@ -102,7 +103,7 @@ fn initFromEnvironFile(io: std.Io, self_environ_path: []const u8) !void {
     defer if (disabled_value) |v| allocator.free(v);
 
     if (disabled_value) |v| {
-        proc_self_environ_values.setOtelInjectorDisabled(parseBooleanValue(v));
+        proc_self_environ_values.setOtelInjectorDisabled(config_values.parseBooleanValue(v));
     }
 
     if (log_level_value) |log_level| {
@@ -333,25 +334,6 @@ test "initFromEnvironFile: overly long environment variable" {
     try initFromEnvironFile(testing.io, absolute_path_to_environ_file);
     try testing.expectEqual(.None, proc_self_environ_values.getLogLevel());
     try testing.expectEqual(true, proc_self_environ_values.getOtelInjectorDisabled());
-}
-
-inline fn parseBooleanValue(value: []const u8) bool {
-    return std.ascii.eqlIgnoreCase(value, "true") or
-        std.ascii.eqlIgnoreCase(value, "t") or
-        std.mem.eql(u8, value, "1");
-}
-
-test "parseBooleanValue: correctly identifies true and false values" {
-    const true_values = [_][]const u8{ "true", "True", "TRUE", "t", "T", "1" };
-    const false_values = [_][]const u8{ "false", "False", "FALSE", "f", "F", "0", "", "random", "yes", "no", "ON" };
-
-    for (true_values) |value| {
-        try testing.expect(parseBooleanValue(value));
-    }
-
-    for (false_values) |value| {
-        try testing.expect(!parseBooleanValue(value));
-    }
 }
 
 fn resolveTestAssetPath(allocator: std.mem.Allocator, relative_path: []const u8) ![]u8 {

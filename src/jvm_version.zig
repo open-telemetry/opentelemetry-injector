@@ -4,8 +4,10 @@
 const std = @import("std");
 const testing = std.testing;
 
-const Vm = enum { hotspot, openj9 };
 const max_version_length = 128;
+const openj9_version_marker = "-Xinternalversion\x00";
+const max_openj9_prefix_length = 128;
+const scan_overlap = openj9_version_marker.len + max_openj9_prefix_length + max_version_length;
 
 pub const BinaryVersion = struct {
     major: ?u32,
@@ -53,8 +55,8 @@ pub fn inspectBinary(io: std.Io, path: []const u8) !BinaryVersion {
             return error.InvalidJvmElf;
         }
 
-        // 32K for the chunk, 256B on top to handle overlap.
-        var buffer: [32 * 1024 + 256]u8 = undefined;
+        // Keep the OpenJ9 marker, intervening strings, and version together across reads.
+        var buffer: [32 * 1024 + scan_overlap]u8 = undefined;
         var carry: usize = 0;
         var offset = segment.p_offset;
 
@@ -67,10 +69,7 @@ pub fn inspectBinary(io: std.Io, path: []const u8) !BinaryVersion {
             }
 
             const bytes = buffer[0 .. carry + count];
-            const detected_major = scanBytes(bytes, .hotspot) orelse
-                scanBytes(bytes, .openj9) orelse
-                scanZingVersion(bytes);
-            if (detected_major) |major| {
+            if (scanBytes(bytes)) |major| {
                 return .{ .major = major, .openj9_forwarder = false };
             }
 
@@ -83,9 +82,8 @@ pub fn inspectBinary(io: std.Io, path: []const u8) !BinaryVersion {
                 return .{ .major = null, .openj9_forwarder = true };
             }
 
-            // Keep enough overlap for a marker plus the maximum version length. This ensures we can handle
-            // split version strings with out chunking logic.
-            carry = @min(bytes.len, 256);
+            // Preserve the marker, intervening OpenJ9 strings, and version across reads.
+            carry = @min(bytes.len, scan_overlap);
             std.mem.copyForwards(u8, buffer[0..carry], bytes[bytes.len - carry ..]);
             offset += count;
         }
@@ -94,30 +92,48 @@ pub fn inspectBinary(io: std.Io, path: []const u8) !BinaryVersion {
     return .{ .major = null, .openj9_forwarder = false };
 }
 
-fn scanBytes(bytes: []const u8, vm: Vm) ?u32 {
-    // HotSpot, including GraalVM's JVM, embeds its complete banner in the binary.
-    // OpenJ9 on the other hand formats its banner at runtime,
-    // and its code can contain labels for several Java versions, i.e. they show the VM version and the
-    // java classes version. OpenJ9 builds (at least for Java 8+) have a NULL
-    // terminated OpenJDK version immediately after these internal-version/OS
-    // strings. This is a conservative best effort layout heuristic, not an attempt to replicate the OpenJ9 ABI.
-    const marker = switch (vm) {
-        .hotspot => " JRE (",
-        .openj9 => "-Xinternalversion\x00linux\x00",
-    };
-    const terminator: u8 = switch (vm) {
-        .hotspot => ')',
-        .openj9 => 0,
-    };
+fn scanBytes(bytes: []const u8) ?u32 {
+    if (scanHotSpotVersion(bytes)) |major| return major;
+    if (scanOpenJ9Version(bytes)) |major| return major;
+    return scanZingVersion(bytes);
+}
 
+fn scanHotSpotVersion(bytes: []const u8) ?u32 {
+    // HotSpot, including GraalVM's JVM, embeds its complete banner in the binary.
+    const marker = " JRE (";
     var position: usize = 0;
+
     while (std.mem.indexOfPos(u8, bytes, position, marker)) |index| {
         position = index + marker.len;
-        const tail = bytes[position..];
-        const bounded = tail[0..@min(tail.len, max_version_length)];
-        const end = std.mem.indexOfScalar(u8, bounded, terminator) orelse continue;
+        if (parseTerminatedVersion(bytes[position..], ')')) |major| return major;
+    }
 
-        if (parseJavaMajorVersion(bounded[0..end])) |major| return major;
+    return null;
+}
+
+fn scanOpenJ9Version(bytes: []const u8) ?u32 {
+    // OpenJ9 formats its banner at runtime. Its Java version follows the
+    // internal-version and OS strings, with intervening labels and NULL padding
+    // on ARM. This observed layout is a best effort heuristic.
+    const os_marker = "\x00linux\x00";
+    var position: usize = 0;
+
+    while (std.mem.indexOfPos(u8, bytes, position, openj9_version_marker)) |index| {
+        position = index + openj9_version_marker.len;
+
+        // Include the marker's final NULL so linux must begin at a string boundary.
+        const tail = bytes[position - 1 ..];
+        const prefix = tail[0..@min(tail.len, max_openj9_prefix_length)];
+        const os_index = std.mem.indexOf(u8, prefix, os_marker) orelse continue;
+
+        var version_start = os_index + os_marker.len;
+        while (version_start < prefix.len and prefix[version_start] == 0) {
+            version_start += 1;
+        }
+
+        if (version_start == prefix.len) continue;
+
+        if (parseTerminatedVersion(tail[version_start..], 0)) |major| return major;
     }
 
     return null;
@@ -133,13 +149,16 @@ fn scanZingVersion(bytes: []const u8) ?u32 {
         position = index + marker.len;
         const previous_terminator = std.mem.lastIndexOfScalar(u8, bytes[0..index], 0) orelse continue;
         const tail = bytes[previous_terminator + 1 ..];
-        const bounded = tail[0..@min(tail.len, max_version_length)];
-        const end = std.mem.indexOfScalar(u8, bounded, 0) orelse continue;
-
-        if (parseJavaMajorVersion(bounded[0..end])) |major| return major;
+        if (parseTerminatedVersion(tail, 0)) |major| return major;
     }
 
     return null;
+}
+
+fn parseTerminatedVersion(bytes: []const u8, terminator: u8) ?u32 {
+    const bounded = bytes[0..@min(bytes.len, max_version_length)];
+    const end = std.mem.indexOfScalar(u8, bounded, terminator) orelse return null;
+    return parseJavaMajorVersion(bounded[0..end]);
 }
 
 fn parseJavaMajorVersion(version: []const u8) ?u32 {
@@ -226,13 +245,13 @@ test "JVM version: extracts legacy and modern majors and rejects invalid prefixe
 }
 
 test "JVM version: HotSpot and GraalVM banners from JDK 6, 8 and 21" {
-    try testing.expectEqual(@as(?u32, 6), scanBytes("Java HotSpot(TM) 64-Bit Server VM (20.45-b01) for linux-amd64 JRE (1.6.0_45-b06), built on Mar 26 2013", .hotspot));
-    try testing.expectEqual(@as(?u32, 8), scanBytes("OpenJDK 64-Bit Server VM (25.472-b08) for linux-amd64 JRE (1.8.0_472-b08), built on Oct 22 2025", .hotspot));
-    try testing.expectEqual(@as(?u32, 21), scanBytes("OpenJDK 64-Bit Server VM (21.0.10+7-LTS) for linux-aarch64 JRE (21.0.10+7-LTS), built on 2026-01-20", .hotspot));
+    try testing.expectEqual(@as(?u32, 6), scanHotSpotVersion("Java HotSpot(TM) 64-Bit Server VM (20.45-b01) for linux-amd64 JRE (1.6.0_45-b06), built on Mar 26 2013"));
+    try testing.expectEqual(@as(?u32, 8), scanHotSpotVersion("OpenJDK 64-Bit Server VM (25.472-b08) for linux-amd64 JRE (1.8.0_472-b08), built on Oct 22 2025"));
+    try testing.expectEqual(@as(?u32, 21), scanHotSpotVersion("OpenJDK 64-Bit Server VM (21.0.10+7-LTS) for linux-aarch64 JRE (21.0.10+7-LTS), built on 2026-01-20"));
 
     const graalvm_banner = "OpenJDK 64-Bit Server VM (21.0.2+13-jvmci-23.1-b30) " ++
         "for linux-amd64 JRE (21.0.2+13-jvmci-23.1-b30), built on 2024-01-06T13:12:14Z";
-    try testing.expectEqual(@as(?u32, 21), scanBytes(graalvm_banner, .hotspot));
+    try testing.expectEqual(@as(?u32, 21), scanHotSpotVersion(graalvm_banner));
 }
 
 test "JVM version: Zing uses the Java major rather than the product release" {
@@ -280,19 +299,63 @@ test "JVM version: Zing requires a complete version string and skips format plac
 }
 
 test "JVM version: OpenJ9 uses the Java build, not shared JRE labels or the VM release" {
-    try testing.expectEqual(@as(?u32, 8), scanBytes("-Xinternalversion\x00linux\x001.8.0_181-b13\x00OpenJDK\x00JRE 1.6.0\x00JRE 1.8.0\x00JRE 9\x00JRE 12\x00openj9-0.9.0\x00", .openj9));
-    try testing.expectEqual(@as(?u32, 21), scanBytes("-Xinternalversion\x00linux\x0021.0.9+10-LTS\x00admin\x00JRE 21\x00", .openj9));
-    try testing.expectEqual(@as(?u32, null), scanBytes("JRE 1.6.0\x00JRE 1.8.0\x00openj9-0.9.0\x00", .openj9));
+    try testing.expectEqual(@as(?u32, 8), scanOpenJ9Version("-Xinternalversion\x00linux\x001.8.0_181-b13\x00OpenJDK\x00JRE 1.6.0\x00JRE 1.8.0\x00JRE 9\x00JRE 12\x00openj9-0.9.0\x00"));
+    try testing.expectEqual(@as(?u32, 21), scanOpenJ9Version("-Xinternalversion\x00linux\x0021.0.9+10-LTS\x00admin\x00JRE 21\x00"));
+    try testing.expectEqual(@as(?u32, null), scanOpenJ9Version("JRE 1.6.0\x00JRE 1.8.0\x00openj9-0.9.0\x00"));
+}
+
+test "JVM version: OpenJ9 ARM version strings allow labels and NULL padding" {
+    const test_util = @import("test_util.zig");
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    // Captured from the ARM Semeru Java 21 image used in CI.
+    const arm_version = "-Xinternalversion\x00" ++ "\x00" ** 7 ++
+        "Extensions for OpenJDK for Eclipse OpenJ9" ++ "\x00" ** 7 ++
+        "aarch64\x00linux\x00" ++ "\x00" ** 2 ++
+        "21.0.12.1+1-LTS\x00IBM Semeru Runtime Open Edition\x00";
+
+    // Exercise the maximum supported prefix and version across a read boundary.
+    const prefix_padding = max_openj9_prefix_length - "\x00linux\x00".len - 1;
+    const long_version = openj9_version_marker ++ "linux\x00" ++ "\x00" ** prefix_padding ++
+        "21." ++ "0" ** (max_version_length - 4) ++ "\x00";
+    const split_long_version = "x" ** (32 * 1024 - long_version.len + 1) ++ long_version;
+    try test_util.writeElf(tmp.dir, "libj9vm29.so", arm_version, std.elf.PF_R | std.elf.PF_X);
+
+    const path = try tmp.dir.realPathFileAlloc(testing.io, "libj9vm29.so", testing.allocator);
+    defer testing.allocator.free(path);
+
+    for ([_][]const u8{
+        arm_version,
+        "x" ** (32 * 1024 - 3) ++ arm_version,
+        split_long_version,
+    }) |content| {
+        try test_util.writeElf(tmp.dir, "libj9vm29.so", content, std.elf.PF_R | std.elf.PF_X);
+        const result = try inspectBinary(testing.io, path);
+        try testing.expectEqual(@as(?u32, 21), result.major);
+        try testing.expect(!result.openj9_forwarder);
+    }
+}
+
+test "JVM version: OpenJ9 requires a bounded prefix and a complete Linux string" {
+    for ([_][]const u8{
+        "-Xinternalversion\x00not-linux\x0021.0.12.1+1-LTS\x00",
+        "-Xinternalversion\x00linux-other\x0021.0.12.1+1-LTS\x00",
+        "-Xinternalversion\x00" ++ "\x00" ** max_openj9_prefix_length ++ "linux\x0021.0.12.1+1-LTS\x00",
+        "-Xinternalversion\x00linux\x00" ++ "\x00" ** max_openj9_prefix_length ++ "21.0.12.1+1-LTS\x00",
+    }) |bytes| {
+        try testing.expectEqual(@as(?u32, null), scanOpenJ9Version(bytes));
+    }
 }
 
 test "JVM version: skips invalid banners and returns the first valid version" {
     for ([_][]const u8{ "", "JRE (%s)", " JRE (1.6.0", " JRE (1.7garbage)", " JRE (1.7\x00)", " JRE (1.)" }) |memory| {
-        try testing.expectEqual(@as(?u32, null), scanBytes(memory, .hotspot));
+        try testing.expectEqual(@as(?u32, null), scanHotSpotVersion(memory));
     }
-    try testing.expectEqual(@as(?u32, null), scanBytes("-Xinternalversion\x00linux\x001.7.0", .openj9));
-    try testing.expectEqual(@as(?u32, 7), scanBytes(" JRE (1.7.0)\x00 JRE (21.0.1)", .hotspot));
-    try testing.expectEqual(@as(?u32, 8), scanBytes(" JRE (1.7garbage)\x00 JRE (1.8.0)\x00 JRE (21.0.1)", .hotspot));
-    try testing.expectEqual(@as(?u32, 21), scanBytes("-Xinternalversion\x00linux\x00invalid\x00-Xinternalversion\x00linux\x0021.0.9+10-LTS\x00-Xinternalversion\x00linux\x001.8.0_181-b13\x00", .openj9));
+    try testing.expectEqual(@as(?u32, null), scanOpenJ9Version("-Xinternalversion\x00linux\x001.7.0"));
+    try testing.expectEqual(@as(?u32, 7), scanHotSpotVersion(" JRE (1.7.0)\x00 JRE (21.0.1)"));
+    try testing.expectEqual(@as(?u32, 8), scanHotSpotVersion(" JRE (1.7garbage)\x00 JRE (1.8.0)\x00 JRE (21.0.1)"));
+    try testing.expectEqual(@as(?u32, 21), scanOpenJ9Version("-Xinternalversion\x00linux\x00invalid\x00-Xinternalversion\x00linux\x0021.0.9+10-LTS\x00-Xinternalversion\x00linux\x001.8.0_181-b13\x00"));
 }
 
 test "JVM version: reads stripped ELF binaries and versions crossing file read boundaries" {

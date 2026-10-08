@@ -1,0 +1,134 @@
+# shellcheck shell=sh
+
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+run_test_case \
+  "runs on Java 6" \
+  "app" \
+  "java Main java.specification.version" \
+  "java.specification.version: 1.6"
+
+run_test_case \
+  "skips the Java agent on Java 6 when launched directly" \
+  "app" \
+  "java Main" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: -"
+
+run_test_case \
+  "skips the Java agent on Java 6 when launched through a shell" \
+  "app" \
+  "./run.sh" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: -"
+
+run_test_case \
+  "skips the Java agent on Java 6 when launched through a symlink" \
+  "app" \
+  "./java-symlink Main" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: -"
+
+run_test_case \
+  "leaves JAVA_TOOL_OPTIONS unset on Java 6 when launched directly" \
+  "app" \
+  "java Main env:JAVA_TOOL_OPTIONS" \
+  "JAVA_TOOL_OPTIONS: -"
+
+run_test_case \
+  "leaves JAVA_TOOL_OPTIONS unset on Java 6 when launched through a shell" \
+  "app" \
+  "./run.sh env:JAVA_TOOL_OPTIONS" \
+  "JAVA_TOOL_OPTIONS: -"
+
+run_test_case \
+  "preserves existing Java 6 options when launched directly" \
+  "app" \
+  "java Main some-property env:JAVA_TOOL_OPTIONS" \
+  "some-property: some-value
+JAVA_TOOL_OPTIONS: -Dsome-property=some-value" \
+  "JAVA_TOOL_OPTIONS=-Dsome-property=some-value"
+
+run_test_case \
+  "preserves existing Java 6 options when launched through a shell" \
+  "app" \
+  "./run.sh some-property env:JAVA_TOOL_OPTIONS" \
+  "some-property: some-value
+JAVA_TOOL_OPTIONS: -Dsome-property=some-value" \
+  "JAVA_TOOL_OPTIONS=-Dsome-property=some-value"
+
+run_test_case \
+  "preserves a user-supplied Java 6 agent when launched directly" \
+  "app" \
+  "java Main otel.injector.jvm.no_op_agent.has_been_loaded some-property env:JAVA_TOOL_OPTIONS" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true
+some-property: some-value
+JAVA_TOOL_OPTIONS: -Dsome-property=some-value -javaagent:/usr/lib/opentelemetry/jvm/java6-agent.jar" \
+  'JAVA_TOOL_OPTIONS="-Dsome-property=some-value -javaagent:/usr/lib/opentelemetry/jvm/java6-agent.jar"'
+
+run_test_case \
+  "preserves a user-supplied Java 6 agent when launched through a shell" \
+  "app" \
+  "./run.sh otel.injector.jvm.no_op_agent.has_been_loaded some-property env:JAVA_TOOL_OPTIONS" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true
+some-property: some-value
+JAVA_TOOL_OPTIONS: -Dsome-property=some-value -javaagent:/usr/lib/opentelemetry/jvm/java6-agent.jar" \
+  'JAVA_TOOL_OPTIONS="-Dsome-property=some-value -javaagent:/usr/lib/opentelemetry/jvm/java6-agent.jar"'
+
+# These controls use the separate Java 6-compatible agent to prove the injector
+# can inject when the configured minimum Java version allows Java 6.
+run_test_case \
+  "a minimum Java version of 6 allows Java agent injection on Java 6" \
+  "app" \
+  "java Main" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true" \
+  "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=6 JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/usr/lib/opentelemetry/jvm/java6-agent.jar"
+
+run_test_case \
+  "a minimum Java version of 0 allows Java agent injection on Java 6" \
+  "app" \
+  "java Main" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true" \
+  "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=0 JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/usr/lib/opentelemetry/jvm/java6-agent.jar"
+
+run_test_case \
+  "a minimum Java version of 6 allows Java agent injection through a shell on Java 6" \
+  "app" \
+  "./run.sh" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true" \
+  "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=6 JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/usr/lib/opentelemetry/jvm/java6-agent.jar"
+
+run_test_case \
+  "a minimum Java version of 6 from the configuration file at a custom location allows Java agent injection on Java 6" \
+  "app" \
+  "java Main" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true" \
+  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/jvm-minimum.conf"
+
+run_test_case \
+  "the minimum Java version environment variable overrides the configuration file at a custom location" \
+  "app" \
+  "java Main" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: -" \
+  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/jvm-minimum.conf JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=8"
+
+run_test_case \
+  "an invalid minimum Java version environment variable preserves the configuration file at a custom location" \
+  "app" \
+  "java Main" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true" \
+  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/jvm-minimum.conf JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=invalid"
+
+# Select the same compatible VM through the alternate selectors to exercise
+# their fail-open behavior without adding another JDK to the image.
+run_test_case \
+  "the -XXaltjvm substring bypasses the Java 6 version check" \
+  "app" \
+  "java -XXaltjvm=$JAVA_HOME/jre/lib/amd64/server Main" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true" \
+  "JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/usr/lib/opentelemetry/jvm/java6-agent.jar"
+
+run_test_case \
+  "JDK_ALTERNATE_VM bypasses the Java 6 version check" \
+  "app" \
+  "java Main" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true" \
+  "JDK_ALTERNATE_VM=$JAVA_HOME/jre/lib/amd64/server JVM_AUTO_INSTRUMENTATION_AGENT_PATH=/usr/lib/opentelemetry/jvm/java6-agent.jar"

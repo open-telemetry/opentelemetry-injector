@@ -1,0 +1,13 @@
+change_type: enhancement
+component: injector
+note: Detect incompatible Java versions during normal Java launches and skip Java agent injection.
+issues: [441]
+subtext: |
+  Inspect the JVM launcher default bundled JVM binary before the VM is loaded.
+  Leave existing Java options and agents unchanged when skipping injection.
+  Skip Java agent injection in processes without a loaded JVM launcher, so shells do not pass it to unsupported Java children.
+  Allow injection when we know it's Java and we cannot determine the version. 
+  Does not handle JVM switching using -XXaltjvm=, when this is detected we allow injection.
+  Configure the minimum Java major version with jvm_auto_instrumentation_minimum_java_major_version in the configuration file
+  or JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION in the environment (default: 8). Environment values take priority.
+change_logs: [user]

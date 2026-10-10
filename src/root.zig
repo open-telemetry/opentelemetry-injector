@@ -411,7 +411,7 @@ fn setCustomEnvironmentVariables(
     }
     var env_var_iterator = custom_env_vars.iterator();
     while (env_var_iterator.next()) |env_var| {
-        const name = allocator.dupeZ(u8, env_var.key_ptr.*) catch |err| {
+        const name = allocator.dupeSentinel(u8, env_var.key_ptr.*, 0) catch |err| {
             print.printError(
                 "error allocating memory for name when setting custom environment variable \"{s}\"=\"{s}\" (remaining custom environment variables will be skipped): {}",
                 .{
@@ -422,7 +422,7 @@ fn setCustomEnvironmentVariables(
             );
             return;
         };
-        const value = allocator.dupeZ(u8, env_var.value_ptr.*) catch |err| {
+        const value = allocator.dupeSentinel(u8, env_var.value_ptr.*, 0) catch |err| {
             print.printError(
                 "error allocating memory for value when setting custom environment variable \"{s}\"=\"{s}\" (remaining custom environment variables will be skipped): {}",
                 .{

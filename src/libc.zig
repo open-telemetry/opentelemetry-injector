@@ -179,12 +179,12 @@ fn getLibCNameAndFlavor(io: std.Io, gpa: std.mem.Allocator, self_exe_path: []con
     if (string_table_offset == 0) {
         // Fallback: Use program headers if section headers don’t map it
         try reader.seekTo(elf_header.phoff);
-        const phdrs = try gpa.alloc(std.elf.Elf64_Phdr, elf_header.phnum);
+        const phdrs = try gpa.alloc(std.elf.Elf64.Phdr, elf_header.phnum);
         defer gpa.free(phdrs);
         try reader.interface.readSliceAll(std.mem.sliceAsBytes(phdrs));
         for (phdrs) |phdr| {
-            if (phdr.p_type == std.elf.PT_LOAD and phdr.p_vaddr <= strtab_addr and strtab_addr < phdr.p_vaddr + phdr.p_filesz) {
-                string_table_offset = phdr.p_offset + (strtab_addr - phdr.p_vaddr);
+            if (phdr.type == .LOAD and phdr.vaddr <= strtab_addr and strtab_addr < phdr.vaddr + phdr.filesz) {
+                string_table_offset = phdr.offset + (strtab_addr - phdr.vaddr);
                 break;
             }
         }
@@ -309,7 +309,7 @@ fn getLibCMemoryLocations(io: std.Io, self_maps_path: []const u8, libc_name_and_
             );
         },
         types.LibCFlavor.MUSL => {
-            const at_base = auxv.getauxval(std.elf.AT_BASE);
+            const at_base = auxv.getauxval(std.elf.AT.BASE);
             if (at_base == 0) {
                 print.printError("cannot find AT_BASE in /proc/self/auxv", .{});
                 return error.CannotFindAtBase;

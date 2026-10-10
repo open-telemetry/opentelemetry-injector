@@ -49,14 +49,14 @@ pub const ElfDynLib = struct {
 
         if (elf_header.e_type != std.elf.ET.DYN) return error.ElfNotDynamicLibrary;
 
-        var maybe_dynamic_program_header: ?std.elf.Elf64_Phdr = null;
+        var maybe_dynamic_program_header: ?std.elf.Elf64.Phdr = null;
         {
-            const program_headers_ptr: [*]const std.elf.Elf64_Phdr = @ptrFromInt(start_memory_range + elf_header.e_phoff);
+            const program_headers_ptr: [*]const std.elf.Elf64.Phdr = @ptrFromInt(start_memory_range + elf_header.e_phoff);
             const program_headers = program_headers_ptr[0..elf_header.e_phnum];
 
             for (program_headers) |program_header| {
-                switch (program_header.p_type) {
-                    std.elf.PT_DYNAMIC => maybe_dynamic_program_header = program_header,
+                switch (program_header.type) {
+                    std.elf.PT.DYNAMIC => maybe_dynamic_program_header = program_header,
                     else => {},
                 }
             }
@@ -70,8 +70,8 @@ pub const ElfDynLib = struct {
         var maybe_gnu_hash: ?*std.elf.gnu_hash.Header = null;
 
         {
-            const dynamic_symbols_count = dynamic_program_header.p_memsz / @sizeOf(std.elf.Elf64_Dyn);
-            const dynamic_symbols_ptr: [*]std.elf.Elf64_Dyn = @ptrFromInt(start_memory_range + dynamic_program_header.p_vaddr);
+            const dynamic_symbols_count = dynamic_program_header.memsz / @sizeOf(std.elf.Elf64_Dyn);
+            const dynamic_symbols_ptr: [*]std.elf.Elf64_Dyn = @ptrFromInt(start_memory_range + dynamic_program_header.vaddr);
             const dynamic_symbols = dynamic_symbols_ptr[0..dynamic_symbols_count];
 
             for (dynamic_symbols) |dynamic_symbol| {

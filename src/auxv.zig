@@ -41,7 +41,7 @@ fn readAuxValFromFile(io: std.Io, auxv_type: u32, auxv_path: []const u8) usize {
 
         if (auxv_symbol.a_type == auxv_type) {
             return auxv_symbol.a_un.a_val;
-        } else if (auxv_symbol.a_type == std.elf.AT_NULL) {
+        } else if (auxv_symbol.a_type == std.elf.AT.NULL) {
             break;
         }
     }
@@ -66,7 +66,7 @@ test "readAuxValFromFile: should read value" {
             auxv_file,
         });
         defer allocator.free(absolute_path_to_auxv_file);
-        const auxv_result = readAuxValFromFile(testing.io, std.elf.AT_BASE, absolute_path_to_auxv_file);
+        const auxv_result = readAuxValFromFile(testing.io, std.elf.AT.BASE, absolute_path_to_auxv_file);
         try test_util.expectWithMessage(auxv_result > 0, "readAuxValFromFile(AT_BASE) should return > 0");
     }
 }

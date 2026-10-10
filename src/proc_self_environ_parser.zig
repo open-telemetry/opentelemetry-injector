@@ -312,9 +312,9 @@ test "initFromEnvironFile: unreadable environ file falls back to defaults" {
     const path = try tmp_dir.dir.realPathFileAlloc(testing.io, "environ-restricted", allocator);
     defer allocator.free(path);
     // Make the file unreadable to trigger AccessDenied when opening it.
-    try std.Io.Dir.cwd().setFilePermissions(testing.io, path, @enumFromInt(0o000), .{});
+    try std.Io.Dir.cwd().setFilePermissions(testing.io, path, @fromBackingInt(@intCast(0o000)), .{});
     // Restore permissions on the way out so tmpDir cleanup succeeds.
-    defer std.Io.Dir.cwd().setFilePermissions(testing.io, path, @enumFromInt(0o600), .{}) catch {};
+    defer std.Io.Dir.cwd().setFilePermissions(testing.io, path, @fromBackingInt(@intCast(0o600)), .{}) catch {};
 
     // Must return without an error so the caller does not log at Error level.
     try initFromEnvironFile(testing.io, path);
@@ -413,7 +413,7 @@ test "getenvFromFile: overlong entry is skipped, subsequent entries still found"
         defer f.close(testing.io);
         // Write an entry strictly longer than max_getenv_entry_length to trigger StreamTooLong
         try f.writeStreamingAll(testing.io, "OVERLONG_VAR=");
-        const chunk = [_]u8{'x'} ** 64;
+        const chunk: [64]u8 = @splat('x');
         var written: usize = 0;
         while (written <= max_getenv_entry_length) {
             const n = @min(chunk.len, max_getenv_entry_length + 1 - written);

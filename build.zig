@@ -59,15 +59,17 @@ pub fn build(b: *std.Build) !void {
 
     b.getInstallStep().dependOn(&b.addInstallArtifact(lib, .{ .dest_dir = .{ .override = .{ .custom = "." } } }).step);
 
-    var copy_injector_to_bin = b.step("copy_file", "Copy injector file");
-    copy_injector_to_bin.makeFn = copyInjectorFile;
+    const copy_injector_to_bin = b.addUpdateSourceFiles();
+    copy_injector_to_bin.addCopyFileToSource(lib.getEmittedBin(), "so/libotelinject.so");
+    const copy_step = b.step("copy_file", "Copy injector file");
+    copy_step.dependOn(&copy_injector_to_bin.step);
 
     // make the copy step depend in the install step, which then makes it transitively depend on the compile step
-    copy_injector_to_bin.dependOn(b.getInstallStep());
+    copy_step.dependOn(b.getInstallStep());
 
     // Make copying the injector shared library binary to its final location the default step. This wil also implictly
     // trigger building the library as a dependent build step.
-    b.default_step = copy_injector_to_bin;
+    b.default_step = copy_step;
 
     // TESTING
     const test_filters = b.option([][]const u8, "test-filter", "Match tests to execute");
@@ -98,12 +100,6 @@ pub fn build(b: *std.Build) !void {
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
-}
-
-fn copyInjectorFile(step: *std.Build.Step, _: std.Build.Step.MakeOptions) anyerror!void {
-    const source_path = step.owner.pathFromRoot("./zig-out/libinjector.so");
-    const dest_path = step.owner.pathFromRoot("so/libotelinject.so");
-    try std.Io.Dir.copyFileAbsolute(source_path, dest_path, step.owner.graph.io, .{ .make_path = true });
 }
 
 const SupportedCpuArch = enum {

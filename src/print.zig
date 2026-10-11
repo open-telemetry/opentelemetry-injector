@@ -23,19 +23,19 @@ pub fn printDebug(comptime fmt: []const u8, args: anytype) void {
 }
 
 pub fn printInfo(comptime fmt: []const u8, args: anytype) void {
-    if (@intFromEnum(getLogLevel()) <= @intFromEnum(proc_self_environ_values.LogLevel.Info)) {
+    if (@backingInt(getLogLevel()) <= @backingInt(proc_self_environ_values.LogLevel.Info)) {
         _printMessage(fmt, args);
     }
 }
 
 pub fn printWarn(comptime fmt: []const u8, args: anytype) void {
-    if (@intFromEnum(getLogLevel()) <= @intFromEnum(proc_self_environ_values.LogLevel.Warn)) {
+    if (@backingInt(getLogLevel()) <= @backingInt(proc_self_environ_values.LogLevel.Warn)) {
         _printMessage(fmt, args);
     }
 }
 
 pub fn printError(comptime fmt: []const u8, args: anytype) void {
-    if (@intFromEnum(getLogLevel()) <= @intFromEnum(proc_self_environ_values.LogLevel.Error)) {
+    if (@backingInt(getLogLevel()) <= @backingInt(proc_self_environ_values.LogLevel.Error)) {
         _printMessage(fmt, args);
     }
 }

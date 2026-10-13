@@ -250,7 +250,7 @@ test "JVM version gate: leaves existing agents unchanged on Java 6 and 7" {
     defer testing.allocator.free(jar);
     const expected = try std.fmt.allocPrint(testing.allocator, "-Dexisting=preserved -javaagent:{s} -Dmessage=\"hello world\" -javaagent:/another.jar", .{jar});
     defer testing.allocator.free(expected);
-    const original = try testing.allocator.dupeZ(u8, expected);
+    const original = try std.fmt.allocPrintSentinel(testing.allocator, "{s}", .{expected}, 0);
     defer testing.allocator.free(original);
 
     inline for (.{ 6, 7 }) |major| {
@@ -376,7 +376,7 @@ test "JVM version gate: does not add a Java agent to a non-Java parent process" 
             return error.JvmLauncherNotFound;
         }
     };
-    const original = try testing.allocator.dupeZ(u8, "-Dexisting=preserved -javaagent:/user-agent.jar");
+    const original = try std.fmt.allocPrintSentinel(testing.allocator, "{s}", .{"-Dexisting=preserved -javaagent:/user-agent.jar"}, 0);
     defer testing.allocator.free(original);
     for ([_]u32{ 0, 6, 8 }) |minimum| {
         const result = doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(

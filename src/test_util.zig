@@ -162,6 +162,13 @@ fn printLine(line: []const u8) void {
     print("{s}\n", .{line});
 }
 
+/// A comptime string made of `count` copies of `byte`, for padding test fixtures.
+/// Zig 0.17 no longer has the `**` array repeat operator.
+pub fn repeat(comptime byte: u8, comptime count: usize) *const [count]u8 {
+    const bytes: [count]u8 = @splat(byte);
+    return &bytes;
+}
+
 /// A small ELF64 VM fixture without section headers. Tests use real program
 /// headers so they exercise the same file scanning as installed JVM binaries.
 pub fn writeElf(dir: std.Io.Dir, path: []const u8, content: []const u8, flags: u32) !void {
@@ -175,14 +182,14 @@ pub fn writeElf(dir: std.Io.Dir, path: []const u8, content: []const u8, flags: u
     header.e_version = 1;
     header.e_ehsize = @sizeOf(std.elf.Elf64_Ehdr);
     header.e_phoff = @sizeOf(std.elf.Elf64_Ehdr);
-    header.e_phentsize = @sizeOf(std.elf.Elf64_Phdr);
+    header.e_phentsize = @sizeOf(std.elf.Elf64.Phdr);
     header.e_phnum = 1;
-    var segment = std.mem.zeroes(std.elf.Elf64_Phdr);
-    segment.p_type = std.elf.PT_LOAD;
-    segment.p_flags = flags;
-    segment.p_offset = @sizeOf(std.elf.Elf64_Ehdr) + @sizeOf(std.elf.Elf64_Phdr);
-    segment.p_filesz = content.len;
-    segment.p_memsz = content.len;
+    var segment = std.mem.zeroes(std.elf.Elf64.Phdr);
+    segment.type = .LOAD;
+    segment.flags = @bitCast(flags);
+    segment.offset = @sizeOf(std.elf.Elf64_Ehdr) + @sizeOf(std.elf.Elf64.Phdr);
+    segment.filesz = content.len;
+    segment.memsz = content.len;
     const file = try dir.createFile(testing.io, path, .{});
     defer file.close(testing.io);
     try file.writeStreamingAll(testing.io, std.mem.asBytes(&header));

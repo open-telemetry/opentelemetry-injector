@@ -9,7 +9,8 @@ const testing = std.testing;
 /// The launcher maps libjli.so before our constructor, but loads libjvm afterwards.
 /// Find its native library directory and inspect bundled VMs on disk before
 /// JAVA_TOOL_OPTIONS is changed. The first recognized Java version wins.
-/// We skip detection when -XXaltjvm= appears in the command line or JDK_ALTERNATE_VM is set.
+/// Once the launcher has been found, we skip detection when -XXaltjvm= appears in the command line or
+/// JDK_ALTERNATE_VM is set, since the VM that will actually be loaded is not the bundled one we would inspect.
 /// Dealing with this would require adding logic to parse command line options for not just java, but the java
 /// tools (which prefix with -J).
 pub fn getJavaMajorVersion(io: std.Io, allocator: std.mem.Allocator, get_env: environ.GetenvFn) !?u32 {
@@ -22,11 +23,17 @@ fn getJavaMajorVersionFromFiles(io: std.Io, allocator: std.mem.Allocator, get_en
 
     const gpa = arena.allocator();
 
+    // Look for the launcher first. It is the decisive test for "is this process a JVM at all", and it has to run
+    // before the alternate VM check for two reasons: a process that is not a JVM must report JvmLauncherNotFound
+    // instead of being waved through by an inherited JDK_ALTERNATE_VM or by a command line that merely contains
+    // the string "-XXaltjvm=" somewhere; and since the injector is preloaded into every process on the host, the
+    // non-JVM majority must not pay for reading and allocating the command line.
+    const launcher = try findLauncher(io, gpa, maps_path) orelse return error.JvmLauncherNotFound;
+
     if (try hasAlternateVm(io, gpa, get_env, cmdline_path)) {
         return null;
     }
 
-    const launcher = try findLauncher(io, gpa, maps_path) orelse return error.JvmLauncherNotFound;
     const library_dir = try runtimeLibraryDirectory(io, gpa, launcher);
     return detectLauncherVersion(io, gpa, library_dir);
 }
@@ -338,7 +345,7 @@ test "JVM launcher: follows OpenJ9 forwarders to numbered and unnumbered VM libr
     }
 }
 
-test "JVM launcher: alternate VM overrides bypass launcher discovery" {
+test "JVM launcher: alternate VM overrides skip version detection, but only for actual JVMs" {
     const test_util = @import("test_util.zig");
     const original = try test_util.setStdCEnviron(&.{});
     defer test_util.resetStdCEnviron(original);
@@ -346,13 +353,26 @@ test "JVM launcher: alternate VM overrides bypass launcher discovery" {
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
 
+    try tmp.dir.createDirPath(testing.io, "lib/server");
+    try test_util.writeElf(tmp.dir, "lib/server/libjvm.so", " JRE (1.6.0_45-b06)\x00", std.elf.PF_R);
+
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const gpa = arena.allocator();
 
     const directory = try tmp.dir.realPathFileAlloc(testing.io, ".", gpa);
+    const maps = try std.fmt.allocPrint(gpa, "1000-2000 r--p 00000000 08:01 1 {s}/lib/libjli.so\n", .{directory});
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "maps", .data = maps });
+    try tmp.dir.writeFile(testing.io, .{
+        .sub_path = "maps-without-launcher",
+        .data = "1000-2000 r--p 00000000 08:01 1 /usr/lib/libc.so.6\n",
+    });
+
     const cmdline_path = try std.fs.path.join(gpa, &.{ directory, "cmdline" });
-    const maps_path = try std.fs.path.join(gpa, &.{ directory, "missing-maps" });
+    const maps_path = try std.fs.path.join(gpa, &.{ directory, "maps" });
+    const maps_without_launcher_path = try std.fs.path.join(gpa, &.{ directory, "maps-without-launcher" });
+    // This file does not exist: reading it would fail, so the assertions below also prove it is never read.
+    const missing_cmdline_path = try std.fs.path.join(gpa, &.{ directory, "missing-cmdline" });
 
     for ([_][]const u8{
         "java\x00-XXaltjvm=/path\x00",
@@ -365,6 +385,8 @@ test "JVM launcher: alternate VM overrides bypass launcher discovery" {
             testing.io,
             .{ .sub_path = "cmdline", .data = cmdline },
         );
+
+        // The bundled VM is a Java 6 VM, but another VM will be loaded instead, so the version is unknown.
         try testing.expectEqual(
             @as(?u32, null),
             try getJavaMajorVersionFromFiles(
@@ -375,12 +397,25 @@ test "JVM launcher: alternate VM overrides bypass launcher discovery" {
                 maps_path,
             ),
         );
+
+        // Without a launcher the process is not a JVM, no matter what its command line contains.
+        try testing.expectError(
+            error.JvmLauncherNotFound,
+            getJavaMajorVersionFromFiles(
+                testing.io,
+                gpa,
+                test_util.posixGetenv,
+                cmdline_path,
+                maps_without_launcher_path,
+            ),
+        );
     }
 
+    // "-XXaltjvm" without a value is not an alternate VM override.
     try tmp.dir.writeFile(testing.io, .{ .sub_path = "cmdline", .data = "java\x00-XXaltjvm\x00" });
-    try testing.expectError(
-        error.FileNotFound,
-        getJavaMajorVersionFromFiles(
+    try testing.expectEqual(
+        @as(?u32, 6),
+        try getJavaMajorVersionFromFiles(
             testing.io,
             gpa,
             test_util.posixGetenv,
@@ -393,15 +428,27 @@ test "JVM launcher: alternate VM overrides bypass launcher discovery" {
         const previous = try test_util.setStdCEnviron(&.{variable});
         defer test_util.resetStdCEnviron(previous);
 
-        // Neither file exists: the supplied environment helper must bypass both reads.
+        // The command line is never read when the environment variable is set.
         try testing.expectEqual(
             @as(?u32, null),
             try getJavaMajorVersionFromFiles(
                 testing.io,
                 gpa,
                 test_util.posixGetenv,
+                missing_cmdline_path,
                 maps_path,
-                maps_path,
+            ),
+        );
+
+        // An inherited JDK_ALTERNATE_VM must not wave through a process that is not a JVM either.
+        try testing.expectError(
+            error.JvmLauncherNotFound,
+            getJavaMajorVersionFromFiles(
+                testing.io,
+                gpa,
+                test_util.posixGetenv,
+                missing_cmdline_path,
+                maps_without_launcher_path,
             ),
         );
     }

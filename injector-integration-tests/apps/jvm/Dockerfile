@@ -14,6 +14,10 @@ RUN mvn package -B -q
 # final stage/image
 FROM ${base_image_run}
 
+RUN if ! command -v find > /dev/null 2>&1; then \
+      microdnf install -y findutils && microdnf clean all; \
+    fi
+
 RUN mkdir -p /etc/opentelemetry/injector/conf.d && chmod -R 777 /etc/opentelemetry
 
 WORKDIR /usr/src/otel/injector/

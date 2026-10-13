@@ -29,7 +29,7 @@ pub fn inspectBinary(io: std.Io, path: []const u8) !BinaryVersion {
 
     // We check defensively for 64bit (just in case we found somehow the wrong file). We cap
     // the number of segments we scan to 128.
-    if (!header.is_64 or header.phentsize != @sizeOf(std.elf.Elf64_Phdr) or header.phnum > 128) {
+    if (!header.is_64 or header.phentsize != @sizeOf(std.elf.Elf64.Phdr) or header.phnum > 128) {
         return error.InvalidJvmElf;
     }
 
@@ -46,22 +46,22 @@ pub fn inspectBinary(io: std.Io, path: []const u8) !BinaryVersion {
 
     while (try headers.next()) |segment| {
         // Skip segment we shouldn't be looking at, e.g. writeable segments that may have constants that would confuse us.
-        if (segment.p_type != std.elf.PT_LOAD or segment.p_flags & std.elf.PF_R == 0 or segment.p_flags & std.elf.PF_W != 0) {
+        if (segment.type != .LOAD or !segment.flags.R or segment.flags.W) {
             continue;
         }
 
         // Check for invalid segments.
-        if (segment.p_offset > size or segment.p_filesz > size - segment.p_offset) {
+        if (segment.offset > size or segment.filesz > size - segment.offset) {
             return error.InvalidJvmElf;
         }
 
         // Keep the OpenJ9 marker, intervening strings, and version together across reads.
         var buffer: [32 * 1024 + scan_overlap]u8 = undefined;
         var carry: usize = 0;
-        var offset = segment.p_offset;
+        var offset = segment.offset;
 
         // Read the segment 32K at a time.
-        const end = offset + segment.p_filesz;
+        const end = offset + segment.filesz;
         while (offset < end) {
             const count: usize = @intCast(@min(end - offset, 32 * 1024));
             if (try file.readPositionalAll(io, buffer[carry .. carry + count], offset) != count) {
@@ -278,6 +278,8 @@ test "JVM version: Zing uses the Java major rather than the product release" {
 }
 
 test "JVM version: Zing requires a complete version string and skips format placeholders" {
+    const test_util = @import("test_util.zig");
+
     for ([_][]const u8{
         "",
         "\x0026.01.0.0\x00",
@@ -286,7 +288,7 @@ test "JVM version: Zing requires a complete version string and skips format plac
         "\x0021garbage-zing_26.01.0.0-b11\x00",
         "\x0021.0.9-zing_26.01.0.0-b11",
         "21.0.9-zing_26.01.0.0-b11\x00",
-        "\x0021." ++ "0" ** max_version_length ++ "-zing_26.01.0.0-b11\x00",
+        "\x0021." ++ test_util.repeat('0', max_version_length) ++ "-zing_26.01.0.0-b11\x00",
     }) |bytes| {
         try testing.expectEqual(@as(?u32, null), scanZingVersion(bytes));
     }
@@ -310,16 +312,16 @@ test "JVM version: OpenJ9 ARM version strings allow labels and NULL padding" {
     defer tmp.cleanup();
 
     // Captured from the ARM Semeru Java 21 image used in CI.
-    const arm_version = "-Xinternalversion\x00" ++ "\x00" ** 7 ++
-        "Extensions for OpenJDK for Eclipse OpenJ9" ++ "\x00" ** 7 ++
-        "aarch64\x00linux\x00" ++ "\x00" ** 2 ++
+    const arm_version = "-Xinternalversion\x00" ++ test_util.repeat('\x00', 7) ++
+        "Extensions for OpenJDK for Eclipse OpenJ9" ++ test_util.repeat('\x00', 7) ++
+        "aarch64\x00linux\x00" ++ test_util.repeat('\x00', 2) ++
         "21.0.12.1+1-LTS\x00IBM Semeru Runtime Open Edition\x00";
 
     // Exercise the maximum supported prefix and version across a read boundary.
     const prefix_padding = max_openj9_prefix_length - "\x00linux\x00".len - 1;
-    const long_version = openj9_version_marker ++ "linux\x00" ++ "\x00" ** prefix_padding ++
-        "21." ++ "0" ** (max_version_length - 4) ++ "\x00";
-    const split_long_version = "x" ** (32 * 1024 - long_version.len + 1) ++ long_version;
+    const long_version = openj9_version_marker ++ "linux\x00" ++ test_util.repeat('\x00', prefix_padding) ++
+        "21." ++ test_util.repeat('0', max_version_length - 4) ++ "\x00";
+    const split_long_version = test_util.repeat('x', 32 * 1024 - long_version.len + 1) ++ long_version;
     try test_util.writeElf(tmp.dir, "libj9vm29.so", arm_version, std.elf.PF_R | std.elf.PF_X);
 
     const path = try tmp.dir.realPathFileAlloc(testing.io, "libj9vm29.so", testing.allocator);
@@ -327,7 +329,7 @@ test "JVM version: OpenJ9 ARM version strings allow labels and NULL padding" {
 
     for ([_][]const u8{
         arm_version,
-        "x" ** (32 * 1024 - 3) ++ arm_version,
+        test_util.repeat('x', 32 * 1024 - 3) ++ arm_version,
         split_long_version,
     }) |content| {
         try test_util.writeElf(tmp.dir, "libj9vm29.so", content, std.elf.PF_R | std.elf.PF_X);
@@ -338,11 +340,13 @@ test "JVM version: OpenJ9 ARM version strings allow labels and NULL padding" {
 }
 
 test "JVM version: OpenJ9 requires a bounded prefix and a complete Linux string" {
+    const test_util = @import("test_util.zig");
+
     for ([_][]const u8{
         "-Xinternalversion\x00not-linux\x0021.0.12.1+1-LTS\x00",
         "-Xinternalversion\x00linux-other\x0021.0.12.1+1-LTS\x00",
-        "-Xinternalversion\x00" ++ "\x00" ** max_openj9_prefix_length ++ "linux\x0021.0.12.1+1-LTS\x00",
-        "-Xinternalversion\x00linux\x00" ++ "\x00" ** max_openj9_prefix_length ++ "21.0.12.1+1-LTS\x00",
+        "-Xinternalversion\x00" ++ test_util.repeat('\x00', max_openj9_prefix_length) ++ "linux\x0021.0.12.1+1-LTS\x00",
+        "-Xinternalversion\x00linux\x00" ++ test_util.repeat('\x00', max_openj9_prefix_length) ++ "21.0.12.1+1-LTS\x00",
     }) |bytes| {
         try testing.expectEqual(@as(?u32, null), scanOpenJ9Version(bytes));
     }
@@ -364,14 +368,14 @@ test "JVM version: reads stripped ELF binaries and versions crossing file read b
     defer tmp.cleanup();
 
     // Test normal happy path.
-    const content = "x" ** (32 * 1024 - 3) ++ " JRE (1.6.0_45-b06)\x00" ++ "x" ** (32 * 1024) ++ " JRE (21.0.10+7-LTS)\x00";
+    const content = test_util.repeat('x', 32 * 1024 - 3) ++ " JRE (1.6.0_45-b06)\x00" ++ test_util.repeat('x', 32 * 1024) ++ " JRE (21.0.10+7-LTS)\x00";
     try test_util.writeElf(tmp.dir, "libjvm.so", content, std.elf.PF_R | std.elf.PF_X);
 
     const path = try tmp.dir.realPathFileAlloc(testing.io, "libjvm.so", testing.allocator);
     defer testing.allocator.free(path);
     try testing.expectEqual(@as(?u32, 6), (try inspectBinary(testing.io, path)).major);
 
-    const zing = "x" ** (32 * 1024 - 16) ++ "\x0021.0.9.0.101-zing_26.01.0.0-b11\x00";
+    const zing = test_util.repeat('x', 32 * 1024 - 16) ++ "\x0021.0.9.0.101-zing_26.01.0.0-b11\x00";
     try test_util.writeElf(tmp.dir, "libjvm.so", zing, std.elf.PF_R | std.elf.PF_X);
     try testing.expectEqual(@as(?u32, 21), (try inspectBinary(testing.io, path)).major);
 
@@ -390,6 +394,6 @@ test "JVM version: reads stripped ELF binaries and versions crossing file read b
     try testing.expectEqual(@as(?u32, null), (try inspectBinary(testing.io, path)).major);
 
     // Test bad elf header.
-    try tmp.dir.writeFile(testing.io, .{ .sub_path = "libjvm.so", .data = "x" ** 64 });
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "libjvm.so", .data = test_util.repeat('x', 64) });
     try testing.expectError(error.InvalidElfMagic, inspectBinary(testing.io, path));
 }

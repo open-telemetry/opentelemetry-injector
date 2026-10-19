@@ -101,6 +101,7 @@ This method requires `root` privileges.
    ```
    dotnet_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/dotnet
    jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/jvm/javaagent.jar
+   jvm_auto_instrumentation_minimum_java_major_version=8
    nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
    ```
 
@@ -128,6 +129,11 @@ This method requires `root` privileges.
      supported by the upstream OpenTelemetry .NET auto-instrumentation. Distributions of the .NET
      auto-instrumentation that support older .NET versions can lower this threshold accordingly.
    - `JVM_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Java auto-instrumentation agent JAR file
+   - `JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION`: the minimum Java major version required for Java
+     auto-instrumentation; can also be set via the configuration file key
+     `jvm_auto_instrumentation_minimum_java_major_version`. The default is `8`, matching the OpenTelemetry Java
+     agent's baseline. Environment values override file values. Non-negative integers are accepted; `0` allows any
+     detected Java version, and invalid values leave the current setting unchanged.
    - `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Node.js auto-instrumentation agent registration file
    - `PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the Python auto-instrumentation agent files (Python is disabled by default, see [Enabling Auto-Instrumentation for Python](#enabling-auto-instrumentation-for-python))
    - `RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the Ruby auto-instrumentation gem bundle
@@ -413,6 +419,42 @@ or for all workloads in a Kubernetes cluster/namespace. Therefore, we provide an
 injector for a specific program launch or workload by setting the environment variable `OTEL_INJECTOR_DISABLED=true`.
 When `OTEL_INJECTOR_DISABLED` is set to `true`, no environment variables will be modified by the injector.
 
+## Limitations
+
+If your application is incompatible with the instrumentation library that is being injected, the injector makes no
+guarantees that your application will work after the instrumentaiton is injected. We consider that the application
+compatibility checks are a responsibility of the instrumentation library.
+
+However, for certain programming languages it's not possible for the instrumentation checks to be performed efficiently
+before the instrumentation is loaded. For this reason, the injector performs a best-effort runtime version checks for
+.NET and Java, allowing for deployment of a runtime verfication configuration for these two platforms.
+
+### Limitations of the .NET runtime version checks
+
+The minimum .NET major version of an application is determined by inspecting its `*.runtimeconfig.json` file. If this
+file is not found in the deployment (or it is malformed), the injector will proceed with injecting the instrumentation.
+The default minimum .NET major version required is 8, matching the current support of the OpenTelemetry .NET SDK. You 
+can modify the supported .NET version by setting the `DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION`
+environment variable or the equivalent configuration option `dotnet_auto_instrumentation_minimum_dotnet_major_version`.
+
+### Limitations of the Java runtime version checks
+
+The OpenTelemetry Java Agent requires Java 8 or newer, which means that the agent jar file contains class files with
+a version that is incompatible with JDKs older than JDK 8. Attempting to load the OpenTelemetry Java agent on an 
+older JVM would result in an application startup failure with a `java.lang.UnsupportedClassVersionError`.
+
+The detection of the JVM version is performed by scanning the `.rodata` segment of the JVM binaries. The current
+detection supports OpenJDK (and derivatives), GraalVM, OpenJ9 and Azul Prime (Zing). If the injector is unable 
+to find the JVM version, the injector will proceed with injecting the instrumentation library.
+
+OpenJDK supports choosing an alternative JVM on the command line through `-XXaltjvm=` or `JDK_ALTERNATE_VM`, the
+injector currently doesn't support detecting the version of the alternate JVM and proceeds with injecting the 
+instrumentation library.
+
+The default supported JVM version is 8, matching the version support of the OpenTelemetry Java Agent. If you 
+are injecting a different instrumentation library with an earlier version support, you can modify the 
+supported version by setting the `JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION` environment variable or
+the equivalent `jvm_auto_instrumentation_minimum_java_major_version` config file option.
 
 ## Design
 

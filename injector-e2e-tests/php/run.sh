@@ -94,10 +94,14 @@ for sapi in "${sapis[@]}"; do
   base="$(image_for "$sapi")"
   tag="otel-php-e2e-${sapi}"
 
-  if ! docker buildx build --platform "linux/${arch}" \
+  # --load is required, not optional: under the docker-container driver that CI's
+  # setup-buildx-action installs, a plain `-t` build stays in the builder's cache and never
+  # reaches the daemon, so the docker run below would silently find no image.
+  if ! docker buildx build --platform "linux/${arch}" --load \
       --build-arg "PHP_IMAGE=${base}" --build-arg "SAPI=${sapi}" \
       -t "$tag" -f Dockerfile.sapi . > "/tmp/e2e-build-${sapi}.log" 2>&1; then
-    echo "FAIL  ${sapi}  -- image build failed (see /tmp/e2e-build-${sapi}.log)"
+    echo "FAIL  ${sapi}  -- image build failed"
+    printf '      %s\n' "$(tail -n 40 "/tmp/e2e-build-${sapi}.log")"
     failures+=("${sapi}: image build failed")
     failed=$((failed + 1))
     continue
@@ -122,13 +126,16 @@ for sapi in "${sapis[@]}"; do
     -e OTEL_LOGS_EXPORTER=none \
     -e OTEL_SERVICE_NAME="${marker}" \
     "$tag" 2>&1)"
+  run_exit=$?
 
   # Give the collector a moment to log what it received before reading its output back.
   sleep 2
   received="$(docker logs "$collector" 2>&1 | tail -n "+${collector_log_offset}")"
 
   problem=""
-  if ! grep -q "APP_RAN" <<< "$output"; then
+  if [[ $run_exit -ne 0 ]]; then
+    problem="the container exited ${run_exit}"
+  elif ! grep -q "APP_RAN" <<< "$output"; then
     problem="the application did not run"
   elif ! grep -q "OWN_PREPEND=ran" <<< "$output"; then
     problem="the application's own auto_prepend_file was displaced"
@@ -149,7 +156,12 @@ for sapi in "${sapis[@]}"; do
   if [[ -n "$problem" ]]; then
     echo "FAIL  ${sapi}  -- ${problem}"
     failures+=("${sapi}: ${problem}")
-    [[ "${VERBOSE:-}" == "true" ]] && printf '        %s\n' "${output//$'\n'/$'\n'        }"
+    # Always, not just under VERBOSE: a failure that cannot be diagnosed from the CI log costs a
+    # whole round trip to reproduce.
+    echo "      --- application output ---"
+    printf '      %s\n' "${output//$'\n'/$'\n'      }"
+    echo "      --- collector output ---"
+    printf '      %s\n' "${received//$'\n'/$'\n'      }"
     failed=$((failed + 1))
   else
     echo "ok    ${sapi}  (manual + hooked spans received over OTLP, own auto_prepend_file intact)"

@@ -132,7 +132,9 @@ case "$test_app" in
   "jvm-legacy")
     dockerfile_name="injector-integration-tests/apps/jvm-legacy/Dockerfile"
     base_image_build=eclipse-temurin:8-jdk
-    base_image_run=vulhub/openjdk:oracle-jdk-6
+    # Pin by digest: this image is an archived Java 6 runtime that nothing refreshes, and the build arg below
+    # overrides whatever default the Dockerfile carries, so the digest has to be here to take effect.
+    base_image_run=vulhub/openjdk:oracle-jdk-6@sha256:35e7972fd3bec182151ec5b61832197e1655609b6a7bf7babebda33318ef5eb1
     ;;
   "nodejs")
     base_image_run=node:22.15.0-bookworm-slim

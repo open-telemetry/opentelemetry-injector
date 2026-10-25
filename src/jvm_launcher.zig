@@ -191,16 +191,44 @@ fn detectLauncherVersion(io: std.Io, allocator: std.mem.Allocator, library_dir: 
     const dir = try std.Io.Dir.openDirAbsolute(io, library_dir, .{ .iterate = true });
     defer dir.close(io);
 
+    // Collect the candidate directories before inspecting any of them. Directory iteration yields entries in
+    // whatever order the filesystem keeps them, so on an image that bundles more than one VM the answer would
+    // otherwise depend on the filesystem rather than on the image.
+    var vm_directories: std.ArrayList([]const u8) = try .initCapacity(allocator, 8);
     var iterator = dir.iterate();
     while (try iterator.next(io)) |entry| {
         if (entry.kind != .directory) continue;
 
-        const directory = try std.fs.path.join(allocator, &.{ library_dir, entry.name });
+        const name = try allocator.dupe(u8, entry.name);
+        try vm_directories.append(allocator, name);
+    }
+
+    std.mem.sort([]const u8, vm_directories.items, {}, vmDirectoryLessThan);
+
+    for (vm_directories.items) |name| {
+        const directory = try std.fs.path.join(allocator, &.{ library_dir, name });
         const candidate_major = inspectVmDirectory(io, allocator, directory) catch null;
         if (candidate_major) |major| return major;
     }
 
     return null;
+}
+
+// The VM HotSpot and OpenJ9 images actually boot by default, ahead of the alternatives they ship alongside it.
+const preferred_vm_directories = [_][]const u8{ "server", "client", "default", "compressedrefs", "j9vm" };
+
+fn vmDirectoryRank(name: []const u8) usize {
+    for (preferred_vm_directories, 0..) |preferred, index| {
+        if (std.mem.eql(u8, name, preferred)) return index;
+    }
+    return preferred_vm_directories.len;
+}
+
+fn vmDirectoryLessThan(_: void, a: []const u8, b: []const u8) bool {
+    const rank_a = vmDirectoryRank(a);
+    const rank_b = vmDirectoryRank(b);
+    if (rank_a != rank_b) return rank_a < rank_b;
+    return std.mem.order(u8, a, b) == .lt;
 }
 
 fn inspectVmDirectory(io: std.Io, allocator: std.mem.Allocator, directory: []const u8) !?u32 {
@@ -382,11 +410,13 @@ test "JVM launcher: resolves a JDK 8 launcher library to its bundled JRE" {
     );
 }
 
-test "JVM launcher: finds the VM when jvm.cfg names a different directory" {
+test "JVM launcher: finds the VM in a subdirectory, whatever jvm.cfg says" {
     const test_util = @import("test_util.zig");
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
 
+    // Detection no longer reads jvm.cfg, because vendors such as Azul Zing do not follow its conventions. One
+    // naming a different directory must not steer the search away from the VM that is actually there.
     try tmp.dir.createDirPath(testing.io, "lib/server");
     try tmp.dir.writeFile(testing.io, .{
         .sub_path = "lib/jvm.cfg",
@@ -424,6 +454,32 @@ test "JVM launcher: scans immediate directories without jvm.cfg and skips unknow
     try tmp.dir.createDirPath(testing.io, "lib/vendor-vm");
     try test_util.writeElf(tmp.dir, "lib/vendor-vm/libjvm.so", " JRE (21.0.9+1-LTS)\x00", std.elf.PF_R);
     try testing.expectEqual(@as(?u32, 21), try detectLauncherVersion(testing.io, gpa, library_dir));
+}
+
+test "JVM launcher: inspects bundled VMs in a deterministic, default-VM-first order" {
+    const test_util = @import("test_util.zig");
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const gpa = arena.allocator();
+
+    // The VM the image boots by default comes first, whatever the directory order on disk and whatever the
+    // alternatives are called. Sorting alphabetically alone would pick "alpha-vm" here.
+    try tmp.dir.createDirPath(testing.io, "lib/alpha-vm");
+    try tmp.dir.createDirPath(testing.io, "lib/server");
+    try tmp.dir.createDirPath(testing.io, "lib/zulu-vm");
+    try test_util.writeElf(tmp.dir, "lib/alpha-vm/libjvm.so", " JRE (11.0.22+7)\x00", std.elf.PF_R);
+    try test_util.writeElf(tmp.dir, "lib/server/libjvm.so", " JRE (17.0.9+9)\x00", std.elf.PF_R);
+    try test_util.writeElf(tmp.dir, "lib/zulu-vm/libjvm.so", " JRE (21.0.9+10)\x00", std.elf.PF_R);
+
+    const library_dir = try tmp.dir.realPathFileAlloc(testing.io, "lib", gpa);
+    try testing.expectEqual(@as(?u32, 17), try detectLauncherVersion(testing.io, gpa, library_dir));
+
+    // Without a preferred name the order is alphabetical, not the order the filesystem happens to return.
+    try tmp.dir.deleteTree(testing.io, "lib/server");
+    try testing.expectEqual(@as(?u32, 11), try detectLauncherVersion(testing.io, gpa, library_dir));
 }
 
 test "JVM launcher: ignores directory symlinks to another Java installation" {

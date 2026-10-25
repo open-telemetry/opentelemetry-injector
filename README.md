@@ -422,37 +422,37 @@ When `OTEL_INJECTOR_DISABLED` is set to `true`, no environment variables will be
 ## Limitations
 
 If your application is incompatible with the instrumentation library that is being injected, the injector makes no
-guarantees that your application will work after the instrumentaiton is injected. We consider that the application
+guarantees that your application will work after the instrumentation is injected. We consider that the application
 compatibility checks are a responsibility of the instrumentation library.
 
 However, for certain programming languages it's not possible for the instrumentation checks to be performed efficiently
 before the instrumentation is loaded. For this reason, the injector performs a best-effort runtime version checks for
-.NET and Java, allowing for deployment of a runtime verfication configuration for these two platforms.
+.NET and Java, allowing for deployment of a runtime verification configuration for these two platforms.
 
 ### Limitations of the .NET runtime version checks
 
 The minimum .NET major version of an application is determined by inspecting its `*.runtimeconfig.json` file. If this
 file is not found in the deployment (or it is malformed), the injector will proceed with injecting the instrumentation.
-The default minimum .NET major version required is 8, matching the current support of the OpenTelemetry .NET SDK. You 
+The default minimum .NET major version required is 8, matching the current support of the OpenTelemetry .NET SDK. You
 can modify the supported .NET version by setting the `DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION`
 environment variable or the equivalent configuration option `dotnet_auto_instrumentation_minimum_dotnet_major_version`.
 
 ### Limitations of the Java runtime version checks
 
 The OpenTelemetry Java Agent requires Java 8 or newer, which means that the agent jar file contains class files with
-a version that is incompatible with JDKs older than JDK 8. Attempting to load the OpenTelemetry Java agent on an 
+a version that is incompatible with JDKs older than JDK 8. Attempting to load the OpenTelemetry Java agent on an
 older JVM would result in an application startup failure with a `java.lang.UnsupportedClassVersionError`.
 
 The detection of the JVM version is performed by scanning the `.rodata` segment of the JVM binaries. The current
-detection supports OpenJDK (and derivatives), GraalVM, OpenJ9 and Azul Prime (Zing). If the injector is unable 
+detection supports OpenJDK (and derivatives), GraalVM, OpenJ9 and Azul Prime (Zing). If the injector is unable
 to find the JVM version, the injector will proceed with injecting the instrumentation library.
 
 OpenJDK supports choosing an alternative JVM on the command line through `-XXaltjvm=` or `JDK_ALTERNATE_VM`, the
-injector currently doesn't support detecting the version of the alternate JVM and proceeds with injecting the 
+injector currently doesn't support detecting the version of the alternate JVM and proceeds with injecting the
 instrumentation library.
 
-The default supported JVM version is 8, matching the version support of the OpenTelemetry Java Agent. If you 
-are injecting a different instrumentation library with an earlier version support, you can modify the 
+The default supported JVM version is 8, matching the version support of the OpenTelemetry Java Agent. If you
+are injecting a different instrumentation library with an earlier version support, you can modify the
 supported version by setting the `JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION` environment variable or
 the equivalent `jvm_auto_instrumentation_minimum_java_major_version` config file option.
 

@@ -3,6 +3,7 @@
 
 const std = @import("std");
 const environ = @import("proc_self_environ_parser.zig");
+const print = @import("print.zig");
 const version = @import("jvm_version.zig");
 const testing = std.testing;
 
@@ -31,10 +32,12 @@ fn getJavaMajorVersionFromFiles(io: std.Io, allocator: std.mem.Allocator, get_en
     const launcher = try findLauncher(io, gpa, maps_path) orelse return error.JvmLauncherNotFound;
 
     if (try hasAlternateVm(io, gpa, get_env, cmdline_path)) {
+        print.printDebug("JVM detection: an alternate VM is selected, the bundled VM says nothing about it.", .{});
         return null;
     }
 
     const library_dir = try runtimeLibraryDirectory(io, gpa, launcher);
+    print.printDebug("JVM detection: native library directory is \"{s}\".", .{library_dir});
 
     // Prefer the release file of the Java home the launcher belongs to. Every runtime image built since JDK 8
     // ships one, including jlink and jpackage images, so this answers the question with a single read of about a
@@ -75,8 +78,11 @@ fn javaHomeVersion(io: std.Io, allocator: std.mem.Allocator, library_dir: []cons
         ) catch continue;
 
         if (releaseFileVersion(content)) |major| {
+            print.printDebug("JVM detection: \"{s}\" reports Java {d}.", .{ release_path, major });
             return major;
         }
+
+        print.printDebug("JVM detection: \"{s}\" carries no usable JAVA_VERSION.", .{release_path});
     }
 
     return null;
@@ -134,6 +140,7 @@ fn findLauncher(io: std.Io, allocator: std.mem.Allocator, maps_path: []const u8)
 
         const launcher = launcherFromMapsLine(line) orelse continue;
 
+        print.printDebug("JVM detection: found the launcher library below \"{s}\".", .{launcher.directory});
         return .{
             .directory = try allocator.dupe(u8, launcher.directory),
             .legacy = launcher.legacy,
@@ -249,6 +256,7 @@ fn vmDirectoryLessThan(_: void, a: []const u8, b: []const u8) bool {
 fn inspectVmDirectory(io: std.Io, allocator: std.mem.Allocator, directory: []const u8) !?u32 {
     const binary = try std.fs.path.join(allocator, &.{ directory, "libjvm.so" });
 
+    print.printDebug("JVM detection: scanning \"{s}\" for a version banner.", .{binary});
     const vm_version = try version.inspectBinary(io, binary);
 
     if (vm_version.major) |major| {

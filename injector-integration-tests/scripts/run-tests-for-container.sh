@@ -43,6 +43,9 @@ fi
 if [[ "$TEST_SET" = "no-getenv-symbol.tests" ]]; then
   test_app="no-getenv-symbol"
 fi
+if [[ "$TEST_SET" = "php.tests" ]]; then
+  test_app="php"
+fi
 if [[ "$TEST_SET" = "python.tests" ]]; then
   test_app="python"
 fi
@@ -106,6 +109,13 @@ case "$test_app" in
     base_image_run=ruby:3.3-slim
     if [[ "$LIBC" = "musl" ]]; then
       base_image_run=ruby:3.3-alpine
+    fi
+    ;;
+  "php")
+    dockerfile_name="injector-integration-tests/apps/php/Dockerfile"
+    base_image_run=php:8.3-cli
+    if [[ "$LIBC" = "musl" ]]; then
+      base_image_run=php:8.3-cli-alpine
     fi
     ;;
   "no-getenv-symbol")

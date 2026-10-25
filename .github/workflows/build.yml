@@ -40,12 +40,72 @@ jobs:
       - name: Run Injector integration tests
         run: make injector-integration-tests-for-one-architecture ARCH=${{ matrix.ARCH }}
 
+      - name: Build the PHP universal loader
+        run: make php-loader ARCH=${{ matrix.ARCH }}
+
       - name: Upload binary
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: libotelinject-${{ matrix.ARCH }}
           path: ./dist/*.so
           if-no-files-found: error
+
+      - name: Upload the PHP universal loader
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: otel-php-loader-${{ matrix.ARCH }}
+          path: ./dist/php/**/otel_loader.so
+          if-no-files-found: error
+
+  # The single most important property of the loader: one binary per libc is accepted by every
+  # supported PHP. Twenty containers per architecture, so it runs as its own job rather than
+  # lengthening the critical path of the build.
+  php-loader-matrix:
+    runs-on: ${{ matrix.ARCH == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        ARCH: [ "amd64", "arm64" ]
+    steps:
+      - name: Check out the codebase.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Run the PHP loader matrix (8.1-8.5 x glibc/musl x NTS/ZTS)
+        run: make php-loader-tests ARCH=${{ matrix.ARCH }}
+
+  # End to end: injector -> PHP_INI_SCAN_DIR -> loader -> opentelemetry.so -> SDK bootstrap ->
+  # spans received by a real collector over OTLP, under every supported SAPI including mod_php.
+  php-e2e:
+    runs-on: ${{ matrix.ARCH == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    needs: verify-and-build-binary
+    strategy:
+      fail-fast: false
+      matrix:
+        ARCH: [ "amd64", "arm64" ]
+    steps:
+      - name: Check out the codebase.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      # Reuse the binary the build job already produced instead of rebuilding it; the Makefile
+      # target depends on the file, so a present, newer binary is left alone.
+      - name: Download the injector binary
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: libotelinject-${{ matrix.ARCH }}
+          path: ./dist
+
+      - name: Run the PHP end-to-end tests (cli, built-in server, php-fpm + nginx, mod_php)
+        run: make php-e2e-tests ARCH=${{ matrix.ARCH }}
 
   test-release-signing:
     runs-on: ubuntu-26.04

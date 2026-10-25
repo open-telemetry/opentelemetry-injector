@@ -1,0 +1,35 @@
+# Builds an OpenTelemetry PHP artifact variant for the *host* architecture.
+#
+# Upstream publishes these as ghcr.io/opentelemetry-php/autoinstrumentation-php, but its arm64
+# image currently contains x86-64 binaries, so arm64 needs a locally built tree. The output
+# layout is identical to upstream's, so the loader cannot tell the difference.
+ARG PHP_IMAGE=php:8.3-cli
+FROM ${PHP_IMAGE} AS build
+
+RUN set -eux; \
+    if command -v apk > /dev/null; then apk add --no-cache $PHPIZE_DEPS git unzip; \
+    else apt-get update && apt-get install -y --no-install-recommends $PHPIZE_DEPS git unzip && rm -rf /var/lib/apt/lists/*; fi
+
+RUN pecl install opentelemetry && docker-php-ext-enable opentelemetry
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /build
+# guzzle + the PSR-18 adapter are what the OTLP/HTTP exporter discovers as its transport; without
+# a PSR-18 client the exporter builds but cannot send. Upstream's tree ships guzzle for the same
+# reason.
+RUN composer require --no-interaction \
+      open-telemetry/sdk \
+      open-telemetry/exporter-otlp \
+      guzzlehttp/guzzle \
+      php-http/guzzle7-adapter
+
+# Flatten into the upstream shape: the vendor tree's contents sit directly in the variant
+# directory, with autoload.php at its root, next to opentelemetry.so.
+RUN set -eux; \
+    mkdir -p /variant; \
+    cp -a vendor/. /variant/; \
+    cp "$(php -r 'echo ini_get("extension_dir");')/opentelemetry.so" /variant/opentelemetry.so; \
+    test -f /variant/autoload.php
+
+FROM scratch AS export
+COPY --from=build /variant /

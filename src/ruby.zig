@@ -390,6 +390,7 @@ fn testConfiguration(path_prefix: []const u8, disabled: bool) config.InjectorCon
         .jvm_auto_instrumentation_agent_path = @constCast(""),
         .nodejs_auto_instrumentation_agent_path = @constCast(""),
         .python_auto_instrumentation_agent_path_prefix = @constCast(""),
+        .php_auto_instrumentation_agent_path_prefix = @constCast(""),
         .ruby_auto_instrumentation_agent_path_prefix = @constCast(path_prefix),
         .all_auto_instrumentation_agents_env_path = @constCast(""),
         .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(testing.allocator),
@@ -402,6 +403,7 @@ fn testConfiguration(path_prefix: []const u8, disabled: bool) config.InjectorCon
         .jvm_instrumentation_disabled = false,
         .nodejs_instrumentation_disabled = false,
         .python_instrumentation_disabled = false,
+        .php_instrumentation_disabled = false,
         .ruby_instrumentation_disabled = disabled,
     };
 }

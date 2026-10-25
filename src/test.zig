@@ -13,6 +13,7 @@ pub const patterns_matcher = @import("patterns_matcher.zig");
 pub const patterns_util = @import("patterns_util.zig");
 pub const proc_self_environ_parser = @import("proc_self_environ_parser.zig");
 pub const print = @import("print.zig");
+pub const php = @import("php.zig");
 pub const python = @import("python.zig");
 pub const ruby = @import("ruby.zig");
 pub const res_attrs_test = @import("resource_attributes_test.zig");

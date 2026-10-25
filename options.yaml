@@ -118,6 +118,18 @@
   details: An empty path disables only Node.js instrumentation, not [resource-attribute injection](#resource_attributes).
   examples: [/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js]
 
+- id: php_agent_path
+  type: string
+  default: ""
+  description: Directory containing the PHP auto-instrumentation distribution.
+  file:
+    key: php_auto_instrumentation_agent_path_prefix
+  env:
+    name: PHP_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX
+  empty_value: Disable PHP auto-instrumentation.
+  details: Must contain `glibc` and `musl` directories. The matching directory is appended to `PHP_INI_SCAN_DIR`. Prefixes containing a colon are rejected during injection, because the colon separates `PHP_INI_SCAN_DIR` entries. An empty path disables only PHP instrumentation, not [resource-attribute injection](#resource_attributes).
+  examples: [/usr/lib/opentelemetry/php]
+
 - id: python_agent_path
   type: string
   default: ""
@@ -163,9 +175,9 @@
   empty_value: Do not disable any runtime through this setting.
   invalid_value: Warn and ignore unknown runtime names.
   details: |
-    Use `*` alone to disable all runtimes, or a comma-separated list of `dotnet`, `jvm`, `nodejs`, `python`, or `ruby`. Names are case-sensitive.
+    Use `*` alone to disable all runtimes, or a comma-separated list of `dotnet`, `jvm`, `nodejs`, `php`, `python`, or `ruby`. Names are case-sensitive.
 
-    For example, `auto_instrumentation_disabled=dotnet,python` leaves JVM, Node.js, and Ruby instrumentation eligible. An empty [agent path](#jvm_agent_path) also disables that runtime.
+    For example, `auto_instrumentation_disabled=dotnet,python` leaves JVM, Node.js, PHP, and Ruby instrumentation eligible. An empty [agent path](#jvm_agent_path) also disables that runtime.
 
     Resource attributes may still be injected. Use [OTEL_INJECTOR_DISABLED](#disabled) to disable the injector completely, including resource-attribute injection.
   examples: ["*", "dotnet,python"]

@@ -1,0 +1,28 @@
+# One of 'breaking', 'deprecation', 'new_component', 'enhancement', 'bug_fix'
+change_type: new_component
+
+# The name of the component, or a single word describing the area of concern, (e.g. filelogreceiver)
+component: injector
+
+# A brief description of the change.  Surround your text with quotes ("") if it needs to start with a backtick (`).
+note: Add PHP auto-instrumentation support by injecting `PHP_INI_SCAN_DIR`, together with a universal loader that selects and activates the matching OpenTelemetry PHP extension.
+
+# Mandatory: One or more tracking issues related to the change. You can use the PR number here if no issue exists.
+issues: [447]
+
+# (Optional) One or more lines of additional information to render under the primary note.
+subtext: |
+  Enabled by installing a `php.conf` drop-in that sets `php_auto_instrumentation_agent_path_prefix`,
+  and disabled per-runtime with `OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=php`.
+
+  Unlike the other runtimes, the injector does not attempt to detect PHP in-process. Only PHP reads
+  `PHP_INI_SCAN_DIR`, and the loader it points at declines to activate on any PHP it cannot support.
+
+  The injector appends its directory to any existing `PHP_INI_SCAN_DIR` value and keeps an empty
+  leading entry when the variable was unset, so the distribution's own `conf.d` is never dropped.
+
+  The loader bootstraps the PHP-level SDK from a module's `RINIT` rather than through
+  `auto_prepend_file`, so applications that use that directive themselves keep working.
+
+# Optional: The change log or logs in which this entry should be included.
+change_logs: [user]

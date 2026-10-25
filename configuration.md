@@ -93,6 +93,7 @@ Generated from `options.yaml` using `make generate-config`. Defaults below are l
 - [`jvm_auto_instrumentation_minimum_java_major_version` / `JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION`](#jvm_minimum_major_version)
 - [`OTEL_INJECTOR_JAVAAGENT_EXTENSIONS`](#javaagent_extensions)
 - [`nodejs_auto_instrumentation_agent_path` / `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH`](#nodejs_agent_path)
+- [`php_auto_instrumentation_agent_path_prefix` / `PHP_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`](#php_agent_path)
 - [`python_auto_instrumentation_agent_path_prefix` / `PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`](#python_agent_path)
 - [`ruby_auto_instrumentation_agent_path_prefix` / `RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`](#ruby_agent_path)
 - [`all_auto_instrumentation_agents_env_path`](#agents_env_path)
@@ -356,6 +357,31 @@ An empty path disables only Node.js instrumentation, not [resource-attribute inj
 
 [Back to options](#options)
 
+<a id="php_agent_path"></a>
+
+### `php_auto_instrumentation_agent_path_prefix` / `PHP_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`
+
+Directory containing the PHP auto-instrumentation distribution.
+
+- Type: `string`
+- Default: `""`
+- File key: `php_auto_instrumentation_agent_path_prefix`
+- Repeated file keys: `replace`
+- Environment variable: `PHP_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`
+- Environment pre-trim: true
+- Empty environment policy: `value`
+- Environment override: replaces file values when successfully parsed
+
+**Empty value:** Disable PHP auto-instrumentation.
+
+Must contain `glibc` and `musl` directories. The matching directory is appended to `PHP_INI_SCAN_DIR`. Prefixes containing a colon are rejected during injection, because the colon separates `PHP_INI_SCAN_DIR` entries. An empty path disables only PHP instrumentation, not [resource-attribute injection](#resource_attributes).
+
+**Examples:**
+
+- `php_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/php`
+
+[Back to options](#options)
+
 <a id="python_agent_path"></a>
 
 ### `python_auto_instrumentation_agent_path_prefix` / `PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`
@@ -446,9 +472,9 @@ Runtimes for which auto-instrumentation is disabled.
 
 **Invalid value:** Warn and ignore unknown runtime names.
 
-Use `*` alone to disable all runtimes, or a comma-separated list of `dotnet`, `jvm`, `nodejs`, `python`, or `ruby`. Names are case-sensitive.
+Use `*` alone to disable all runtimes, or a comma-separated list of `dotnet`, `jvm`, `nodejs`, `php`, `python`, or `ruby`. Names are case-sensitive.
 
-For example, `auto_instrumentation_disabled=dotnet,python` leaves JVM, Node.js, and Ruby instrumentation eligible. An empty [agent path](#jvm_agent_path) also disables that runtime.
+For example, `auto_instrumentation_disabled=dotnet,python` leaves JVM, Node.js, PHP, and Ruby instrumentation eligible. An empty [agent path](#jvm_agent_path) also disables that runtime.
 
 Resource attributes may still be injected. Use [OTEL_INJECTOR_DISABLED](#disabled) to disable the injector completely, including resource-attribute injection.
 

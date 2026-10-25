@@ -54,6 +54,34 @@ $(DIST_TARGET): $(DIST_SRCS)
 .PHONY: dist
 dist: $(DIST_TARGET)
 
+# Builds the PHP universal loader into dist/php/<libc>/<arch>/otel_loader.so. One binary per
+# {libc, architecture} serves every supported PHP version and thread-safety flavor.
+.PHONY: php-loader
+php-loader:
+	php-loader/build.sh all $(ARCH)
+
+# Verifies that a single loader binary is accepted by every supported PHP: 8.1-8.5, glibc and
+# musl, NTS and ZTS.
+.PHONY: php-loader-tests
+php-loader-tests: php-loader
+	php-loader/test-matrix.sh $(ARCH)
+
+# Fetches (or, where upstream's image is unusable on this architecture, builds) the
+# OpenTelemetry PHP artifact tree the loader dispatches to.
+.PHONY: php-artifacts
+php-artifacts:
+	injector-e2e-tests/php/prepare-artifacts.sh
+
+# End-to-end: the injector sets PHP_INI_SCAN_DIR, the loader selects and activates the matching
+# extension, the SDK bootstraps, and spans reach a real collector over OTLP -- under CLI, the
+# built-in server, php-fpm behind nginx, and Apache mod_php.
+#
+# Depends on $(DIST_TARGET) rather than dist so that a prebuilt binary (for example one
+# downloaded in CI) is not rebuilt unnecessarily.
+.PHONY: php-e2e-tests
+php-e2e-tests: $(DIST_TARGET) php-loader php-artifacts
+	injector-e2e-tests/php/run.sh
+
 # Run this to install and enable the auto-instrumentation files. Mostly intended for development.
 .PHONY: install
 install: all uninstall

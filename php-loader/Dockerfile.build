@@ -1,0 +1,65 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+# Builds the universal loader. The PHP version used here only determines which
+# headers we compile against -- the resulting binary is expected to load on any
+# PHP, which is the whole point of the loader and what test-matrix.sh verifies.
+#
+# We build against the oldest PHP we support (8.1), so that every struct we
+# touch is one that all supported versions agree on.
+ARG PHP_BUILD_IMAGE=php:8.1-cli
+
+FROM ${PHP_BUILD_IMAGE} AS build
+
+# The official PHP images ship the toolchain list in $PHPIZE_DEPS but do not
+# install it.
+RUN set -eux; \
+    if command -v apk > /dev/null; then \
+      apk add --no-cache $PHPIZE_DEPS; \
+    else \
+      apt-get update && apt-get install -y --no-install-recommends $PHPIZE_DEPS && rm -rf /var/lib/apt/lists/*; \
+    fi
+
+WORKDIR /src
+COPY config.m4 otel_loader.c otel_loader.h ./
+
+RUN set -eux; \
+    phpize; \
+    ./configure --enable-otel-loader; \
+    make -j"$(nproc)"; \
+    strip modules/otel_loader.so; \
+    php -r 'exit(0);'
+
+# Fail the build rather than ship a loader that is missing the two symbols the
+# engine looks up by name; a typo there degrades to "silently never loads".
+RUN set -eux; \
+    nm -D --defined-only modules/otel_loader.so | grep -q ' zend_extension_entry$'; \
+    nm -D --defined-only modules/otel_loader.so | grep -q ' extension_version_info$'
+
+# A universal loader must not reference any engine global. EG()/CG() and the
+# macros built on them (zend_try among them) compile to a direct
+# `executor_globals` symbol on NTS but to a TSRM offset lookup on ZTS, so a
+# single binary that touches one loads on exactly half the matrix and fails on
+# the other with "undefined symbol: executor_globals". That is a silent loss of
+# instrumentation on every ZTS PHP, so fail the build instead.
+RUN set -eux; \
+    if nm -D --undefined-only modules/otel_loader.so \
+       | grep -E ' (executor_globals|compiler_globals|core_globals|sapi_globals|file_globals|basic_globals)$'; then \
+      echo "ERROR: the loader references a thread-safety-dependent engine global" >&2; \
+      exit 1; \
+    fi
+
+# Keep the glibc floor low enough for the long-lived distros the injector
+# already supports (UBI 8 is glibc 2.28). Building on a current base image
+# would otherwise stamp a GLIBC_2.34 requirement on the binary and silently
+# lose instrumentation there; see the .symver block in otel_loader.c.
+RUN set -eux; \
+    if [ ! -f /etc/alpine-release ]; then \
+      if objdump -T modules/otel_loader.so | grep -oE 'GLIBC_2\.(3[4-9]|[4-9][0-9])' | sort -u | grep .; then \
+        echo "ERROR: the loader requires a glibc newer than the supported floor" >&2; \
+        exit 1; \
+      fi; \
+    fi
+
+FROM scratch AS export
+COPY --from=build /src/modules/otel_loader.so /otel_loader.so

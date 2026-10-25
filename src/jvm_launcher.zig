@@ -121,7 +121,17 @@ fn findLauncher(io: std.Io, allocator: std.mem.Allocator, maps_path: []const u8)
     var buffer: [8192]u8 = undefined;
     var reader = file.readerStreaming(io, &buffer);
 
-    while (try reader.interface.takeDelimiter('\n')) |line| {
+    while (true) {
+        const line = (reader.interface.takeDelimiter('\n') catch |err| switch (err) {
+            // A line that does not fit the buffer cannot be one we care about. Skip it and resume at the next
+            // delimiter rather than abandoning the file, the way libc.zig reads /proc/self/maps.
+            error.StreamTooLong => {
+                _ = try reader.interface.discardDelimiterInclusive('\n');
+                continue;
+            },
+            else => return err,
+        }) orelse break;
+
         const launcher = launcherFromMapsLine(line) orelse continue;
 
         return .{
@@ -140,8 +150,13 @@ fn launcherFromMapsLine(line: []const u8) ?Launcher {
     var fields = std.mem.tokenizeAny(u8, line, " \t");
     for (0..5) |_| _ = fields.next() orelse return null;
 
-    // Check if it's our only loaded module libjli.so.
-    const path = std.mem.trim(u8, fields.rest(), " \t\r");
+    // Check if it's our only loaded module libjli.so. The kernel appends " (deleted)" to the path when the file
+    // has been replaced since it was mapped, which happens to a long-running JVM across a JDK package upgrade.
+    const deleted_suffix = " (deleted)";
+    var path = std.mem.trim(u8, fields.rest(), " \t\r");
+    if (std.mem.endsWith(u8, path, deleted_suffix)) {
+        path = path[0 .. path.len - deleted_suffix.len];
+    }
     if (!std.fs.path.isAbsolute(path) or !std.mem.eql(u8, std.fs.path.basename(path), "libjli.so")) {
         return null;
     }
@@ -287,6 +302,49 @@ test "JVM launcher: maps identify old and modern native library directories" {
     try testing.expectEqualStrings("/jdk/lib", modern.directory);
     try testing.expect(!modern.legacy);
     try testing.expectEqual(@as(?Launcher, null), launcherFromMapsLine("1000-2000 r-xp 0 00:01 1 /jdk/lib/libother.so"));
+}
+
+test "JVM launcher: recognizes a launcher library whose file has been replaced on disk" {
+    const deleted = launcherFromMapsLine("1000-2000 r-xp 0 00:01 1 /jdk/lib/libjli.so (deleted)").?;
+    try testing.expectEqualStrings("/jdk/lib", deleted.directory);
+    try testing.expect(!deleted.legacy);
+
+    const legacy_deleted = launcherFromMapsLine("1000-2000 r-xp 0 00:01 1 /jdk/jre/lib/amd64/jli/libjli.so (deleted)").?;
+    try testing.expectEqualStrings("/jdk/jre/lib/amd64", legacy_deleted.directory);
+    try testing.expect(legacy_deleted.legacy);
+
+    // A path that merely ends in the suffix is still not the launcher.
+    try testing.expectEqual(
+        @as(?Launcher, null),
+        launcherFromMapsLine("1000-2000 r-xp 0 00:01 1 /jdk/lib/libother.so (deleted)"),
+    );
+}
+
+test "JVM launcher: skips maps lines too long for the read buffer" {
+    const test_util = @import("test_util.zig");
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const gpa = arena.allocator();
+
+    // A pathological line ahead of the launcher must not cost us the rest of the file.
+    const overly_long = try std.fmt.allocPrint(
+        gpa,
+        "1000-2000 r--p 00000000 08:01 1 /{s}/libother.so\n",
+        .{test_util.repeat('x', 16 * 1024)},
+    );
+    const maps = try std.fmt.allocPrint(
+        gpa,
+        "{s}1000-2000 r--p 00000000 08:01 1 /jdk/lib/libjli.so\n",
+        .{overly_long},
+    );
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "maps", .data = maps });
+
+    const maps_path = try tmp.dir.realPathFileAlloc(testing.io, "maps", gpa);
+    const launcher = (try findLauncher(testing.io, gpa, maps_path)).?;
+    try testing.expectEqualStrings("/jdk/lib", launcher.directory);
 }
 
 test "JVM release file: reads the Java major version from the vendors we support" {

@@ -53,41 +53,6 @@ fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
         return null;
     }
 
-    // A minimum of zero turns the version gate off entirely: no detection runs and every process is injected, which
-    // is how the injector behaved before the gate existed. Besides being the cheapest way to opt out of the scan,
-    // this is the only way to keep instrumenting JVMs the launcher detection cannot see. A VM created through the
-    // JNI Invocation API (jsvc and other embedded launchers) dlopens libjvm.so long after our constructor has run,
-    // so at detection time the process looks like any other non-Java process, even though the VM it later starts
-    // does read JAVA_TOOL_OPTIONS.
-    if (minimum_java_major_version == 0) {
-        print.printDebug("Skipping JVM version detection because the minimum Java major version is set to 0.", .{});
-    } else {
-        var major: ?u32 = null;
-        if (get_java_major_version(io, gpa, get_env)) |detected_major| {
-            major = detected_major;
-        } else |err| {
-            // We need to ignore processes that don't have Java because we'll inject into any shell that wraps a Java
-            // process, and then, like it or not, this environment variable will propagate to the JVM process.
-            if (err == error.JvmLauncherNotFound) {
-                print.printDebug("Skipping Java agent injection because no Java launcher is loaded.", .{});
-                return null;
-            }
-            print.printDebug("Cannot detect the JVM's Java version, allowing Java agent injection: {}", .{err});
-        }
-        if (major) |java_major| {
-            if (java_major < minimum_java_major_version) {
-                print.printInfo(
-                    "Skipping the injection of the OpenTelemetry Java agent because Java {d} is older than the minimum supported version {d}.",
-                    .{ java_major, minimum_java_major_version },
-                );
-                return null;
-            }
-            print.printDebug("Detected Java {d} in the JVM binary.", .{java_major});
-        } else {
-            print.printDebug("No JVM version detected, allowing Java agent injection.", .{});
-        }
-    }
-
     // Check the existence of the Jar file: by passing a `-javaagent` to a
     // jar file that does not exist or cannot be opened will crash the JVM
     std.Io.Dir.cwd().access(io, jvm_auto_instrumentation_agent_path, .{}) catch |err| {
@@ -100,11 +65,77 @@ fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
         return null;
     };
 
+    if (original_value_optional) |original_java_tool_options_env_var_value| {
+        if (std.mem.indexOf(u8, original_java_tool_options_env_var_value, javaagent_flag_value)) |_| {
+            // If our "-javaagent ..." flag is already present in JAVA_TOOL_OPTIONS, do nothing. This is particularly
+            // important to avoid double injection, for example if we are injecting into a container which has a shell
+            // executable as its entry point (into which we inject env var modifications), and then this shell starts
+            // the JVM executable as a child process, which inherits the environment from the already injected shell.
+            gpa.free(javaagent_flag_value);
+            return null;
+        }
+    }
+
+    // Detecting the runtime version is the expensive part of this function, so it runs last: the checks above can
+    // rule out injection on their own, and they cost a stat and a substring search.
+    if (!javaVersionAllowsInjection(io, gpa, minimum_java_major_version, get_env, get_java_major_version)) {
+        gpa.free(javaagent_flag_value);
+        return null;
+    }
+
     return getModifiedJavaToolOptionsValue(
         gpa,
         original_value_optional,
         javaagent_flag_value,
     );
+}
+
+fn javaVersionAllowsInjection(
+    io: std.Io,
+    gpa: std.mem.Allocator,
+    minimum_java_major_version: u32,
+    get_env: environ.GetenvFn,
+    comptime get_java_major_version: fn (std.Io, std.mem.Allocator, environ.GetenvFn) anyerror!?u32,
+) bool {
+    // A minimum of zero turns the version gate off entirely: no detection runs and every process is injected, which
+    // is how the injector behaved before the gate existed. Besides being the cheapest way to opt out of the scan,
+    // this is the only way to keep instrumenting JVMs the launcher detection cannot see. A VM created through the
+    // JNI Invocation API (jsvc and other embedded launchers) dlopens libjvm.so long after our constructor has run,
+    // so at detection time the process looks like any other non-Java process, even though the VM it later starts
+    // does read JAVA_TOOL_OPTIONS.
+    if (minimum_java_major_version == 0) {
+        print.printDebug("Skipping JVM version detection because the minimum Java major version is set to 0.", .{});
+        return true;
+    }
+
+    var major: ?u32 = null;
+    if (get_java_major_version(io, gpa, get_env)) |detected_major| {
+        major = detected_major;
+    } else |err| {
+        // We need to ignore processes that don't have Java because we'll inject into any shell that wraps a Java
+        // process, and then, like it or not, this environment variable will propagate to the JVM process.
+        if (err == error.JvmLauncherNotFound) {
+            print.printDebug("Skipping Java agent injection because no Java launcher is loaded.", .{});
+            return false;
+        }
+        print.printDebug("Cannot detect the JVM's Java version, allowing Java agent injection: {}", .{err});
+    }
+
+    const java_major = major orelse {
+        print.printDebug("No JVM version detected, allowing Java agent injection.", .{});
+        return true;
+    };
+
+    if (java_major < minimum_java_major_version) {
+        print.printInfo(
+            "Skipping the injection of the OpenTelemetry Java agent because Java {d} is older than the minimum supported version {d}.",
+            .{ java_major, minimum_java_major_version },
+        );
+        return false;
+    }
+
+    print.printDebug("Detected Java {d}.", .{java_major});
+    return true;
 }
 
 fn getJavaMajorVersion(io: std.Io, allocator: std.mem.Allocator, get_env: environ.GetenvFn) !?u32 {
@@ -290,16 +321,8 @@ fn getModifiedJavaToolOptionsValue(
     javaagent_flag_value: [:0]u8,
 ) ?[:0]u8 {
     // For auto-instrumentation, we inject the -javaagent flag into the JAVA_TOOL_OPTIONS environment variable.
+    // The caller has already established that our flag is not in the original value yet.
     if (original_java_tool_options_env_var_value_optional) |original_java_tool_options_env_var_value| {
-        if (std.mem.indexOf(u8, original_java_tool_options_env_var_value, javaagent_flag_value)) |_| {
-            // If our "-javaagent ..." flag is already present in JAVA_TOOL_OPTIONS, do nothing. This is particularly
-            // important to avoid double injection, for example if we are injecting into a container which has a shell
-            // executable as its entry point (into which we inject env var modifications), and then this shell starts
-            // the JVM executable as a child process, which inherits the environment from the already injected shell.
-            gpa.free(javaagent_flag_value);
-            return null;
-        }
-
         // If JAVA_TOOL_OPTIONS is already set, prepend the "-javaagent ..." flag to the original value.
         // Since we copy over javaagent_flag_value into newly allocated memory, we can free the parameter here.
         defer gpa.free(javaagent_flag_value);
@@ -359,18 +382,37 @@ test "getModifiedJavaToolOptionsValue: should append -javaagent if original valu
     );
 }
 
-test "getModifiedJavaToolOptionsValue: should do nothing if our -javaagent is already present" {
-    const original_value: [:0]const u8 = "-Dsome.property=value -javaagent:/usr/lib/opentelemetry/jvm/javaagent.jar -Dsome.other.property=value"[0.. :0];
-    const javaagent_flag_value = try std.fmt.allocPrintSentinel(
+test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should do nothing if our -javaagent is already present" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "agent.jar", .data = "" });
+    const jar = try tmp.dir.realPathFileAlloc(testing.io, "agent.jar", testing.allocator);
+    defer testing.allocator.free(jar);
+    const original = try std.fmt.allocPrintSentinel(
         testing.allocator,
-        "-javaagent:/usr/lib/opentelemetry/jvm/javaagent.jar",
-        .{},
+        "-Dsome.property=value -javaagent:{s} -Dsome.other.property=value",
+        .{jar},
         0,
     );
-    const modified_java_tool_options = getModifiedJavaToolOptionsValue(
+    defer testing.allocator.free(original);
+
+    // Detecting the version is the expensive part of the injection decision, so an already injected
+    // JAVA_TOOL_OPTIONS has to short-circuit before it: this detector fails the test if it is ever reached.
+    const Detector = struct {
+        fn detect(_: std.Io, _: std.mem.Allocator, _: environ.GetenvFn) anyerror!?u32 {
+            return error.TestDetectorMustNotBeCalled;
+        }
+    };
+
+    const modified_java_tool_options = doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+        testing.io,
         testing.allocator,
-        original_value,
-        javaagent_flag_value,
+        original,
+        jar,
+        false,
+        config.default_jvm_auto_instrumentation_minimum_java_major_version,
+        test_util.posixGetenv,
+        Detector.detect,
     );
     try test_util.expectWithMessage(modified_java_tool_options == null, "modified_java_tool_options == null");
 }

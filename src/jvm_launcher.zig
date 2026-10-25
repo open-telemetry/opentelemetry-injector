@@ -35,7 +35,68 @@ fn getJavaMajorVersionFromFiles(io: std.Io, allocator: std.mem.Allocator, get_en
     }
 
     const library_dir = try runtimeLibraryDirectory(io, gpa, launcher);
+
+    // Prefer the release file of the Java home the launcher belongs to. Every runtime image built since JDK 8
+    // ships one, including jlink and jpackage images, so this answers the question with a single read of about a
+    // kilobyte. Scanning libjvm.so is the fallback: correct everywhere, but it reads tens of megabytes (the
+    // version banner sits roughly two thirds into a 26 MB libjvm.so on a current JDK) at every JVM start. The
+    // runtimes that lack a release file are the pre-8 ones this check exists to catch, so the expensive path is
+    // taken exactly where it has to be. An alternate VM selection would make the release file describe a VM other
+    // than the one being loaded, but hasAlternateVm has already returned above in that case.
+    if (try javaHomeVersion(io, gpa, library_dir)) |major| {
+        return major;
+    }
+
     return detectLauncherVersion(io, gpa, library_dir);
+}
+
+const release_file_name = "release";
+const java_version_key = "JAVA_VERSION=";
+const max_release_file_size = 64 * 1024;
+// From the native library directory the Java home is one level up on a modern image (<home>/lib) and three on a
+// legacy one (<home>/jre/lib/<arch>); JDK 8 also keeps a release file in <home>/jre, two levels up.
+const max_java_home_depth = 4;
+
+/// Reads the Java major version from the release file of the Java home that owns `library_dir`, walking up from the
+/// native library directory until a release file turns up. Returns null when there is none, or when it carries no
+/// usable JAVA_VERSION entry.
+fn javaHomeVersion(io: std.Io, allocator: std.mem.Allocator, library_dir: []const u8) !?u32 {
+    var directory = library_dir;
+
+    for (0..max_java_home_depth) |_| {
+        directory = std.fs.path.dirname(directory) orelse return null;
+
+        const release_path = try std.fs.path.join(allocator, &.{ directory, release_file_name });
+        const content = std.Io.Dir.cwd().readFileAlloc(
+            io,
+            release_path,
+            allocator,
+            .limited(max_release_file_size),
+        ) catch continue;
+
+        if (releaseFileVersion(content)) |major| {
+            return major;
+        }
+    }
+
+    return null;
+}
+
+fn releaseFileVersion(content: []const u8) ?u32 {
+    var lines = std.mem.splitScalar(u8, content, '\n');
+
+    while (lines.next()) |line| {
+        // Match the key on a line of its own, so that JAVA_VERSION_DATE and friends cannot be mistaken for it.
+        const trimmed = std.mem.trim(u8, line, " \t\r");
+        if (!std.mem.startsWith(u8, trimmed, java_version_key)) {
+            continue;
+        }
+
+        const value = std.mem.trim(u8, trimmed[java_version_key.len..], "\"");
+        return version.parseJavaMajorVersion(value);
+    }
+
+    return null;
 }
 
 fn hasAlternateVm(io: std.Io, allocator: std.mem.Allocator, get_env: environ.GetenvFn, cmdline_path: []const u8) !bool {
@@ -198,6 +259,102 @@ test "JVM launcher: maps identify old and modern native library directories" {
     try testing.expectEqualStrings("/jdk/lib", modern.directory);
     try testing.expect(!modern.legacy);
     try testing.expectEqual(@as(?Launcher, null), launcherFromMapsLine("1000-2000 r-xp 0 00:01 1 /jdk/lib/libother.so"));
+}
+
+test "JVM release file: reads the Java major version from the vendors we support" {
+    const test_util = @import("test_util.zig");
+    // Verbatim excerpts from the release files of eclipse-temurin:8-jre, eclipse-temurin:21-jre,
+    // ibm-semeru-runtimes:open-21-jre-jammy, ghcr.io/graalvm/jdk-community:21 and azul/prime:21.
+    const Case = struct { content: []const u8, major: ?u32 };
+    for ([_]Case{
+        .{ .content = "JAVA_VERSION=\"1.8.0_504\"\nOS_NAME=\"Linux\"\nFULL_VERSION=\"1.8.0_504-b01\"\n", .major = 8 },
+        .{ .content = "IMPLEMENTOR=\"Eclipse Adoptium\"\nJAVA_VERSION=\"21.0.9\"\nJAVA_VERSION_DATE=\"2026-10-21\"\n", .major = 21 },
+        .{ .content = "IMPLEMENTOR=\"IBM Corporation\"\nJAVA_VERSION=\"21.0.12.1\"\n", .major = 21 },
+        .{ .content = "IMPLEMENTOR=\"GraalVM Community\"\nJAVA_VERSION=\"21.0.2\"\n", .major = 21 },
+        .{ .content = "IMPLEMENTOR=\"Azul Systems, Inc.\"\nJAVA_VERSION=\"21.0.9.0.101\"\n", .major = 21 },
+        // JAVA_VERSION_DATE must not be mistaken for the version itself.
+        .{ .content = "JAVA_VERSION_DATE=\"2026-10-21\"\nOS_ARCH=\"aarch64\"\n", .major = null },
+        // A value too long to be a version string, a malformed one, and a file without the key at all.
+        .{ .content = "JAVA_VERSION=\"21." ++ test_util.repeat('0', 200) ++ "\"\n", .major = null },
+        .{ .content = "JAVA_VERSION=\"not-a-version\"\n", .major = null },
+        .{ .content = "OS_NAME=\"Linux\"\n", .major = null },
+        .{ .content = "", .major = null },
+        // A release file without a trailing newline, and one with CRLF line endings.
+        .{ .content = "JAVA_VERSION=\"11.0.22\"", .major = 11 },
+        .{ .content = "OS_NAME=\"Linux\"\r\nJAVA_VERSION=\"17.0.9\"\r\n", .major = 17 },
+    }) |case| {
+        try testing.expectEqual(case.major, releaseFileVersion(case.content));
+    }
+}
+
+test "JVM release file: is found from modern and legacy native library directories" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const gpa = arena.allocator();
+
+    // A modern image keeps the launcher library in <home>/lib, a legacy one in <home>/jre/lib/<arch>.
+    try tmp.dir.createDirPath(testing.io, "modern/lib");
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "modern/release", .data = "JAVA_VERSION=\"21.0.9\"\n" });
+    try tmp.dir.createDirPath(testing.io, "legacy/jre/lib/amd64");
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "legacy/release", .data = "JAVA_VERSION=\"1.8.0_504\"\n" });
+    // A Java home without a release file, as shipped by Oracle JDK 6, must fall through to the binary scan.
+    try tmp.dir.createDirPath(testing.io, "no-release/jre/lib/amd64");
+
+    const modern = try tmp.dir.realPathFileAlloc(testing.io, "modern/lib", gpa);
+    try testing.expectEqual(@as(?u32, 21), try javaHomeVersion(testing.io, gpa, modern));
+
+    const legacy = try tmp.dir.realPathFileAlloc(testing.io, "legacy/jre/lib/amd64", gpa);
+    try testing.expectEqual(@as(?u32, 8), try javaHomeVersion(testing.io, gpa, legacy));
+
+    const without = try tmp.dir.realPathFileAlloc(testing.io, "no-release/jre/lib/amd64", gpa);
+    try testing.expectEqual(@as(?u32, null), try javaHomeVersion(testing.io, gpa, without));
+}
+
+test "JVM release file: the Java home version wins over the bundled VM binary" {
+    const test_util = @import("test_util.zig");
+    const original = try test_util.setStdCEnviron(&.{});
+    defer test_util.resetStdCEnviron(original);
+
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const gpa = arena.allocator();
+
+    try tmp.dir.createDirPath(testing.io, "lib/server");
+    try test_util.writeElf(tmp.dir, "lib/server/libjvm.so", " JRE (1.6.0_45-b06)\x00", std.elf.PF_R);
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "cmdline", .data = "java\x00Main\x00" });
+
+    const directory = try tmp.dir.realPathFileAlloc(testing.io, ".", gpa);
+    const maps = try std.fmt.allocPrint(gpa, "1000-2000 r--p 00000000 08:01 1 {s}/lib/libjli.so\n", .{directory});
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "maps", .data = maps });
+
+    const cmdline_path = try std.fs.path.join(gpa, &.{ directory, "cmdline" });
+    const maps_path = try std.fs.path.join(gpa, &.{ directory, "maps" });
+
+    // Without a release file the bundled VM binary is scanned.
+    try testing.expectEqual(
+        @as(?u32, 6),
+        try getJavaMajorVersionFromFiles(testing.io, gpa, test_util.posixGetenv, cmdline_path, maps_path),
+    );
+
+    // With one, it answers instead of the Java 6 banner in the bundled VM.
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "release", .data = "JAVA_VERSION=\"21.0.9\"\n" });
+    try testing.expectEqual(
+        @as(?u32, 21),
+        try getJavaMajorVersionFromFiles(testing.io, gpa, test_util.posixGetenv, cmdline_path, maps_path),
+    );
+
+    // An unusable release file falls back to the binary rather than reporting an unknown version.
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "release", .data = "OS_NAME=\"Linux\"\n" });
+    try testing.expectEqual(
+        @as(?u32, 6),
+        try getJavaMajorVersionFromFiles(testing.io, gpa, test_util.posixGetenv, cmdline_path, maps_path),
+    );
 }
 
 test "JVM launcher: resolves a JDK 8 launcher library to its bundled JRE" {

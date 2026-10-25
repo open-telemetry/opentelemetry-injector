@@ -161,9 +161,10 @@ fn parseTerminatedVersion(bytes: []const u8, terminator: u8) ?u32 {
     return parseJavaMajorVersion(bounded[0..end]);
 }
 
-fn parseJavaMajorVersion(version: []const u8) ?u32 {
-    std.debug.assert(version.len < max_version_length);
-    if (version.len == 0) {
+pub fn parseJavaMajorVersion(version: []const u8) ?u32 {
+    // Callers scanning binaries bound their slices before getting here, but the release file parser hands over
+    // whatever the file holds, so reject anything longer than a version string can plausibly be.
+    if (version.len == 0 or version.len >= max_version_length) {
         return null;
     }
 

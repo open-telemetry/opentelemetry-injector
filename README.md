@@ -132,8 +132,8 @@ This method requires `root` privileges.
    - `JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION`: the minimum Java major version required for Java
      auto-instrumentation; can also be set via the configuration file key
      `jvm_auto_instrumentation_minimum_java_major_version`. The default is `8`, matching the OpenTelemetry Java
-     agent's baseline. Environment values override file values. Non-negative integers are accepted; `0` allows any
-     detected Java version, and invalid values leave the current setting unchanged.
+     agent's baseline. Environment values override file values. Non-negative integers are accepted; `0` turns the
+     version check off entirely, and invalid values leave the current setting unchanged.
    - `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Node.js auto-instrumentation agent registration file
    - `PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the Python auto-instrumentation agent files (Python is disabled by default, see [Enabling Auto-Instrumentation for Python](#enabling-auto-instrumentation-for-python))
    - `RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the Ruby auto-instrumentation gem bundle
@@ -455,6 +455,14 @@ The default supported JVM version is 8, matching the version support of the Open
 are injecting a different instrumentation library with an earlier version support, you can modify the 
 supported version by setting the `JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION` environment variable or
 the equivalent `jvm_auto_instrumentation_minimum_java_major_version` config file option.
+
+The injector recognizes a process as a JVM by the launcher library the dynamic loader has already mapped when the
+injector initializes. Programs that embed a JVM through the JNI Invocation API instead of the `java` launcher, such
+as `jsvc` from Apache Commons Daemon, load the VM later in their startup and therefore look like any other non-Java
+process at that point. `JAVA_TOOL_OPTIONS` is not set for them, so the VM they go on to create is not instrumented.
+Setting the minimum Java major version to `0` turns the version check off: no detection runs, and `JAVA_TOOL_OPTIONS`
+is set for every process the injector is loaded into, which is how the injector behaved before the version check
+existed. Use it when you host your JVMs this way and you know they are new enough for the agent you are injecting.
 
 ## Design
 

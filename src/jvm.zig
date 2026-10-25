@@ -53,29 +53,39 @@ fn doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
         return null;
     }
 
-    var major: ?u32 = null;
-    if (get_java_major_version(io, gpa, get_env)) |detected_major| {
-        major = detected_major;
-    } else |err| {
-        // We need to ignore processes that don't have Java because we'll inject into any shell that wraps a Java
-        // process, and then, like it or not, this environment variable will propagate to the JVM process.
-        if (err == error.JvmLauncherNotFound) {
-            print.printDebug("Skipping Java agent injection because no Java launcher is loaded.", .{});
-            return null;
-        }
-        print.printDebug("Cannot detect the JVM's Java version, allowing Java agent injection: {}", .{err});
-    }
-    if (major) |java_major| {
-        if (java_major < minimum_java_major_version) {
-            print.printInfo(
-                "Skipping the injection of the OpenTelemetry Java agent because Java {d} is older than the minimum supported version {d}.",
-                .{ java_major, minimum_java_major_version },
-            );
-            return null;
-        }
-        print.printDebug("Detected Java {d} in the JVM binary.", .{java_major});
+    // A minimum of zero turns the version gate off entirely: no detection runs and every process is injected, which
+    // is how the injector behaved before the gate existed. Besides being the cheapest way to opt out of the scan,
+    // this is the only way to keep instrumenting JVMs the launcher detection cannot see. A VM created through the
+    // JNI Invocation API (jsvc and other embedded launchers) dlopens libjvm.so long after our constructor has run,
+    // so at detection time the process looks like any other non-Java process, even though the VM it later starts
+    // does read JAVA_TOOL_OPTIONS.
+    if (minimum_java_major_version == 0) {
+        print.printDebug("Skipping JVM version detection because the minimum Java major version is set to 0.", .{});
     } else {
-        print.printDebug("No JVM version detected, allowing Java agent injection.", .{});
+        var major: ?u32 = null;
+        if (get_java_major_version(io, gpa, get_env)) |detected_major| {
+            major = detected_major;
+        } else |err| {
+            // We need to ignore processes that don't have Java because we'll inject into any shell that wraps a Java
+            // process, and then, like it or not, this environment variable will propagate to the JVM process.
+            if (err == error.JvmLauncherNotFound) {
+                print.printDebug("Skipping Java agent injection because no Java launcher is loaded.", .{});
+                return null;
+            }
+            print.printDebug("Cannot detect the JVM's Java version, allowing Java agent injection: {}", .{err});
+        }
+        if (major) |java_major| {
+            if (java_major < minimum_java_major_version) {
+                print.printInfo(
+                    "Skipping the injection of the OpenTelemetry Java agent because Java {d} is older than the minimum supported version {d}.",
+                    .{ java_major, minimum_java_major_version },
+                );
+                return null;
+            }
+            print.printDebug("Detected Java {d} in the JVM binary.", .{java_major});
+        } else {
+            print.printDebug("No JVM version detected, allowing Java agent injection.", .{});
+        }
     }
 
     // Check the existence of the Jar file: by passing a `-javaagent` to a
@@ -378,7 +388,7 @@ test "JVM version gate: does not add a Java agent to a non-Java parent process" 
     };
     const original = try std.fmt.allocPrintSentinel(testing.allocator, "{s}", .{"-Dexisting=preserved -javaagent:/user-agent.jar"}, 0);
     defer testing.allocator.free(original);
-    for ([_]u32{ 0, 6, 8 }) |minimum| {
+    for ([_]u32{ 6, 8 }) |minimum| {
         const result = doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
             testing.io,
             testing.allocator,
@@ -392,6 +402,49 @@ test "JVM version gate: does not add a Java agent to a non-Java parent process" 
         defer if (result) |value| testing.allocator.free(value);
         try testing.expectEqual(@as(?[:0]u8, null), result);
         try testing.expectEqualStrings("-Dexisting=preserved -javaagent:/user-agent.jar", original);
+    }
+}
+
+test "JVM version gate: a minimum of zero injects without detecting the runtime" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "agent.jar", .data = "" });
+    const jar = try tmp.dir.realPathFileAlloc(testing.io, "agent.jar", testing.allocator);
+    defer testing.allocator.free(jar);
+    const expected = try std.fmt.allocPrint(testing.allocator, "-Dexisting=preserved -javaagent:{s}", .{jar});
+    defer testing.allocator.free(expected);
+
+    // Detection must not run at all when the gate is off, so every detector outcome has to inject: a process that
+    // does not look like a JVM (an embedded launcher such as jsvc, or a shell that goes on to exec java), a JVM too
+    // old for the agent, and a detector that fails outright.
+    const Detector = struct {
+        fn notJava(_: std.Io, _: std.mem.Allocator, _: environ.GetenvFn) anyerror!?u32 {
+            return error.JvmLauncherNotFound;
+        }
+        fn failing(_: std.Io, _: std.mem.Allocator, _: environ.GetenvFn) anyerror!?u32 {
+            return error.AccessDenied;
+        }
+        fn java6(_: std.Io, _: std.mem.Allocator, _: environ.GetenvFn) anyerror!?u32 {
+            return 6;
+        }
+        fn unreachableDetector(_: std.Io, _: std.mem.Allocator, _: environ.GetenvFn) anyerror!?u32 {
+            return error.TestDetectorMustNotBeCalled;
+        }
+    };
+
+    inline for (.{ Detector.notJava, Detector.failing, Detector.java6, Detector.unreachableDetector }) |detect| {
+        const result = doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+            testing.io,
+            testing.allocator,
+            "-Dexisting=preserved",
+            jar,
+            false,
+            0,
+            test_util.posixGetenv,
+            detect,
+        );
+        defer if (result) |value| testing.allocator.free(value);
+        try testing.expectEqualStrings(expected, result orelse return error.TestUnexpectedResult);
     }
 }
 

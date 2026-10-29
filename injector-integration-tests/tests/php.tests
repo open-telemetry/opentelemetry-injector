@@ -1,0 +1,109 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+run_test_case \
+  "injects PHP_INI_SCAN_DIR if it is not present" \
+  "app" \
+  "php app.php php-ini-scan-dir" \
+  "PHP_INI_SCAN_DIR: :/usr/lib/opentelemetry/php/${LIBC_FLAVOR}"
+
+# The leading empty entry is what stands for PHP's compiled-in scan directory. Without it,
+# setting PHP_INI_SCAN_DIR would silently drop the distribution's conf.d.
+run_test_case \
+  "preserves the compiled-in scan directory" \
+  "app" \
+  "php app.php verify-compiled-in-scan-dir-is-preserved" \
+  "distro conf.d scanned: true"
+
+run_test_case \
+  "PHP actually scans the injected directory" \
+  "app" \
+  "php app.php verify-loader-ini-has-been-scanned" \
+  "loader ini scanned: true"
+
+run_test_case \
+  "appends to an existing PHP_INI_SCAN_DIR value" \
+  "app" \
+  "php app.php php-ini-scan-dir" \
+  "PHP_INI_SCAN_DIR: /etc/php/conf.d:/usr/lib/opentelemetry/php/${LIBC_FLAVOR}" \
+  "PHP_INI_SCAN_DIR=/etc/php/conf.d"
+
+run_test_case \
+  "does not inject twice if the directory is already present" \
+  "app" \
+  "php app.php php-ini-scan-dir" \
+  "PHP_INI_SCAN_DIR: :/usr/lib/opentelemetry/php/${LIBC_FLAVOR}" \
+  "PHP_INI_SCAN_DIR=:/usr/lib/opentelemetry/php/${LIBC_FLAVOR}"
+
+# An entry that merely shares our prefix must not be mistaken for ours; a substring check
+# instead of an entry-wise one would wrongly skip the injection here.
+run_test_case \
+  "still injects when an existing entry only shares our prefix" \
+  "app" \
+  "php app.php php-ini-scan-dir" \
+  "PHP_INI_SCAN_DIR: /usr/lib/opentelemetry/php/${LIBC_FLAVOR}-old:/usr/lib/opentelemetry/php/${LIBC_FLAVOR}" \
+  "PHP_INI_SCAN_DIR=/usr/lib/opentelemetry/php/${LIBC_FLAVOR}-old"
+
+run_test_case \
+  "does not inject if PHP auto-instrumentation is disabled" \
+  "app" \
+  "php app.php php-ini-scan-dir" \
+  "PHP_INI_SCAN_DIR: <unset>" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=php"
+
+run_test_case \
+  "does not inject if all auto-instrumentation is disabled" \
+  "app" \
+  "php app.php php-ini-scan-dir" \
+  "PHP_INI_SCAN_DIR: <unset>" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=*"
+
+run_test_case \
+  "does not inject if the injector is disabled" \
+  "app" \
+  "php app.php php-ini-scan-dir" \
+  "PHP_INI_SCAN_DIR: <unset>" \
+  "OTEL_INJECTOR_DISABLED=true"
+
+run_test_case \
+  "does not inject if the configured path prefix is empty" \
+  "app" \
+  "php app.php php-ini-scan-dir" \
+  "PHP_INI_SCAN_DIR: <unset>" \
+  "PHP_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX="
+
+# The prefix becomes part of a colon-separated list, so a colon in it would split into two
+# directory entries rather than failing to resolve.
+run_test_case \
+  "does not inject if the configured path prefix contains a colon" \
+  "app" \
+  "php app.php php-ini-scan-dir" \
+  "PHP_INI_SCAN_DIR: <unset>" \
+  "PHP_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/usr/lib:/opentelemetry/php"
+
+run_test_case \
+  "does not inject if the loader ini does not exist at the configured prefix" \
+  "app" \
+  "php app.php php-ini-scan-dir" \
+  "PHP_INI_SCAN_DIR: <unset>" \
+  "PHP_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/does/not/exist"
+
+run_test_case \
+  "reads the path prefix from the environment variable" \
+  "app" \
+  "php app.php php-ini-scan-dir" \
+  "PHP_INI_SCAN_DIR: :/path/from/environment-variable/php/${LIBC_FLAVOR}" \
+  "PHP_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX=/path/from/environment-variable/php"
+
+run_test_case \
+  "reads the path prefix from the default configuration file" \
+  "app" \
+  "php app.php php-ini-scan-dir" \
+  "PHP_INI_SCAN_DIR: :/path/from/config-file/php/${LIBC_FLAVOR}"
+
+run_test_case \
+  "reads the path prefix from a configuration file at a custom location" \
+  "app" \
+  "php app.php php-ini-scan-dir" \
+  "PHP_INI_SCAN_DIR: :/path/from/config-file-custom-location/php/${LIBC_FLAVOR}" \
+  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/injector.conf"

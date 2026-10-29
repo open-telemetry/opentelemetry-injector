@@ -1,0 +1,28 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Receives the spans the instrumented application exports over OTLP and prints them, so the
+# harness can assert that telemetry actually crossed the wire rather than only reaching a
+# console exporter inside the same process.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+exporters:
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [debug]
+  telemetry:
+    logs:
+      # Must stay at info: the debug exporter writes the received spans at info level, and
+      # raising this to warn silently hides the very output the assertions read.
+      level: info

@@ -9,6 +9,7 @@ const dotnet = @import("dotnet.zig");
 const libc = @import("libc.zig");
 const jvm = @import("jvm.zig");
 const nodejs = @import("nodejs.zig");
+const php = @import("php.zig");
 const print = @import("print.zig");
 const proc_self_environ_values = @import("proc_self_environ_values.zig");
 const proc_self_environ_parser = @import("proc_self_environ_parser.zig");
@@ -69,6 +70,7 @@ fn initEnviron() callconv(.c) void {
         return;
     };
     dotnet.setLibcInfo(libc_info);
+    php.setLibcInfo(libc_info);
     python.setLibcInfo(libc_info);
     ruby.setLibcInfo(libc_info);
     res_attrs.setLibcInfo(libc_info);
@@ -112,6 +114,13 @@ fn initEnviron() callconv(.c) void {
         allocator,
         libc_info,
         jvm.java_tool_options_env_var_name,
+        configuration,
+    );
+    modifyEnvironmentVariable(
+        io,
+        allocator,
+        libc_info,
+        php.php_ini_scan_dir_env_var_name,
         configuration,
     );
     modifyEnvironmentVariable(
@@ -333,6 +342,13 @@ fn getEnvValue(
         );
     } else if (std.mem.eql(u8, name, python.pythonpath_env_var_name)) {
         return python.checkPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
+            io,
+            allocator,
+            original_value,
+            configuration,
+        );
+    } else if (std.mem.eql(u8, name, php.php_ini_scan_dir_env_var_name)) {
+        return php.checkPhpAutoInstrumentationAgentAndGetModifiedPhpIniScanDirValue(
             io,
             allocator,
             original_value,

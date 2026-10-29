@@ -53,6 +53,15 @@ if [ -f no-op-agent/opentelemetry-auto-instrumentation.rb ]; then
   cp no-op-agent/opentelemetry-auto-instrumentation.rb /usr/lib/opentelemetry/ruby/musl
 fi
 
+# PHP
+# Copy the PHP no-op loader ini to the directory the injector points PHP_INI_SCAN_DIR at.
+if [ -f no-op-loader/otel-loader.ini ]; then
+  mkdir -p /usr/lib/opentelemetry/php/glibc
+  mkdir -p /usr/lib/opentelemetry/php/musl
+  cp no-op-loader/otel-loader.ini /usr/lib/opentelemetry/php/glibc
+  cp no-op-loader/otel-loader.ini /usr/lib/opentelemetry/php/musl
+fi
+
 # Provide instrumentation files also in three more locations, for testing configuration via
 # /etc/opentelemetry/injector/injector.conf, OTEL_INJECTOR_CONFIG_FILE, and via environment variables
 # NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH and friends.

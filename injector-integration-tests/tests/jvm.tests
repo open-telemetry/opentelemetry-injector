@@ -13,6 +13,44 @@ run_test_case \
   "otel.injector.jvm.no_op_agent.has_been_loaded: true; some-property: some-value" \
   "JAVA_TOOL_OPTIONS=-Dsome-property=some-value"
 
+run_test_case \
+  "adds the Java agent when Java is launched through a shell" \
+  "app" \
+  "sh -c 'exec java -jar Main.jar verify-javaagent-has-been-injected'" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true"
+
+run_test_case \
+  "skips the Java agent when the configured minimum Java version is above Java 21" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: -" \
+  "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=22"
+
+# Some JVM images preset JAVA_TOOL_OPTIONS with their own options, so these two cases look for our -javaagent flag
+# specifically instead of comparing the whole variable.
+run_test_case \
+  "does not add the Java agent to JAVA_TOOL_OPTIONS for a process that is not a JVM" \
+  "app" \
+  "sh -c 'case \"\$JAVA_TOOL_OPTIONS\" in *-javaagent:/usr/lib/opentelemetry/jvm/javaagent.jar*) echo \"our javaagent: present\";; *) echo \"our javaagent: -\";; esac'" \
+  "our javaagent: -"
+
+# A minimum of 0 turns the version check off, restoring the pre-check behavior of injecting into every process. This
+# is the only way to reach JVMs that are created through the JNI Invocation API (jsvc and similar), which load the VM
+# after the injector has run and are indistinguishable from any other non-Java process at that point.
+run_test_case \
+  "a minimum Java version of 0 adds the Java agent to JAVA_TOOL_OPTIONS for a process that is not a JVM" \
+  "app" \
+  "sh -c 'case \"\$JAVA_TOOL_OPTIONS\" in *-javaagent:/usr/lib/opentelemetry/jvm/javaagent.jar*) echo \"our javaagent: present\";; *) echo \"our javaagent: -\";; esac'" \
+  "our javaagent: present" \
+  "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=0"
+
+run_test_case \
+  "preserves existing Java options when Java is launched through a shell" \
+  "app" \
+  "sh -c 'exec java -jar Main.jar verify-javaagent-has-been-injected-and-existing-property-is-still-in-place'" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true; some-property: some-value" \
+  "JAVA_TOOL_OPTIONS=-Dsome-property=some-value"
+
 # For test cases with the "default configuration file" substring in their label, run-tests-within-container.sh
 # will provide a configuration file in the expected location (/etc/opentelemetry/injector/injector.conf).
 run_test_case \

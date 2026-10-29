@@ -36,3 +36,5 @@ Usage
   on a test for one specific app/test set, you would usually want to combine this with something like
   `ARCHITECTURES=arm64 LIBC_FLAVORS=glibc TEST_SETS=dotnet INTERACTIVE=true scripts/test-all.sh` to narrow down the
   scope to one container under test.
+* The `jvm-legacy` test set uses a legacy supplied [`vulhub/openjdk:oracle-jdk-6` image](https://hub.docker.com/layers/vulhub/openjdk/oracle-jdk-6/images/sha256-35e7972fd3bec182151ec5b61832197e1655609b6a7bf7babebda33318ef5eb1).
+  It only supports `amd64` and `glibc`. Run it as `ARCHITECTURES=amd64 LIBC_FLAVORS=glibc TEST_SETS=jvm-legacy injector-integration-tests/scripts/test-all.sh`.

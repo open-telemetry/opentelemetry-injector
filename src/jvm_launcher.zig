@@ -107,6 +107,9 @@ fn releaseFileVersion(content: []const u8) ?u32 {
 
 const alternate_vm_option = "-XXaltjvm=";
 const tool_prefix = "-J";
+// An argument that does not fit here is skipped, so this has to leave room for the longest option that could be
+// the one we are looking for: the "-J" prefix, the option name, and a PATH_MAX path for the VM directory.
+const max_argument_length = 8192;
 
 fn hasAlternateVm(io: std.Io, allocator: std.mem.Allocator, get_env: environ.GetenvFn, cmdline_path: []const u8) !bool {
     if (get_env(io, allocator, "JDK_ALTERNATE_VM") != null) {
@@ -116,14 +119,32 @@ fn hasAlternateVm(io: std.Io, allocator: std.mem.Allocator, get_env: environ.Get
     const cmdline_file = try std.Io.Dir.openFileAbsolute(io, cmdline_path, .{});
     defer cmdline_file.close(io);
 
-    var cmdline_reader = cmdline_file.readerStreaming(io, &.{});
-    const cmdline = try cmdline_reader.interface.allocRemaining(allocator, .limited(64 * 1024));
-
-    // /proc/self/cmdline separates the arguments with NUL bytes, so each option has to be matched on its own.
-    // Searching the whole buffer would also match the option name inside an unrelated argument, such as
+    // /proc/self/cmdline separates the arguments with NUL bytes, so each option is matched on its own. Searching
+    // the whole command line would also match the option name inside an unrelated argument, such as
     // "-Dnote=-XXaltjvm=ignored" or a file name, and every false positive here waves the version check through.
-    var arguments = std.mem.splitScalar(u8, cmdline, 0);
-    while (arguments.next()) |argument| {
+    //
+    // The arguments are read one at a time rather than into one buffer: a command line can reach the couple of
+    // megabytes the kernel allows, a fat classpath alone goes well past any reasonable fixed limit, and running
+    // out of room to read it must not turn into a failure to answer the question.
+    var buffer: [max_argument_length]u8 = undefined;
+    var cmdline_reader = cmdline_file.readerStreaming(io, &buffer);
+
+    while (true) {
+        const argument = cmdline_reader.interface.takeDelimiter(0) catch |err| switch (err) {
+            // An argument too long to fit in the buffer cannot be the option we are looking for, so skip past it
+            // instead of giving up on the command line. takeDelimiter leaves the stream untouched when it fails
+            // this way, so the discard starts at the first byte of that argument.
+            error.StreamTooLong => {
+                _ = cmdline_reader.interface.discardDelimiterInclusive(0) catch |discard_err| switch (discard_err) {
+                    // The last argument is not NUL terminated, so there is nothing left after it.
+                    error.EndOfStream => break,
+                    else => |e| return e,
+                };
+                continue;
+            },
+            else => |e| return e,
+        } orelse break;
+
         // The java tools (javac, jshell, ...) pass VM options through with a -J prefix.
         if (std.mem.startsWith(u8, argument, alternate_vm_option) or
             std.mem.startsWith(u8, argument, tool_prefix ++ alternate_vm_option))
@@ -726,6 +747,32 @@ test "JVM launcher: alternate VM overrides skip version detection, but only for 
                 cmdline_path,
                 maps_path,
             ),
+        );
+    }
+
+    // A single argument larger than the read buffer, such as a fat classpath, must neither hide an alternate VM
+    // option that comes after it nor abort the detection.
+    const long_argument = test_util.repeat('x', max_argument_length * 2);
+
+    try tmp.dir.writeFile(testing.io, .{
+        .sub_path = "cmdline",
+        .data = "java\x00-cp\x00" ++ long_argument ++ "\x00-XXaltjvm=/path\x00Main\x00",
+    });
+    try testing.expectEqual(
+        @as(?u32, null),
+        try getJavaMajorVersionFromFiles(testing.io, gpa, test_util.posixGetenv, cmdline_path, maps_path),
+    );
+
+    for ([_][]const u8{
+        "java\x00-cp\x00" ++ long_argument ++ "\x00Main\x00",
+        // /proc/self/cmdline terminates every argument, but an overlong unterminated one must not fail either.
+        "java\x00-cp\x00" ++ long_argument,
+    }) |cmdline| {
+        try tmp.dir.writeFile(testing.io, .{ .sub_path = "cmdline", .data = cmdline });
+
+        try testing.expectEqual(
+            @as(?u32, 6),
+            try getJavaMajorVersionFromFiles(testing.io, gpa, test_util.posixGetenv, cmdline_path, maps_path),
         );
     }
 

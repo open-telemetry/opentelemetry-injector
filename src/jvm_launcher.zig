@@ -70,6 +70,11 @@ fn javaHomeVersion(io: std.Io, allocator: std.mem.Allocator, library_dir: []cons
         directory = std.fs.path.dirname(directory) orelse return null;
 
         const release_path = try std.fs.path.join(allocator, &.{ directory, release_file_name });
+        // Refuse to open anything that is not a regular file: see version.isRegularFile.
+        if (!version.isRegularFile(io, release_path)) {
+            continue;
+        }
+
         const content = std.Io.Dir.cwd().readFileAlloc(
             io,
             release_path,

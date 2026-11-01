@@ -14,9 +14,25 @@ pub const BinaryVersion = struct {
     openj9_forwarder: bool,
 };
 
+/// Reports whether `path` is a regular file, so that callers can refuse to open anything else.
+///
+/// Opening a named pipe blocks until a writer appears, and every file this module and the launcher detection read
+/// is opened from the constructor, before the application's main runs. A pipe planted anywhere we look would
+/// therefore hang the process at startup, and no read limit bounds that wait: the limit caps how much is read, not
+/// how long the open takes. The path can in principle be swapped between this check and the open that follows, but
+/// anyone able to do that inside a Java home can also replace libjvm.so itself, so the window buys them nothing.
+pub fn isRegularFile(io: std.Io, path: []const u8) bool {
+    const file_stat = std.Io.Dir.cwd().statFile(io, path, .{}) catch return false;
+    return file_stat.kind == .file;
+}
+
 /// Reads ELF load segments on disk, including binaries with no section table.
 /// Positional reads avoid loading the VM or mapping mutable files into memory.
 pub fn inspectBinary(io: std.Io, path: []const u8) !BinaryVersion {
+    if (!isRegularFile(io, path)) {
+        return error.NotARegularFile;
+    }
+
     const file = try std.Io.Dir.openFileAbsolute(io, path, .{});
     defer file.close(io);
 
@@ -397,4 +413,34 @@ test "JVM version: reads stripped ELF binaries and versions crossing file read b
     // Test bad elf header.
     try tmp.dir.writeFile(testing.io, .{ .sub_path = "libjvm.so", .data = test_util.repeat('x', 64) });
     try testing.expectError(error.InvalidElfMagic, inspectBinary(testing.io, path));
+}
+
+// mkfifo is not in the Zig standard library; the tests link libc, so it is declared here for the one test below.
+extern "c" fn mkfifo(path: [*:0]const u8, mode: std.c.mode_t) c_int;
+
+test "JVM version: refuses to inspect anything that is not a regular file" {
+    const test_util = @import("test_util.zig");
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const directory = try tmp.dir.realPathFileAlloc(testing.io, ".", testing.allocator);
+    defer testing.allocator.free(directory);
+
+    const fifo_path = try std.fs.path.joinZ(testing.allocator, &.{ directory, "libjvm.so" });
+    defer testing.allocator.free(fifo_path);
+    try testing.expectEqual(@as(c_int, 0), mkfifo(fifo_path.ptr, 0o600));
+
+    // Only the predicate is exercised on the pipe: stat never blocks, while an open would wait for a writer that
+    // never comes, so calling inspectBinary here would hang the test suite instead of failing it if the guard
+    // ever went away. The directory below stands in for that assertion, since opening one fails fast.
+    try testing.expect(!isRegularFile(testing.io, fifo_path));
+
+    try testing.expect(!isRegularFile(testing.io, directory));
+    try testing.expectError(error.NotARegularFile, inspectBinary(testing.io, directory));
+    try testing.expect(!isRegularFile(testing.io, "/does/not/exist"));
+
+    try test_util.writeElf(tmp.dir, "regular.so", " JRE (21.0.10+7-LTS)\x00", std.elf.PF_R);
+    const regular_path = try tmp.dir.realPathFileAlloc(testing.io, "regular.so", testing.allocator);
+    defer testing.allocator.free(regular_path);
+    try testing.expect(isRegularFile(testing.io, regular_path));
 }

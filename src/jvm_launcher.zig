@@ -105,6 +105,9 @@ fn releaseFileVersion(content: []const u8) ?u32 {
     return null;
 }
 
+const alternate_vm_option = "-XXaltjvm=";
+const tool_prefix = "-J";
+
 fn hasAlternateVm(io: std.Io, allocator: std.mem.Allocator, get_env: environ.GetenvFn, cmdline_path: []const u8) !bool {
     if (get_env(io, allocator, "JDK_ALTERNATE_VM") != null) {
         return true;
@@ -116,7 +119,20 @@ fn hasAlternateVm(io: std.Io, allocator: std.mem.Allocator, get_env: environ.Get
     var cmdline_reader = cmdline_file.readerStreaming(io, &.{});
     const cmdline = try cmdline_reader.interface.allocRemaining(allocator, .limited(64 * 1024));
 
-    return std.mem.indexOf(u8, cmdline, "-XXaltjvm=") != null;
+    // /proc/self/cmdline separates the arguments with NUL bytes, so each option has to be matched on its own.
+    // Searching the whole buffer would also match the option name inside an unrelated argument, such as
+    // "-Dnote=-XXaltjvm=ignored" or a file name, and every false positive here waves the version check through.
+    var arguments = std.mem.splitScalar(u8, cmdline, 0);
+    while (arguments.next()) |argument| {
+        // The java tools (javac, jshell, ...) pass VM options through with a -J prefix.
+        if (std.mem.startsWith(u8, argument, alternate_vm_option) or
+            std.mem.startsWith(u8, argument, tool_prefix ++ alternate_vm_option))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 // Find libjli.so which is always the one thing we should have loaded in the maps when the injector initializes.
@@ -656,7 +672,6 @@ test "JVM launcher: alternate VM overrides skip version detection, but only for 
     for ([_][]const u8{
         "java\x00-XXaltjvm=/path\x00",
         "javac\x00-J-XXaltjvm=/path\x00",
-        "java\x00-Dproperty=-XXaltjvm=/path\x00",
         "java\x00Main\x00-XXaltjvm=/path\x00",
         "java\x00-XXaltjvm=\x00",
     }) |cmdline| {
@@ -690,18 +705,29 @@ test "JVM launcher: alternate VM overrides skip version detection, but only for 
         );
     }
 
-    // "-XXaltjvm" without a value is not an alternate VM override.
-    try tmp.dir.writeFile(testing.io, .{ .sub_path = "cmdline", .data = "java\x00-XXaltjvm\x00" });
-    try testing.expectEqual(
-        @as(?u32, 6),
-        try getJavaMajorVersionFromFiles(
-            testing.io,
-            gpa,
-            test_util.posixGetenv,
-            cmdline_path,
-            maps_path,
-        ),
-    );
+    // The option name has to be an option of its own. Carrying it inside an unrelated argument, be it a system
+    // property, an application argument or a file name, selects no alternate VM, so the bundled VM is still the
+    // one that will be loaded and the version check must go ahead.
+    for ([_][]const u8{
+        // "-XXaltjvm" without a value is not an alternate VM override.
+        "java\x00-XXaltjvm\x00",
+        "java\x00-Dproperty=-XXaltjvm=/path\x00",
+        "java\x00-jar\x00/opt/-XXaltjvm=/app.jar\x00",
+        "java\x00Main\x00--note=-XXaltjvm=/path\x00",
+    }) |cmdline| {
+        try tmp.dir.writeFile(testing.io, .{ .sub_path = "cmdline", .data = cmdline });
+
+        try testing.expectEqual(
+            @as(?u32, 6),
+            try getJavaMajorVersionFromFiles(
+                testing.io,
+                gpa,
+                test_util.posixGetenv,
+                cmdline_path,
+                maps_path,
+            ),
+        );
+    }
 
     for ([_][]const u8{ "JDK_ALTERNATE_VM=/path", "JDK_ALTERNATE_VM=" }) |variable| {
         const previous = try test_util.setStdCEnviron(&.{variable});

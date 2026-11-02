@@ -168,22 +168,8 @@ fn hasAlternateVm(io: std.Io, allocator: std.mem.Allocator, get_env: environ.Get
     var buffer: [max_argument_length]u8 = undefined;
     var cmdline_reader = cmdline_file.readerStreaming(io, &buffer);
 
-    while (true) {
-        const argument = cmdline_reader.interface.takeDelimiter(0) catch |err| switch (err) {
-            // An argument too long to fit in the buffer cannot be the option we are looking for, so skip past it
-            // instead of giving up on the command line. takeDelimiter leaves the stream untouched when it fails
-            // this way, so the discard starts at the first byte of that argument.
-            error.StreamTooLong => {
-                _ = cmdline_reader.interface.discardDelimiterInclusive(0) catch |discard_err| switch (discard_err) {
-                    // The last argument is not NUL terminated, so there is nothing left after it.
-                    error.EndOfStream => break,
-                    else => |e| return e,
-                };
-                continue;
-            },
-            else => |e| return e,
-        } orelse break;
-
+    // An argument too long to fit in the buffer cannot be the option we are looking for.
+    while (try takeDelimiterSkippingOverlyLong(&cmdline_reader.interface, 0)) |argument| {
         // The java tools (javac, jshell, ...) pass VM options through with a -J prefix.
         if (std.mem.startsWith(u8, argument, alternate_vm_option) or
             std.mem.startsWith(u8, argument, tool_prefix ++ alternate_vm_option))
@@ -203,17 +189,8 @@ fn findLauncher(io: std.Io, allocator: std.mem.Allocator, maps_path: []const u8)
     var buffer: [8192]u8 = undefined;
     var reader = file.readerStreaming(io, &buffer);
 
-    while (true) {
-        const line = (reader.interface.takeDelimiter('\n') catch |err| switch (err) {
-            // A line that does not fit the buffer cannot be one we care about. Skip it and resume at the next
-            // delimiter rather than abandoning the file, the way libc.zig reads /proc/self/maps.
-            error.StreamTooLong => {
-                _ = try reader.interface.discardDelimiterInclusive('\n');
-                continue;
-            },
-            else => return err,
-        }) orelse break;
-
+    // A line that does not fit the buffer cannot be one we care about.
+    while (try takeDelimiterSkippingOverlyLong(&reader.interface, '\n')) |line| {
         const launcher = launcherFromMapsLine(line) orelse continue;
 
         print.printDebug("JVM detection: found the launcher library below \"{s}\".", .{launcher.directory});
@@ -224,6 +201,24 @@ fn findLauncher(io: std.Io, allocator: std.mem.Allocator, maps_path: []const u8)
     }
 
     return null;
+}
+
+fn takeDelimiterSkippingOverlyLong(reader: *std.Io.Reader, delimiter: u8) !?[]u8 {
+    while (true) {
+        return reader.takeDelimiter(delimiter) catch |err| switch (err) {
+            // takeDelimiter leaves the stream untouched when it fails this way, so the discard starts at the first
+            // byte of the overlong item.
+            error.StreamTooLong => {
+                _ = reader.discardDelimiterInclusive(delimiter) catch |discard_err| switch (discard_err) {
+                    // An unterminated item was the last one, so there is nothing left after it.
+                    error.EndOfStream => return null,
+                    else => |e| return e,
+                };
+                continue;
+            },
+            else => |e| return e,
+        };
+    }
 }
 
 const Launcher = struct { directory: []const u8, legacy: bool };
@@ -429,6 +424,11 @@ test "JVM launcher: skips maps lines too long for the read buffer" {
     const maps_path = try tmp.dir.realPathFileAlloc(testing.io, "maps", gpa);
     const launcher = (try findLauncher(testing.io, gpa, maps_path)).?;
     try testing.expectEqualStrings("/jdk/lib", launcher.directory);
+
+    // The kernel ends every maps line with a newline, but an overlong unterminated last one must not turn a process
+    // that is not a JVM into a failed detection.
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "maps", .data = overly_long[0 .. overly_long.len - 1] });
+    try testing.expectEqual(@as(?Launcher, null), try findLauncher(testing.io, gpa, maps_path));
 }
 
 test "JVM release file: reads the Java major version from the vendors we support" {

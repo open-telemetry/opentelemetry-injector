@@ -19,6 +19,14 @@ run_test_case \
   "sh -c 'exec java -jar Main.jar verify-javaagent-has-been-injected'" \
   "otel.injector.jvm.no_op_agent.has_been_loaded: true"
 
+# Together with the next case, this pins the detected version to exactly 21: a detection that is off in either direction
+# fails one of them, which a minimum of 8 alone would not notice.
+run_test_case \
+  "adds the Java agent when the configured minimum Java version is Java 21" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true" \
+  "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=21"
 run_test_case \
   "skips the Java agent when the configured minimum Java version is above Java 21" \
   "app" \

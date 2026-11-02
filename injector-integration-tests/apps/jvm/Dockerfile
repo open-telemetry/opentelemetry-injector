@@ -40,6 +40,15 @@ COPY injector-integration-tests/common/injector.custom-location.conf /custom/con
 RUN scripts/create-config-file-directory.sh
 RUN ${create_sdk_dummy_files_script}
 
+# The *-binary-scan test sets remove the release file of the Java home, so that the injector has to detect the Java
+# version by scanning the VM binary, the way it does on runtimes that ship without one. This is declared after the
+# layers above so that both variants of an image share them. No -f on rm: should an image move its release file, the
+# build fails instead of the tests quietly passing through the release file again.
+ARG remove_java_release_file=false
+RUN if [ "$remove_java_release_file" = "true" ]; then \
+      rm "$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")/release"; \
+    fi
+
 COPY dist/${injector_binary} /injector/libotelinject.so
 
 CMD ["scripts/run-tests-within-container.sh"]

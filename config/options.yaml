@@ -1,0 +1,288 @@
+- id: disabled
+  type: boolean
+  default: false
+  description: Disable the injector completely, including resource-attribute injection.
+  env:
+    name: OTEL_INJECTOR_DISABLED
+    trim: false
+  empty_value: The injector remains enabled.
+  details: Values `true` and `t` (case-insensitive), and `1` disable the injector. Every other value is false. Read before configuration files and process filtering. Unlike [auto_instrumentation_disabled](#auto_instrumentation_disabled), this prevents all injector environment modifications for the workload.
+  examples: ["true"]
+
+- id: log_level
+  type: log_level
+  default: error
+  description: Minimum severity of injector messages written to the application's stderr.
+  env:
+    name: OTEL_INJECTOR_LOG_LEVEL
+    trim: false
+  empty_value: Log an error and retain the default level.
+  details: Values are case-insensitive. Invalid values log an error and retain the default level. Read before configuration files and process filtering.
+  examples: [debug, none]
+
+- id: config_file
+  type: string
+  default: /etc/opentelemetry/injector/injector.conf
+  description: Location of the main injector configuration file.
+  env:
+    name: OTEL_INJECTOR_CONFIG_FILE
+    empty: default
+  empty_value: Use the default configuration-file location.
+  details: A missing or unreadable file is skipped. Files from [config_dir](#config_dir) and environment overrides are still processed.
+  examples: [/app/injector.conf]
+
+- id: config_dir
+  type: string
+  default: /etc/opentelemetry/injector/conf.d
+  description: Directory containing injector configuration drop-in files.
+  env:
+    name: OTEL_INJECTOR_CONFIG_DIR
+    empty: default
+  empty_value: Use the default configuration-directory location.
+  details: Regular files ending in `.conf` are read in alphabetical order after [config_file](#config_file). A missing or unreadable directory is skipped.
+  examples: [/app/injector.conf.d]
+
+- id: dotnet_agent_path
+  type: string
+  default: ""
+  description: Directory containing the .NET auto-instrumentation agent files.
+  file:
+    key: dotnet_auto_instrumentation_agent_path_prefix
+  env:
+    name: DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX
+  empty_value: Disable .NET auto-instrumentation.
+  details: Must contain the architecture-specific native library, AdditionalDeps, store, and net startup-hook files beneath glibc and musl directories. See the [agent layout guide](README.md#activation-and-configuration). An empty path disables only .NET instrumentation, not [resource-attribute injection](#resource_attributes).
+  examples: [/usr/lib/opentelemetry/dotnet]
+
+- id: dotnet_minimum_major_version
+  type: uint32
+  default: 8
+  description: Minimum .NET major version eligible for auto-instrumentation.
+  file:
+    key: dotnet_auto_instrumentation_minimum_dotnet_major_version
+  env:
+    name: DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION
+    trim: false
+  empty_value: Warn and retain the previously resolved value.
+  details: Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces and tabs. Invalid values warn and retain the previously resolved value. Applies when the application's `runtimeconfig.json` identifies a runtime version. Distributions supporting older .NET versions can lower this threshold.
+  examples: ["8", "6"]
+
+- id: jvm_agent_path
+  type: string
+  default: ""
+  description: Path to the Java auto-instrumentation agent JAR.
+  file:
+    key: jvm_auto_instrumentation_agent_path
+  env:
+    name: JVM_AUTO_INSTRUMENTATION_AGENT_PATH
+  empty_value: Disable JVM auto-instrumentation.
+  details: An empty path disables only JVM instrumentation, not [resource-attribute injection](#resource_attributes). It can disable Java for one process without changing shared configuration.
+  examples: [/usr/lib/opentelemetry/jvm/javaagent.jar, ""]
+
+- id: nodejs_agent_path
+  type: string
+  default: ""
+  description: Path to the Node.js auto-instrumentation registration file.
+  file:
+    key: nodejs_auto_instrumentation_agent_path
+  env:
+    name: NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH
+  empty_value: Disable Node.js auto-instrumentation.
+  details: An empty path disables only Node.js instrumentation, not [resource-attribute injection](#resource_attributes).
+  examples: [/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js]
+
+- id: python_agent_path
+  type: string
+  default: ""
+  description: Directory containing the Python auto-instrumentation packages.
+  file:
+    key: python_auto_instrumentation_agent_path_prefix
+  env:
+    name: PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX
+  empty_value: Disable Python auto-instrumentation.
+  details: Must contain `glibc` and `musl` directories. The matching directory is prepended to `PYTHONPATH`. Python is opt-in because injecting packages can cause dependency conflicts. An empty path disables only Python instrumentation, not [resource-attribute injection](#resource_attributes).
+  examples: [/usr/lib/opentelemetry/python]
+
+- id: ruby_agent_path
+  type: string
+  default: ""
+  description: Directory containing the Ruby auto-instrumentation gem bundle.
+  file:
+    key: ruby_auto_instrumentation_agent_path_prefix
+  env:
+    name: RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX
+  empty_value: Disable Ruby auto-instrumentation.
+  details: Must contain `glibc` and `musl` gem-home directories with the `opentelemetry-auto-instrumentation.rb` entry point. Prefixes containing whitespace are rejected during injection. An empty path disables only Ruby instrumentation, not [resource-attribute injection](#resource_attributes).
+  examples: [/usr/lib/opentelemetry/ruby]
+
+- id: agents_env_path
+  type: string
+  default: /etc/opentelemetry/injector/default_env.conf
+  description: File containing environment variables to pass to all agents.
+  file:
+    key: all_auto_instrumentation_agents_env_path
+  empty_value: Do not load an agent environment file.
+  details: Uses the same `key=value` syntax as `injector.conf`. Missing or unreadable files are skipped. Only `OTEL_` variables are accepted by default. Additional prefixes require a custom build using `-Dallowed-env-var-prefixes`. Variables from this file overwrite existing process values.
+  examples: [/app/default_env.conf]
+
+- id: auto_instrumentation_disabled
+  type: runtime_list
+  default: []
+  description: Runtimes for which auto-instrumentation is disabled.
+  file:
+    key: auto_instrumentation_disabled
+  env:
+    name: OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED
+  empty_value: Do not disable any runtime through this setting.
+  details: |
+    Use `*` alone to disable all runtimes, or a comma-separated list of runtime names. Names are case-sensitive. Unknown names warn and are ignored.
+
+    For example, `auto_instrumentation_disabled=dotnet,python` leaves JVM, Node.js, and Ruby instrumentation eligible. An empty [agent path](#jvm_agent_path) also disables that runtime.
+
+    Resource attributes may still be injected. Use [OTEL_INJECTOR_DISABLED](#disabled) to disable the injector completely, including resource-attribute injection.
+  examples: ["*", "dotnet,python"]
+
+- id: include_paths
+  type: glob_list
+  default: []
+  description: Executable path patterns eligible for instrumentation.
+  file:
+    key: include_paths
+    repeated: append
+  env:
+    name: OTEL_INJECTOR_INCLUDE_PATHS
+  empty_value: No executable-path inclusion restriction.
+  details: Any matching pattern satisfies this setting. When [include_with_arguments](#include_with_arguments) is also non-empty, both settings must match. [Path exclusions](#exclude_paths) and [argument exclusions](#exclude_with_arguments) take precedence.
+  examples: ["/app/*,/utilities/*"]
+
+- id: exclude_paths
+  type: glob_list
+  default: []
+  description: Executable path patterns excluded from instrumentation.
+  file:
+    key: exclude_paths
+    repeated: append
+  env:
+    name: OTEL_INJECTOR_EXCLUDE_PATHS
+  empty_value: No executable-path exclusions.
+  details: Any matching pattern excludes the process, even when [include_paths](#include_paths) matches.
+  examples: ["/app/system/*"]
+
+- id: include_with_arguments
+  type: glob_list
+  default: []
+  description: Process argument patterns eligible for instrumentation.
+  file:
+    key: include_with_arguments
+    repeated: append
+  env:
+    name: OTEL_INJECTOR_INCLUDE_WITH_ARGUMENTS
+  empty_value: No process-argument inclusion restriction.
+  details: Patterns match individual arguments. Any matching argument satisfies this setting. When [include_paths](#include_paths) is also non-empty, both settings must match. [Path exclusions](#exclude_paths) and [argument exclusions](#exclude_with_arguments) take precedence.
+  examples: ["*MyProject*.jar,*app.js"]
+
+- id: exclude_with_arguments
+  type: glob_list
+  default: []
+  description: Process argument patterns excluded from instrumentation.
+  file:
+    key: exclude_with_arguments
+    repeated: append
+  env:
+    name: OTEL_INJECTOR_EXCLUDE_WITH_ARGUMENTS
+  empty_value: No process-argument exclusions.
+  details: Patterns match individual arguments. Any matching argument excludes the process, even when [include_with_arguments](#include_with_arguments) matches.
+  examples: ["-javaagent:*,*@opentelemetry-js*"]
+
+- id: resource_attributes
+  type: string
+  default: ""
+  description: Additional resource attributes to append to OTEL_RESOURCE_ATTRIBUTES.
+  env:
+    name: OTEL_INJECTOR_RESOURCE_ATTRIBUTES
+    trim: false
+  empty_value: Do not add any resource attributes.
+  details: |
+    Comma-separated `key=value` pairs. Keys are trimmed and empty keys are ignored. Values are preserved.
+
+    Resource keys already in `OTEL_RESOURCE_ATTRIBUTES` win over this setting. These values in turn win over individual mappings such as [OTEL_INJECTOR_SERVICE_NAME](#service_name). Within this additional key-value list, the first occurrence of a key wins.
+
+    Setting [auto_instrumentation_disabled](#auto_instrumentation_disabled) does not disable resource-attribute injection. Use [OTEL_INJECTOR_DISABLED](#disabled) to prevent all injector environment modifications. See the [Kubernetes mapping example](README.md#mapping-kubernetes-resource-attributes) for deriving individual values from pod fields.
+  examples: ["service.name=my-service,deployment.environment.name=production"]
+
+- id: k8s_namespace_name
+  type: string
+  default: ""
+  description: Kubernetes namespace name to add to OTEL_RESOURCE_ATTRIBUTES.
+  env:
+    name: OTEL_INJECTOR_K8S_NAMESPACE_NAME
+    trim: false
+  resource_attribute: k8s.namespace.name
+  empty_value: Add the resource attribute with an empty value if the variable is set.
+  examples: [default]
+
+- id: k8s_pod_name
+  type: string
+  default: ""
+  description: Kubernetes pod name to add to OTEL_RESOURCE_ATTRIBUTES.
+  env:
+    name: OTEL_INJECTOR_K8S_POD_NAME
+    trim: false
+  resource_attribute: k8s.pod.name
+  empty_value: Add the resource attribute with an empty value if the variable is set.
+  examples: [my-pod]
+
+- id: k8s_pod_uid
+  type: string
+  default: ""
+  description: Kubernetes pod UID to add to OTEL_RESOURCE_ATTRIBUTES.
+  env:
+    name: OTEL_INJECTOR_K8S_POD_UID
+    trim: false
+  resource_attribute: k8s.pod.uid
+  empty_value: Add the resource attribute with an empty value if the variable is set.
+  examples: [123e4567-e89b-12d3-a456-426614174000]
+
+- id: k8s_container_name
+  type: string
+  default: ""
+  description: Kubernetes container name to add to OTEL_RESOURCE_ATTRIBUTES.
+  env:
+    name: OTEL_INJECTOR_K8S_CONTAINER_NAME
+    trim: false
+  resource_attribute: k8s.container.name
+  empty_value: Add the resource attribute with an empty value if the variable is set.
+  examples: [my-container]
+
+- id: service_name
+  type: string
+  default: ""
+  description: Service name to add to OTEL_RESOURCE_ATTRIBUTES.
+  env:
+    name: OTEL_INJECTOR_SERVICE_NAME
+    trim: false
+  resource_attribute: service.name
+  empty_value: Add the resource attribute with an empty value if the variable is set.
+  examples: [my-service]
+
+- id: service_version
+  type: string
+  default: ""
+  description: Service version to add to OTEL_RESOURCE_ATTRIBUTES.
+  env:
+    name: OTEL_INJECTOR_SERVICE_VERSION
+    trim: false
+  resource_attribute: service.version
+  empty_value: Add the resource attribute with an empty value if the variable is set.
+  examples: ["1.0.0"]
+
+- id: service_namespace
+  type: string
+  default: ""
+  description: Service namespace to add to OTEL_RESOURCE_ATTRIBUTES.
+  env:
+    name: OTEL_INJECTOR_SERVICE_NAMESPACE
+    trim: false
+  resource_attribute: service.namespace
+  empty_value: Add the resource attribute with an empty value if the variable is set.
+  examples: [my-team]

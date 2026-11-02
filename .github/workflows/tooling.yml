@@ -6,16 +6,50 @@ on:
       - main
     paths:
       - "tooling/**"
+      - "config/**"
+      - "configuration.md"
+      - "src/config_generated.zig"
+      - "src/config_option.zig"
+      - "Makefile"
       - ".github/workflows/tooling.yml"
   pull_request:
     paths:
       - "tooling/**"
+      - "config/**"
+      - "configuration.md"
+      - "src/config_generated.zig"
+      - "src/config_option.zig"
+      - "Makefile"
       - ".github/workflows/tooling.yml"
 
 permissions:
   contents: read
 
 jobs:
+  configgen:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.3"
+          cache: true
+          cache-dependency-path: tooling/configgen/go.sum
+      - name: go vet
+        working-directory: ./tooling/configgen
+        run: go vet ./...
+      - name: go test
+        working-directory: ./tooling/configgen
+        run: go test -race -count=1 ./...
+      - name: Generate configuration reference and Zig accessors
+        run: make generate-config
+      - name: Verify generated files are up to date
+        run: |
+          git diff --exit-code -- configuration.md src/config_generated.zig
+          test -z "$(git status --porcelain -- configuration.md src/config_generated.zig)"
+
   nextversion:
     runs-on: ubuntu-26.04
     steps:

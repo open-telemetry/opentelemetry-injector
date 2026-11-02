@@ -35,6 +35,10 @@ See the page [Zig Learn](https://ziglang.org/learn/) for more information about 
 The DEB and RPM system packages that bundle the injector with the auto-instrumentation agents for supported runtimes live in [open-telemetry/opentelemetry-packaging](https://github.com/open-telemetry/opentelemetry-packaging).
 Please open packaging bugs, feature requests, and pull requests against that repository.
 
+### Configuration catalog
+
+See the [configuration catalog](configuration.md#configuration-catalog) for declaring options, generating documentation and Zig code, and testing changes.
+
 ### Github PR Workflow
 
 It is recommended to follow the ["GitHub Workflow"](https://guides.github.com/introduction/flow/). When using [GitHub's CLI](https://github.com/cli/cli), here's how it typically looks like:

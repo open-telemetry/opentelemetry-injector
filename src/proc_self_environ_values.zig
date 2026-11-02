@@ -1,18 +1,14 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-pub const LogLevel = enum(u8) {
-    Debug = 0,
-    Info = 1,
-    Warn = 2,
-    Error = 3,
-    None = 4,
-};
+const options = @import("config_generated.zig");
+
+pub const LogLevel = @import("config_option.zig").LogLevel;
 
 pub const ProcSelfEnvironValues = struct {
-    log_level: LogLevel = .Error,
+    log_level: LogLevel = options.log_level.default_value,
     pid: u32 = 0,
-    otel_injector_disabled: bool = false,
+    otel_injector_disabled: bool = options.disabled.default_value,
 };
 
 var proc_self_environ_values: ProcSelfEnvironValues = .{};

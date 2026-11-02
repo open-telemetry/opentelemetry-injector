@@ -571,31 +571,20 @@ fn applyAutoInstrumentationDisabledValue(trimmed_value: []const u8, source: []co
     }
 }
 
-fn applyDotnetMinimumDotnetMajorVersionValue(value: []const u8, source: []const u8, configuration: *InjectorConfiguration) void {
+/// Sets a minimum runtime major version, such as dotnet_auto_instrumentation_minimum_dotnet_major_version, from
+/// `value`. An invalid value is reported and leaves the setting as it was.
+fn applyMinimumMajorVersionValue(setting: *u32, value: []const u8, key: []const u8, source: []const u8) void {
     const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-    const parsed_version = std.fmt.parseUnsigned(u32, trimmed_value, 10) catch {
+    setting.* = std.fmt.parseUnsigned(u32, trimmed_value, 10) catch {
         print.printWarn(
             "Ignoring invalid value for {s} from {s}: \"{s}\" - a non-negative integer is required.",
-            .{ dotnet_minimum_dotnet_major_version_key, source, trimmed_value },
+            .{ key, source, trimmed_value },
         );
         return;
     };
-    configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version = parsed_version;
 }
 
-fn applyJvmMinimumJavaMajorVersionValue(value: []const u8, source: []const u8, configuration: *InjectorConfiguration) void {
-    const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-    const parsed_version = std.fmt.parseUnsigned(u32, trimmed_value, 10) catch {
-        print.printWarn(
-            "Ignoring invalid value for {s} from {s}: \"{s}\" - a non-negative integer is required.",
-            .{ jvm_minimum_java_major_version_key, source, trimmed_value },
-        );
-        return;
-    };
-    configuration.jvm_auto_instrumentation_minimum_java_major_version = parsed_version;
-}
-
-test "JVM minimum Java major version: parses values with the same rules as .NET" {
+test "applyMinimumMajorVersionValue: accepts a non-negative integer and otherwise keeps the previous value" {
     const Case = struct { value: []const u8, expected: u32 };
     for ([_]Case{
         .{ .value = "0", .expected = 0 },
@@ -612,14 +601,11 @@ test "JVM minimum Java major version: parses values with the same rules as .NET"
         .{ .value = "1.6", .expected = 8 },
         .{ .value = "4294967296", .expected = 8 },
     }) |case| {
-        var configuration = createEmptyConfiguration(testing.allocator);
-        defer configuration.all_auto_instrumentation_agents_env_vars.deinit();
+        var setting: u32 = 8;
 
-        try testing.expectEqual(@as(u32, 8), configuration.jvm_auto_instrumentation_minimum_java_major_version);
+        applyMinimumMajorVersionValue(&setting, case.value, "test_key", "test");
 
-        applyJvmMinimumJavaMajorVersionValue(case.value, "test", &configuration);
-
-        try testing.expectEqual(case.expected, configuration.jvm_auto_instrumentation_minimum_java_major_version);
+        try testing.expectEqual(case.expected, setting);
     }
 }
 
@@ -670,40 +656,6 @@ test "JVM minimum Java major version: reads config files and applies environment
     }
 }
 
-test "applyDotnetMinimumDotnetMajorVersionValue: parses a valid value" {
-    var configuration = createEmptyConfiguration(testing.allocator);
-    defer configuration.all_auto_instrumentation_agents_env_vars.deinit();
-
-    applyDotnetMinimumDotnetMajorVersionValue("6", "test", &configuration);
-
-    try testing.expectEqual(@as(u32, 6), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
-}
-
-test "applyDotnetMinimumDotnetMajorVersionValue: trims whitespace" {
-    var configuration = createEmptyConfiguration(testing.allocator);
-    defer configuration.all_auto_instrumentation_agents_env_vars.deinit();
-
-    applyDotnetMinimumDotnetMajorVersionValue(" 7\t", "test", &configuration);
-
-    try testing.expectEqual(@as(u32, 7), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
-
-    applyDotnetMinimumDotnetMajorVersionValue("8\r\n", "test", &configuration);
-
-    try testing.expectEqual(@as(u32, 8), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
-}
-
-test "applyDotnetMinimumDotnetMajorVersionValue: ignores an invalid value and keeps the default" {
-    var configuration = createEmptyConfiguration(testing.allocator);
-    defer configuration.all_auto_instrumentation_agents_env_vars.deinit();
-
-    applyDotnetMinimumDotnetMajorVersionValue("not-a-number", "test", &configuration);
-
-    try testing.expectEqual(
-        default_dotnet_auto_instrumentation_minimum_dotnet_major_version,
-        configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version,
-    );
-}
-
 fn applyCommaSeparatedPatternsOption(arena_allocator: std.mem.Allocator, setting: *[][]const u8, value: []u8, pattern_name: []const u8, cfg_file_path: []const u8) void {
     const new_patterns = patterns_util.splitByComma(arena_allocator, value) catch |err| {
         print.printError("error parsing {s} value from configuration file {s}: {}", .{ pattern_name, cfg_file_path, err });
@@ -719,11 +671,11 @@ fn applyKeyValueToGeneralOptions(arena_allocator: std.mem.Allocator, key: []cons
     if (std.mem.eql(u8, key, dotnet_path_prefix_key)) {
         _configuration.dotnet_auto_instrumentation_agent_path_prefix = value;
     } else if (std.mem.eql(u8, key, dotnet_minimum_dotnet_major_version_key)) {
-        applyDotnetMinimumDotnetMajorVersionValue(value, _cfg_file_path, _configuration);
+        applyMinimumMajorVersionValue(&_configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version, value, key, _cfg_file_path);
     } else if (std.mem.eql(u8, key, jvm_path_key)) {
         _configuration.jvm_auto_instrumentation_agent_path = value;
     } else if (std.mem.eql(u8, key, jvm_minimum_java_major_version_key)) {
-        applyJvmMinimumJavaMajorVersionValue(value, _cfg_file_path, _configuration);
+        applyMinimumMajorVersionValue(&_configuration.jvm_auto_instrumentation_minimum_java_major_version, value, key, _cfg_file_path);
     } else if (std.mem.eql(u8, key, nodejs_path_key)) {
         _configuration.nodejs_auto_instrumentation_agent_path = value;
     } else if (std.mem.eql(u8, key, python_path_prefix_key)) {
@@ -2198,7 +2150,12 @@ fn readConfigurationFromEnvironment(io: std.Io, arena_allocator: std.mem.Allocat
         configuration.dotnet_auto_instrumentation_agent_path_prefix = dotnet_value;
     }
     if (getenv_fn(io, arena_allocator, dotnet_minimum_dotnet_major_version_env_var)) |value| {
-        applyDotnetMinimumDotnetMajorVersionValue(value, dotnet_minimum_dotnet_major_version_env_var, configuration);
+        applyMinimumMajorVersionValue(
+            &configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version,
+            value,
+            dotnet_minimum_dotnet_major_version_key,
+            dotnet_minimum_dotnet_major_version_env_var,
+        );
     }
     if (getenv_fn(io, arena_allocator, jvm_agent_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
@@ -2209,7 +2166,12 @@ fn readConfigurationFromEnvironment(io: std.Io, arena_allocator: std.mem.Allocat
         configuration.jvm_auto_instrumentation_agent_path = jvm_value;
     }
     if (getenv_fn(io, arena_allocator, jvm_minimum_java_major_version_env_var)) |value| {
-        applyJvmMinimumJavaMajorVersionValue(value, jvm_minimum_java_major_version_env_var, configuration);
+        applyMinimumMajorVersionValue(
+            &configuration.jvm_auto_instrumentation_minimum_java_major_version,
+            value,
+            jvm_minimum_java_major_version_key,
+            jvm_minimum_java_major_version_env_var,
+        );
     }
     if (getenv_fn(io, arena_allocator, nodejs_agent_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");

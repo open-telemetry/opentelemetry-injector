@@ -55,10 +55,15 @@ fn getJavaMajorVersionFromFiles(io: std.Io, allocator: std.mem.Allocator, get_en
 
 const release_file_name = "release";
 const java_version_key = "JAVA_VERSION=";
-const max_release_file_size = 64 * 1024;
+// J9 VMs run more than one Java release from the same VM build, so it is the class library that names the release,
+// in <home>/lib/classlib.properties. That is the only place IBM Java names the class library version.
+const classlib_file_name = "classlib.properties";
+const classlib_version_key = "version=";
+const max_version_file_size = 64 * 1024;
 
-/// Reads the Java major version from the release file of the Java home that owns `library_dir`. Returns null when
-/// that home has no release file, or one without a usable JAVA_VERSION entry.
+/// Reads the Java major version from the release file of the Java home that owns `library_dir`, or failing that from
+/// the classlib.properties of a J9 class library. Returns null when that home has neither, or the first one found has
+/// no usable version entry.
 ///
 /// The home is derived from the layout of the native library directory.
 /// A modern image keeps its libraries in <home>/lib, a legacy one in <home>/lib/<arch>. Legacy JDKs run from
@@ -72,9 +77,14 @@ fn javaHomeVersion(io: std.Io, allocator: std.mem.Allocator, library_dir: []cons
     }
     const home = std.fs.path.dirname(lib) orelse return null;
 
-    switch (try readReleaseFile(io, allocator, home)) {
+    // The home's own version files are authoritative, so one that says nothing usable ends the search here.
+    switch (try readReleaseFile(io, allocator, try std.fs.path.join(allocator, &.{ home, release_file_name }), java_version_key)) {
         .version => |major| return major,
-        // The home's own release file is authoritative, so one that says nothing usable ends the search here.
+        .unusable => return null,
+        .missing => {},
+    }
+    switch (try readReleaseFile(io, allocator, try std.fs.path.join(allocator, &.{ lib, classlib_file_name }), classlib_version_key)) {
+        .version => |major| return major,
         .unusable => return null,
         .missing => {},
     }
@@ -91,7 +101,7 @@ fn javaHomeVersion(io: std.Io, allocator: std.mem.Allocator, library_dir: []cons
         return null;
     }
 
-    return switch (try readReleaseFile(io, allocator, jdk)) {
+    return switch (try readReleaseFile(io, allocator, try std.fs.path.join(allocator, &.{ jdk, release_file_name }), java_version_key)) {
         .version => |major| major,
         .unusable, .missing => null,
     };
@@ -99,11 +109,10 @@ fn javaHomeVersion(io: std.Io, allocator: std.mem.Allocator, library_dir: []cons
 
 const ReleaseFile = union(enum) { missing, unusable, version: u32 };
 
-fn readReleaseFile(io: std.Io, allocator: std.mem.Allocator, home: []const u8) !ReleaseFile {
-    const release_path = try std.fs.path.join(allocator, &.{ home, release_file_name });
-
+/// Reads the Java major version from the `key` line of the file at `path`, such as JAVA_VERSION= in a release file.
+fn readReleaseFile(io: std.Io, allocator: std.mem.Allocator, path: []const u8, key: []const u8) !ReleaseFile {
     // Refuse to open anything that is not a regular file: see version.isRegularFile.
-    const file_stat = std.Io.Dir.cwd().statFile(io, release_path, .{}) catch |err| switch (err) {
+    const file_stat = std.Io.Dir.cwd().statFile(io, path, .{}) catch |err| switch (err) {
         error.FileNotFound => return .missing,
         else => return .unusable,
     };
@@ -113,31 +122,31 @@ fn readReleaseFile(io: std.Io, allocator: std.mem.Allocator, home: []const u8) !
 
     const content = std.Io.Dir.cwd().readFileAlloc(
         io,
-        release_path,
+        path,
         allocator,
-        .limited(max_release_file_size),
+        .limited(max_version_file_size),
     ) catch return .unusable;
 
-    if (releaseFileVersion(content)) |major| {
-        print.printDebug("JVM detection: \"{s}\" reports Java {d}.", .{ release_path, major });
+    if (propertyVersion(content, key)) |major| {
+        print.printDebug("JVM detection: \"{s}\" reports Java {d}.", .{ path, major });
         return .{ .version = major };
     }
 
-    print.printDebug("JVM detection: \"{s}\" carries no usable JAVA_VERSION.", .{release_path});
+    print.printDebug("JVM detection: \"{s}\" carries no usable {s} entry.", .{ path, key[0 .. key.len - 1] });
     return .unusable;
 }
 
-fn releaseFileVersion(content: []const u8) ?u32 {
+fn propertyVersion(content: []const u8, key: []const u8) ?u32 {
     var lines = std.mem.splitScalar(u8, content, '\n');
 
     while (lines.next()) |line| {
         // Match the key on a line of its own, so that JAVA_VERSION_DATE and friends cannot be mistaken for it.
         const trimmed = std.mem.trim(u8, line, " \t\r");
-        if (!std.mem.startsWith(u8, trimmed, java_version_key)) {
+        if (!std.mem.startsWith(u8, trimmed, key)) {
             continue;
         }
 
-        const value = std.mem.trim(u8, trimmed[java_version_key.len..], "\"");
+        const value = std.mem.trim(u8, trimmed[key.len..], "\"");
         return version.parseJavaMajorVersion(value);
     }
 
@@ -453,7 +462,7 @@ test "JVM release file: reads the Java major version from the vendors we support
         .{ .content = "JAVA_VERSION=\"11.0.22\"", .major = 11 },
         .{ .content = "OS_NAME=\"Linux\"\r\nJAVA_VERSION=\"17.0.9\"\r\n", .major = 17 },
     }) |case| {
-        try testing.expectEqual(case.major, releaseFileVersion(case.content));
+        try testing.expectEqual(case.major, propertyVersion(case.content, java_version_key));
     }
 }
 
@@ -494,6 +503,48 @@ test "JVM release file: is found from modern and legacy native library directori
 
     const without = try tmp.dir.realPathFileAlloc(testing.io, "no-release/jre/lib/amd64", gpa);
     try testing.expectEqual(@as(?u32, null), try javaHomeVersion(testing.io, gpa, without));
+}
+
+test "JVM release file: IBM Java 8 names its release only in classlib.properties" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const gpa = arena.allocator();
+
+    // Verbatim from ibmjava:8-jre, which ships no release file. IBM Java 8 SR3 (J9 2.8) carries the same version line.
+    const classlib_properties = "# Properties file for Java SE 7 and beyond\n" ++
+        "# List of bootstrap classpath entries, separated by colon.\n" ++
+        "bootpath=math.jar:ibmorb.jar:xml.jar:charsets.jar:resources.jar:rt.jar:dataaccess.jar\n" ++
+        "# Shape of the class library (e.g. Sun.Basic, Harmony)\n" ++
+        "shape=sun_openjdk\n" ++
+        "# Version of the class library\n" ++
+        "version=1.8\n";
+    try tmp.dir.createDirPath(testing.io, "ibm8/jre/lib/amd64");
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "ibm8/jre/lib/classlib.properties", .data = classlib_properties });
+
+    const ibm8 = try tmp.dir.realPathFileAlloc(testing.io, "ibm8/jre/lib/amd64", gpa);
+    try testing.expectEqual(@as(?u32, 8), try javaHomeVersion(testing.io, gpa, ibm8));
+
+    // Semeru 8 ships both, and the release file comes first.
+    try tmp.dir.createDirPath(testing.io, "both/lib/amd64");
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "both/release", .data = "JAVA_VERSION=\"21.0.9\"\n" });
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "both/lib/classlib.properties", .data = "version=1.8\n" });
+
+    const both = try tmp.dir.realPathFileAlloc(testing.io, "both/lib/amd64", gpa);
+    try testing.expectEqual(@as(?u32, 21), try javaHomeVersion(testing.io, gpa, both));
+
+    // Like a release file, one without a usable version ends the search in this Java home: the binary scan answers,
+    // not the release file of the JDK above it.
+    try tmp.dir.createDirPath(testing.io, "sdk/jre/lib/amd64");
+    try tmp.dir.createDirPath(testing.io, "sdk/lib/amd64/jli");
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "sdk/lib/amd64/jli/libjli.so", .data = "" });
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "sdk/jre/lib/classlib.properties", .data = "shape=sun\nversions=1.8\n" });
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "sdk/release", .data = "JAVA_VERSION=\"21.0.9\"\n" });
+
+    const sdk = try tmp.dir.realPathFileAlloc(testing.io, "sdk/jre/lib/amd64", gpa);
+    try testing.expectEqual(@as(?u32, null), try javaHomeVersion(testing.io, gpa, sdk));
 }
 
 test "JVM release file: is never read from above the Java home" {

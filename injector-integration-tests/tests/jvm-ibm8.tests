@@ -3,9 +3,9 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-# IBM Java 8 ships no release file, so the injector always has to scan its J9 VM library for the Java version, which
-# it reaches through the forwarder libjvm.so in the j9vm directory. The jvm.tests cases assume Java 21 and a server VM
-# directory, so only the cases that depend on the version detection are repeated here.
+# IBM Java 8 ships no release file. Its class library names the Java release in lib/classlib.properties instead, a
+# file the J9 VM itself needs to start, which is also why this set has no binary-scan variant. The jvm.tests cases
+# assume Java 21 and a server VM directory, so only the cases that depend on the version detection are repeated here.
 
 run_test_case \
   "uses the IBM J9 VM" \
@@ -14,10 +14,10 @@ run_test_case \
   "IBM J9 VM"
 
 run_test_case \
-  "detects the Java version by scanning the VM binary" \
+  "reads the Java version from classlib.properties" \
   "app" \
-  "java -version 2>&1 | grep -m 1 -o 'JVM detection: scanning'" \
-  "JVM detection: scanning" \
+  "java -version 2>&1 | grep -m 1 -o 'classlib.properties\" reports Java 8'" \
+  "classlib.properties\" reports Java 8" \
   "OTEL_INJECTOR_LOG_LEVEL=debug"
 
 run_test_case \

@@ -39,7 +39,7 @@ fn getJavaMajorVersionFromFiles(io: std.Io, allocator: std.mem.Allocator, get_en
     const library_dir = try runtimeLibraryDirectory(io, gpa, launcher);
     print.printDebug("JVM detection: native library directory is \"{s}\".", .{library_dir});
 
-    // Prefer the release file of the Java home the launcher belongs to. Every runtime image built since JDK 8
+    // Prefer the release file of the Java home the launcher belongs to. Almost every runtime image built since JDK 8
     // ships one, including jlink and jpackage images, so this answers the question with a single read of about a
     // kilobyte. Scanning libjvm.so is the fallback: correct everywhere, but it reads tens of megabytes (the
     // version banner sits roughly two thirds into a 26 MB libjvm.so on a current JDK) at every JVM start. The
@@ -56,41 +56,75 @@ fn getJavaMajorVersionFromFiles(io: std.Io, allocator: std.mem.Allocator, get_en
 const release_file_name = "release";
 const java_version_key = "JAVA_VERSION=";
 const max_release_file_size = 64 * 1024;
-// From the native library directory the Java home is one level up on a modern image (<home>/lib) and three on a
-// legacy one (<home>/jre/lib/<arch>); JDK 8 also keeps a release file in <home>/jre, two levels up.
-const max_java_home_depth = 4;
 
-/// Reads the Java major version from the release file of the Java home that owns `library_dir`, walking up from the
-/// native library directory until a release file turns up. Returns null when there is none, or when it carries no
-/// usable JAVA_VERSION entry.
+/// Reads the Java major version from the release file of the Java home that owns `library_dir`. Returns null when
+/// that home has no release file, or one without a usable JAVA_VERSION entry.
+///
+/// The home is derived from the layout of the native library directory.
+/// A modern image keeps its libraries in <home>/lib, a legacy one in <home>/lib/<arch>. Legacy JDKs run from
+/// <jdk>/jre, and only <jdk> has a release file, so that one parent is the only step up ever taken, to prevent
+/// stepping up beyond the JVM home directory.
 fn javaHomeVersion(io: std.Io, allocator: std.mem.Allocator, library_dir: []const u8) !?u32 {
-    var directory = library_dir;
+    const legacy = !std.mem.eql(u8, std.fs.path.basename(library_dir), "lib");
+    const lib = if (legacy) std.fs.path.dirname(library_dir) orelse return null else library_dir;
+    if (!std.mem.eql(u8, std.fs.path.basename(lib), "lib")) {
+        return null;
+    }
+    const home = std.fs.path.dirname(lib) orelse return null;
 
-    for (0..max_java_home_depth) |_| {
-        directory = std.fs.path.dirname(directory) orelse return null;
-
-        const release_path = try std.fs.path.join(allocator, &.{ directory, release_file_name });
-        // Refuse to open anything that is not a regular file: see version.isRegularFile.
-        if (!version.isRegularFile(io, release_path)) {
-            continue;
-        }
-
-        const content = std.Io.Dir.cwd().readFileAlloc(
-            io,
-            release_path,
-            allocator,
-            .limited(max_release_file_size),
-        ) catch continue;
-
-        if (releaseFileVersion(content)) |major| {
-            print.printDebug("JVM detection: \"{s}\" reports Java {d}.", .{ release_path, major });
-            return major;
-        }
-
-        print.printDebug("JVM detection: \"{s}\" carries no usable JAVA_VERSION.", .{release_path});
+    switch (try readReleaseFile(io, allocator, home)) {
+        .version => |major| return major,
+        // The home's own release file is authoritative, so one that says nothing usable ends the search here.
+        .unusable => return null,
+        .missing => {},
     }
 
-    return null;
+    // Step up to the JDK only when the parent really is the JDK that owns this JRE, which its own launcher library
+    // in <jdk>/lib/<arch>/jli shows. A standalone JRE that merely sits in a directory called jre has no such
+    // sibling, so whatever lies above it is never read.
+    if (!legacy or !std.mem.eql(u8, std.fs.path.basename(home), "jre")) {
+        return null;
+    }
+    const jdk = std.fs.path.dirname(home) orelse return null;
+    const jdk_launcher = try std.fs.path.join(allocator, &.{ jdk, "lib", std.fs.path.basename(library_dir), "jli", "libjli.so" });
+    if (!version.isRegularFile(io, jdk_launcher)) {
+        return null;
+    }
+
+    return switch (try readReleaseFile(io, allocator, jdk)) {
+        .version => |major| major,
+        .unusable, .missing => null,
+    };
+}
+
+const ReleaseFile = union(enum) { missing, unusable, version: u32 };
+
+fn readReleaseFile(io: std.Io, allocator: std.mem.Allocator, home: []const u8) !ReleaseFile {
+    const release_path = try std.fs.path.join(allocator, &.{ home, release_file_name });
+
+    // Refuse to open anything that is not a regular file: see version.isRegularFile.
+    const file_stat = std.Io.Dir.cwd().statFile(io, release_path, .{}) catch |err| switch (err) {
+        error.FileNotFound => return .missing,
+        else => return .unusable,
+    };
+    if (file_stat.kind != .file) {
+        return .unusable;
+    }
+
+    const content = std.Io.Dir.cwd().readFileAlloc(
+        io,
+        release_path,
+        allocator,
+        .limited(max_release_file_size),
+    ) catch return .unusable;
+
+    if (releaseFileVersion(content)) |major| {
+        print.printDebug("JVM detection: \"{s}\" reports Java {d}.", .{ release_path, major });
+        return .{ .version = major };
+    }
+
+    print.printDebug("JVM detection: \"{s}\" carries no usable JAVA_VERSION.", .{release_path});
+    return .unusable;
 }
 
 fn releaseFileVersion(content: []const u8) ?u32 {
@@ -431,22 +465,84 @@ test "JVM release file: is found from modern and legacy native library directori
     defer arena.deinit();
     const gpa = arena.allocator();
 
-    // A modern image keeps the launcher library in <home>/lib, a legacy one in <home>/jre/lib/<arch>.
+    // A modern image keeps its native libraries in <home>/lib (eclipse-temurin:21-jre).
     try tmp.dir.createDirPath(testing.io, "modern/lib");
     try tmp.dir.writeFile(testing.io, .{ .sub_path = "modern/release", .data = "JAVA_VERSION=\"21.0.9\"\n" });
-    try tmp.dir.createDirPath(testing.io, "legacy/jre/lib/amd64");
-    try tmp.dir.writeFile(testing.io, .{ .sub_path = "legacy/release", .data = "JAVA_VERSION=\"1.8.0_504\"\n" });
-    // A Java home without a release file, as shipped by Oracle JDK 6, must fall through to the binary scan.
+    // A legacy JRE keeps them in <home>/lib/<arch> (eclipse-temurin:8-jre).
+    try tmp.dir.createDirPath(testing.io, "jre8/lib/amd64");
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "jre8/release", .data = "JAVA_VERSION=\"1.8.0_504\"\n" });
+    // A JDK 8 runs from <jdk>/jre/lib/<arch>, and only <jdk> has a release file. Corretto, Zulu and the
+    // distribution packages point `java` at <jdk>/jre/bin/java, so the launcher library is the JRE's own.
+    try tmp.dir.createDirPath(testing.io, "jdk8/jre/lib/amd64");
+    try tmp.dir.createDirPath(testing.io, "jdk8/lib/amd64/jli");
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "jdk8/lib/amd64/jli/libjli.so", .data = "" });
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "jdk8/release", .data = "JAVA_VERSION=\"1.8.0_504\"\n" });
+    // A JDK without a release file anywhere, as shipped by Oracle JDK 6 and Ubuntu's openjdk-8, must fall through
+    // to the binary scan.
     try tmp.dir.createDirPath(testing.io, "no-release/jre/lib/amd64");
+    try tmp.dir.createDirPath(testing.io, "no-release/lib/amd64/jli");
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "no-release/lib/amd64/jli/libjli.so", .data = "" });
 
     const modern = try tmp.dir.realPathFileAlloc(testing.io, "modern/lib", gpa);
     try testing.expectEqual(@as(?u32, 21), try javaHomeVersion(testing.io, gpa, modern));
 
-    const legacy = try tmp.dir.realPathFileAlloc(testing.io, "legacy/jre/lib/amd64", gpa);
-    try testing.expectEqual(@as(?u32, 8), try javaHomeVersion(testing.io, gpa, legacy));
+    const jre8 = try tmp.dir.realPathFileAlloc(testing.io, "jre8/lib/amd64", gpa);
+    try testing.expectEqual(@as(?u32, 8), try javaHomeVersion(testing.io, gpa, jre8));
+
+    const jdk8 = try tmp.dir.realPathFileAlloc(testing.io, "jdk8/jre/lib/amd64", gpa);
+    try testing.expectEqual(@as(?u32, 8), try javaHomeVersion(testing.io, gpa, jdk8));
 
     const without = try tmp.dir.realPathFileAlloc(testing.io, "no-release/jre/lib/amd64", gpa);
     try testing.expectEqual(@as(?u32, null), try javaHomeVersion(testing.io, gpa, without));
+}
+
+test "JVM release file: is never read from above the Java home" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const gpa = arena.allocator();
+
+    // Each Java home below lacks a release file, and the directory above it holds one that describes some other
+    // runtime: a JDK flattened into /opt or /usr/local, say. Reading it would let a Java 6 VM through.
+    const newer = "JAVA_VERSION=\"21.0.9\"\n";
+
+    // A standalone JRE 6 installed in /opt/jre6.
+    try tmp.dir.createDirPath(testing.io, "standalone/jre6/lib/amd64");
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "standalone/release", .data = newer });
+    // The same, installed in a directory that happens to be called jre. It is not a JDK's JRE: its parent has no
+    // launcher library of its own.
+    try tmp.dir.createDirPath(testing.io, "named/jre/lib/amd64");
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "named/release", .data = newer });
+    // A modern image is never inside a JDK, even one that jlink wrote to a directory called jre.
+    try tmp.dir.createDirPath(testing.io, "jlinked/jre/lib");
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "jlinked/release", .data = newer });
+
+    for ([_][]const u8{ "standalone/jre6/lib/amd64", "named/jre/lib/amd64", "jlinked/jre/lib" }) |sub_path| {
+        const library_dir = try tmp.dir.realPathFileAlloc(testing.io, sub_path, gpa);
+        try testing.expectEqual(@as(?u32, null), try javaHomeVersion(testing.io, gpa, library_dir));
+    }
+}
+
+test "JVM release file: an unusable one in the Java home ends the search" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const gpa = arena.allocator();
+
+    // The Java home's own release file is authoritative even when it does not say which version it is: the
+    // binary scan answers then, not the release file of the JDK above it.
+    try tmp.dir.createDirPath(testing.io, "jdk/jre/lib/amd64");
+    try tmp.dir.createDirPath(testing.io, "jdk/lib/amd64/jli");
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "jdk/lib/amd64/jli/libjli.so", .data = "" });
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "jdk/jre/release", .data = "OS_NAME=\"Linux\"\n" });
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "jdk/release", .data = "JAVA_VERSION=\"21.0.9\"\n" });
+
+    const library_dir = try tmp.dir.realPathFileAlloc(testing.io, "jdk/jre/lib/amd64", gpa);
+    try testing.expectEqual(@as(?u32, null), try javaHomeVersion(testing.io, gpa, library_dir));
 }
 
 test "JVM release file: the Java home version wins over the bundled VM binary" {

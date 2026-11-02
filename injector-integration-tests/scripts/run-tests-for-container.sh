@@ -36,6 +36,11 @@ if [[ "$TEST_SET" = "jvm-legacy.tests" && ( "$ARCH" != "amd64" || "$LIBC" != "gl
   exit 0
 fi
 
+if [[ "$TEST_SET" = "jvm-ibm8.tests" && "$ARCH" != "amd64" ]]; then
+  echo "skipping jvm-ibm8.tests: IBM Java 8 images are not published for $ARCH"
+  exit 0
+fi
+
 case "$TEST_SET" in
   jvm-openj9*.tests | jvm-graalvm*.tests | jvm-zing*.tests)
     if [[ "$LIBC" != "glibc" ]]; then
@@ -62,6 +67,9 @@ if [[ "$TEST_SET" = "jvm-graalvm.tests" ]]; then
 fi
 if [[ "$TEST_SET" = "jvm-zing.tests" ]]; then
   test_app="jvm-zing"
+fi
+if [[ "$TEST_SET" = "jvm-ibm8.tests" ]]; then
+  test_app="jvm-ibm8"
 fi
 if [[ "$TEST_SET" = "jvm-legacy.tests" ]]; then
   test_app="jvm-legacy"
@@ -138,6 +146,15 @@ case "$test_app" in
     dockerfile_name="injector-integration-tests/apps/jvm/Dockerfile"
     base_image_build=maven:3.9-eclipse-temurin-21
     base_image_run=azul/prime:21
+    ;;
+  "jvm-ibm8")
+    dockerfile_name="injector-integration-tests/apps/jvm/Dockerfile"
+    base_image_build=maven:3.9-eclipse-temurin-21
+    base_image_run=ibmjava:8-jre
+    if [[ "$LIBC" = "musl" ]]; then
+      # Last published in 2022, so this also covers an older IBM Java 8 service release.
+      base_image_run=ibmjava:8-jre-alpine
+    fi
     ;;
   "jvm-legacy")
     dockerfile_name="injector-integration-tests/apps/jvm-legacy/Dockerfile"

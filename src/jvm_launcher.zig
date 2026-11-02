@@ -725,6 +725,38 @@ test "JVM launcher: returns the first recognized version without checking later 
     try testing.expectEqual(@as(?u32, 6), try detectLauncherVersion(testing.io, gpa, library_dir));
 }
 
+test "JVM launcher: detects IBM Java 8, which ships no release file" {
+    const test_util = @import("test_util.zig");
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    // The layout of ibmjava:8-jre: its default/libjvm.so lacks -Xjvm: and is not recognized as a forwarder, but the
+    // one in j9vm/ is, and leads to the VM in default/. That VM has nothing after -Xinternalversion and names its
+    // Java release only in the dump agent's label, after the forwarder markers.
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const gpa = arena.allocator();
+
+    for ([_][]const u8{ "default", "compressedrefs", "j9vm", "classic" }) |name| {
+        try tmp.dir.createDirPath(testing.io, try std.fs.path.join(gpa, &.{ "lib/amd64", name }));
+    }
+    try test_util.writeElf(tmp.dir, "lib/amd64/default/libjvm.so", "IBM_JAVA_OPTIONS\x00", std.elf.PF_R);
+    try test_util.writeElf(tmp.dir, "lib/amd64/compressedrefs/libjvm.so", "IBM_JAVA_OPTIONS\x00", std.elf.PF_R);
+    try test_util.writeElf(tmp.dir, "lib/amd64/j9vm/libjvm.so", "IBM_JAVA_OPTIONS\x00-Xjvm:\x00", std.elf.PF_R);
+    try test_util.writeElf(tmp.dir, "lib/amd64/classic/libjvm.so", "IBM_JAVA_OPTIONS\x00-Xjvm:\x00", std.elf.PF_R);
+    try test_util.writeElf(tmp.dir, "lib/amd64/default/libj9vmchk29.so", "VM check helper\x00", std.elf.PF_R);
+    try test_util.writeElf(
+        tmp.dir,
+        "lib/amd64/default/libj9vm29.so",
+        "-Xinternalversion\x00-XX:+PortableSharedCache\x00-Xjvm:\x00-server\x00IBM_JAVA_OPTIONS\x00" ++
+            " (build \x00rasdump.c:455\x00JRE 1.8.0\x00%s %s %s-%s%s%s%s\x00",
+        std.elf.PF_R,
+    );
+
+    const library_dir = try tmp.dir.realPathFileAlloc(testing.io, "lib/amd64", gpa);
+    try testing.expectEqual(@as(?u32, 8), try detectLauncherVersion(testing.io, gpa, library_dir));
+}
+
 test "JVM launcher: follows OpenJ9 forwarders to numbered and unnumbered VM libraries" {
     const test_util = @import("test_util.zig");
     for ([_][]const u8{ "libj9vm29.so", "libj9vm.so" }) |vm_name| {

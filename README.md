@@ -463,15 +463,16 @@ a Java workload is not reporting.
 
 #### Runtimes with supported version detection
 
-The version is read from the `JAVA_VERSION` entry of the Java home's `release` file, which every runtime image
-built since JDK 8 ships, including `jlink` and `jpackage` images. When there is no usable `release` file, the
-injector falls back to scanning the read-only segments of the VM binaries for the vendor's version banner.
+The version is read from the `JAVA_VERSION` entry of the Java home's `release` file, which most runtime images
+ship, including `jlink` and `jpackage` images. When there is no usable `release` file, the injector falls back to
+scanning the read-only segments of the VM binaries for the vendor's version banner.
 
 | Runtime | Detection |
 | --- | --- |
 | OpenJDK and derivatives (Temurin, Corretto, Zulu, Liberica, Oracle JDK, ...) | `release` file, falling back to the HotSpot banner |
 | GraalVM (JVM mode) | `release` file, falling back to the HotSpot banner |
-| Eclipse OpenJ9 and IBM Semeru | `release` file, falling back to the OpenJ9 internal version string |
+| Eclipse OpenJ9 and IBM Semeru | `release` file, falling back to the OpenJ9 internal version string or the J9 version label |
+| IBM SDK, Java Technology Edition 8 (IBM J9 VM) | J9 version label (it ships no `release` file) |
 | Azul Prime (Zing) | `release` file, falling back to the Zing version string |
 
 Other runtimes are not recognized. They are not instrumented unless the version check is turned off, as described

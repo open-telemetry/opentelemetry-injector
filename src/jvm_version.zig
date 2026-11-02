@@ -8,11 +8,20 @@ const max_version_length = 128;
 const hotspot_version_marker = " JRE (";
 const openj9_version_marker = "-Xinternalversion\x00";
 const zing_version_marker = "-zing_";
+// J9 VMs, IBM's own as well as Eclipse OpenJ9, label the version line of their dump agent with the Java release,
+// right before the format string that line is printed with.
+const j9_version_marker = "\x00JRE ";
+const j9_version_suffix = "\x00%s %s %s-%s%s%s%s\x00";
 // OpenJ9 ships a dummy libjvm.so that forwards to its VM in libj9vmNNN.so. These two strings identify it.
 const openj9_options_marker = "IBM_JAVA_OPTIONS\x00";
 const openj9_vm_selection_marker = "-Xjvm:\x00";
 const max_openj9_prefix_length = 128;
-const scan_overlap = openj9_version_marker.len + max_openj9_prefix_length + max_version_length;
+// Long enough to hold any marker together with the version it leads to, so that one a read splits is seen whole in
+// the next.
+const scan_overlap: usize = @max(
+    openj9_version_marker.len + max_openj9_prefix_length + max_version_length,
+    j9_version_marker.len + max_version_length + j9_version_suffix.len,
+);
 
 pub const BinaryVersion = struct {
     major: ?u32,
@@ -96,13 +105,9 @@ pub fn inspectBinary(io: std.Io, path: []const u8) !BinaryVersion {
             }
 
             // OpenJ9 ships dummy libjvm.so, it's VM code (and version) is really in libj9vmNNN.so.
-            // We try few symbols in the library that will speak for sure that this is J9, and then stop
-            // scanning this JVM binary.
+            // We try few symbols in the library that will speak for sure that this is J9.
             ibm_options = ibm_options or scan.ibm_options;
             jvm_selection = jvm_selection or scan.jvm_selection;
-            if (ibm_options and jvm_selection) {
-                return .{ .major = null, .openj9_forwarder = true };
-            }
 
             // Preserve the marker, intervening OpenJ9 strings, and version across reads.
             carry = @min(bytes.len, scan_overlap);
@@ -111,7 +116,10 @@ pub fn inspectBinary(io: std.Io, path: []const u8) !BinaryVersion {
         }
     }
 
-    return .{ .major = null, .openj9_forwarder = false };
+    // The VM library behind a forwarder parses the same options, and IBM J9 names them before its version. They only
+    // mark a forwarder once the whole binary has turned out to have no version, which costs little: forwarders are
+    // a few hundred kilobytes at most.
+    return .{ .major = null, .openj9_forwarder = ibm_options and jvm_selection };
 }
 
 const ChunkScan = struct {
@@ -135,6 +143,8 @@ fn scanChunk(bytes: []const u8) ChunkScan {
             openJ9VersionAt(bytes, index)
         else if (std.mem.startsWith(u8, rest, zing_version_marker))
             zingVersionAt(bytes, index)
+        else if (std.mem.startsWith(u8, rest, j9_version_marker))
+            j9VersionAt(bytes, index)
         else blk: {
             scan.ibm_options = scan.ibm_options or std.mem.startsWith(u8, rest, openj9_options_marker);
             scan.jvm_selection = scan.jvm_selection or std.mem.startsWith(u8, rest, openj9_vm_selection_marker);
@@ -167,6 +177,7 @@ const MarkerCandidates = struct {
         hotspot_version_marker[0..2],
         openj9_version_marker[0..2],
         zing_version_marker[0..2],
+        j9_version_marker[0..2],
         openj9_options_marker[0..2],
         openj9_vm_selection_marker[0..2],
     };
@@ -233,6 +244,16 @@ fn openJ9VersionAt(bytes: []const u8, index: usize) ?u32 {
     if (version_start == prefix.len) return null;
 
     return parseTerminatedVersion(tail[version_start..], 0);
+}
+
+fn j9VersionAt(bytes: []const u8, index: usize) ?u32 {
+    // IBM J9 for Java 9 lists a label for every release it can report, so a label only counts when the format string
+    // follows it. IBM J9 2.9 for Java 8 has nothing after -Xinternalversion, and names its release only here.
+    const label = bytes[index + j9_version_marker.len ..];
+    const bounded = label[0..@min(label.len, max_version_length)];
+    const end = std.mem.indexOfScalar(u8, bounded, 0) orelse return null;
+    if (!std.mem.startsWith(u8, label[end..], j9_version_suffix)) return null;
+    return parseJavaMajorVersion(bounded[0..end]);
 }
 
 fn zingVersionAt(bytes: []const u8, index: usize) ?u32 {
@@ -494,6 +515,7 @@ test "JVM version: finds every marker wherever it falls in the chunk" {
         .{ .text = " JRE (21.0.10+7-LTS)", .major = 21 },
         .{ .text = "-Xinternalversion\x00linux\x0021.0.9+10-LTS\x00", .major = 21 },
         .{ .text = "\x0021.0.9.0.101-zing_26.01.0.0-b11\x00", .major = 21 },
+        .{ .text = "\x00JRE 1.8.0\x00%s %s %s-%s%s%s%s\x00", .major = 8 },
         .{ .text = "IBM_JAVA_OPTIONS\x00-Xjvm:\x00", .major = null },
     };
 
@@ -512,6 +534,53 @@ test "JVM version: finds every marker wherever it falls in the chunk" {
             }
         }
     }
+}
+
+test "JVM version: J9 VMs carry their Java version in a dump agent label" {
+    // Captured from ibmjava:8-jre (IBM J9 2.9) and ibm-semeru-runtimes:open-21-jre-jammy. IBM J9 2.9 has nothing after
+    // -Xinternalversion, so this label is the only place its libj9vm29.so names the Java release.
+    try testing.expectEqual(@as(?u32, 8), scanChunk("Triggered DumpAgent Thread\x00 (build \x00rasdump.c:455\x00" ++
+        "JRE 1.8.0\x00%s %s %s-%s%s%s%s\x00/proc/sys/kernel/core_pattern\x00").major);
+    try testing.expectEqual(@as(?u32, 21), scanChunk("Triggered DumpAgent Thread\x00 (build \x00" ++
+        "JRE 21\x00%s %s %s-%s%s%s%s\x00/proc/sys/kernel/core_pattern\x00").major);
+}
+
+test "JVM version: J9 labels only count next to the dump agent's format string" {
+    const test_util = @import("test_util.zig");
+    for ([_][]const u8{
+        // IBM J9 for Java 9 lists a label for every release it can report, so a bare label says nothing.
+        "\x00JRE 1.6.0\x00JRE 1.8.0\x00JRE 9\x00",
+        "\x00JRE 1.8.0\x00%s %s\x00",
+        "\x00JRE 1.8.0\x00%s %s %s-%s%s%s%s",
+        "xJRE 1.8.0\x00%s %s %s-%s%s%s%s\x00",
+        "\x00JRE garbage\x00%s %s %s-%s%s%s%s\x00",
+        "\x00JRE 21." ++ test_util.repeat('0', max_version_length) ++ "\x00%s %s %s-%s%s%s%s\x00",
+    }) |bytes| {
+        try testing.expectEqual(@as(?u32, null), scanChunk(bytes).major);
+    }
+}
+
+test "JVM version: a VM library is not mistaken for a forwarder because of the options it parses" {
+    const test_util = @import("test_util.zig");
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    // Every J9 VM library parses IBM_JAVA_OPTIONS and -Xjvm: as well. Those strings can come before its version
+    // label, here even a whole read before it, and the label still has to win.
+    const options = "-Xjvm:\x00IBM_JAVA_OPTIONS\x00" ++ test_util.repeat('x', 32 * 1024);
+    try test_util.writeElf(tmp.dir, "libj9vm29.so", options ++ "\x00JRE 1.8.0\x00%s %s %s-%s%s%s%s\x00", std.elf.PF_R);
+
+    const path = try tmp.dir.realPathFileAlloc(testing.io, "libj9vm29.so", testing.allocator);
+    defer testing.allocator.free(path);
+    const vm = try inspectBinary(testing.io, path);
+    try testing.expectEqual(@as(?u32, 8), vm.major);
+    try testing.expect(!vm.openj9_forwarder);
+
+    // A forwarder carries the same options and no version anywhere.
+    try test_util.writeElf(tmp.dir, "libj9vm29.so", options, std.elf.PF_R);
+    const forwarder = try inspectBinary(testing.io, path);
+    try testing.expectEqual(@as(?u32, null), forwarder.major);
+    try testing.expect(forwarder.openj9_forwarder);
 }
 
 test "JVM version: the first valid version in a chunk wins, whichever VM it belongs to" {

@@ -422,13 +422,22 @@ When `OTEL_INJECTOR_DISABLED` is set to `true`, no environment variables will be
 
 ## Limitations
 
-If your application is incompatible with the instrumentation library that is being injected, the injector makes no
-guarantees that your application will work after the instrumentation is injected. We consider that the application
-compatibility checks are a responsibility of the instrumentation library.
+Safe activation is a contract between the injector and the instrumentation library being injected. The library
+documents the prerequisites for activating it safely and states which of them it verifies itself; the injector
+verifies the prerequisites assigned to it, and does not activate a library whose prerequisites it cannot confirm.
+This division is being specified in the OpenTelemetry library guidelines, see
+[open-telemetry/opentelemetry-specification#5267](https://github.com/open-telemetry/opentelemetry-specification/issues/5267).
 
-However, for certain programming languages it's not possible for the instrumentation checks to be performed efficiently
-before the instrumentation is loaded. For this reason, the injector performs a best-effort runtime version checks for
-.NET and Java, allowing for deployment of a runtime verification configuration for these two platforms.
+Within that division, most compatibility checking belongs to the instrumentation library: if your application is
+incompatible with the library being injected, the injector makes no guarantee that your application will work
+afterwards. For some runtimes the library cannot check anything, because loading it is already the failure: an
+incompatible Java agent aborts JVM startup before any of its own code runs. The injector therefore performs
+best-effort runtime version checks for .NET and Java before activating them.
+
+When the injector declines to inject because such a check did not pass, it reports why at the default log level,
+naming the detected version and the configured minimum where it has them, so that an uninstrumented workload can
+be diagnosed from the application's own output. Processes that carry no runtime at all are the common case on a
+host and are reported at debug level only.
 
 ### Limitations of the .NET runtime version checks
 

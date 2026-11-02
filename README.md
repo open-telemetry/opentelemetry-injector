@@ -434,10 +434,11 @@ afterwards. For some runtimes the library cannot check anything, because loading
 incompatible Java agent aborts JVM startup before any of its own code runs. The injector therefore performs
 best-effort runtime version checks for .NET and Java before activating them.
 
-When the injector declines to inject because such a check did not pass, it reports why at the default log level,
-naming the detected version and the configured minimum where it has them, so that an uninstrumented workload can
-be diagnosed from the application's own output. Processes that carry no runtime at all are the common case on a
-host and are reported at debug level only.
+When the injector declines to inject because such a check did not pass, it logs why at the `info` level, naming the
+detected version and the configured minimum where it has them. The injector only logs errors by default, so set
+`OTEL_INJECTOR_LOG_LEVEL=info` (see [Configure the Injector's Logging](#configure-the-injectors-logging)) to diagnose
+an uninstrumented workload from the application's own output. Processes that carry no runtime at all are the common
+case on a host and are reported at `debug` level only.
 
 ### Limitations of the .NET runtime version checks
 

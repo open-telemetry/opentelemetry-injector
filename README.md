@@ -444,31 +444,55 @@ The OpenTelemetry Java Agent requires Java 8 or newer, which means that the agen
 a version that is incompatible with JDKs older than JDK 8. Attempting to load the OpenTelemetry Java agent on an
 older JVM would result in an application startup failure with a `java.lang.UnsupportedClassVersionError`.
 
-The detection of the JVM version is performed by reading the `release` file of the Java home, falling back to
-scanning the `.rodata` segment of the JVM binaries. The current detection supports OpenJDK (and derivatives),
-GraalVM, OpenJ9 and Azul Prime (Zing). If the injector is unable to determine the JVM version, it does not inject
-the instrumentation library: an injection into a runtime that turns out to be unsupported can keep the application
-from starting, while skipping one only costs telemetry from a workload that keeps running.
+**The Java agent is injected only into a JVM whose version the injector could determine.** When the version cannot
+be established, the injector leaves `JAVA_TOOL_OPTIONS` alone and the workload runs uninstrumented. This is the
+deliberate trade-off: injecting into a runtime that turns out to be unsupported can stop an application from
+starting, while skipping an injection only costs telemetry from a workload that keeps running. Whether your
+runtime can be detected therefore decides whether you get telemetry at all, so it is the first thing to check if
+a Java workload is not reporting.
 
-OpenJDK supports choosing an alternative JVM on the command line through `-XXaltjvm=` or `JDK_ALTERNATE_VM`. The
-injector does not support detecting the version of the alternate JVM, so it treats that runtime as undetermined
-and does not inject the instrumentation library.
+#### Runtimes with supported version detection
 
-The default supported JVM version is 8, matching the version support of the OpenTelemetry Java Agent. If you
-are injecting a different instrumentation library with an earlier version support, you can modify the
-supported version by setting the `JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION` environment variable or
-the equivalent `jvm_auto_instrumentation_minimum_java_major_version` config file option.
+The version is read from the `JAVA_VERSION` entry of the Java home's `release` file, which every runtime image
+built since JDK 8 ships, including `jlink` and `jpackage` images. When there is no usable `release` file, the
+injector falls back to scanning the read-only segments of the VM binaries for the vendor's version banner.
 
-The injector recognizes a process as a JVM by the launcher library the dynamic loader has already mapped when the
-injector initializes. Programs that embed a JVM through the JNI Invocation API instead of the `java` launcher, such
-as `jsvc` from Apache Commons Daemon, load the VM later in their startup and therefore look like any other non-Java
-process at that point. `JAVA_TOOL_OPTIONS` is not set for them, so the VM they go on to create is not instrumented.
+| Runtime | Detection |
+| --- | --- |
+| OpenJDK and derivatives (Temurin, Corretto, Zulu, Liberica, Oracle JDK, ...) | `release` file, falling back to the HotSpot banner |
+| GraalVM (JVM mode) | `release` file, falling back to the HotSpot banner |
+| Eclipse OpenJ9 and IBM Semeru | `release` file, falling back to the OpenJ9 internal version string |
+| Azul Prime (Zing) | `release` file, falling back to the Zing version string |
+
+Other runtimes are not recognized. They are not instrumented unless the version check is turned off, as described
+below.
+
+#### When the version cannot be determined
+
+Even on a runtime from the table above, the injector does not instrument a process in any of these cases:
+
+- **The VM is not loaded through the `java` launcher.** A process is recognized as a JVM by the launcher library
+  the dynamic loader has already mapped when the injector initializes. Programs that embed a VM through the JNI
+  Invocation API, such as `jsvc` from Apache Commons Daemon, load it later in their startup and look like any
+  other non-Java process at that point. No check that runs at process startup can see them.
+- **An alternate VM is selected** through `-XXaltjvm=` on the command line or the `JDK_ALTERNATE_VM` environment
+  variable. The VM that will be loaded is not the one the injector can inspect, so its version is unknown.
+- **The runtime image carries no usable `release` file and no recognizable version banner**, for example a
+  heavily stripped or repackaged image.
+
+#### Configuring the check
+
+The default minimum version is 8, matching the version support of the OpenTelemetry Java Agent. If you are
+injecting a different instrumentation library with an earlier version support, you can modify the supported
+version by setting the `JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION` environment variable or the
+equivalent `jvm_auto_instrumentation_minimum_java_major_version` config file option.
 
 Setting the minimum Java major version to `0` turns the version check off: no detection runs, and
 `JAVA_TOOL_OPTIONS` is set for every process the injector is loaded into, which is how the injector behaved before
-the version check existed. This is the way to keep instrumenting runtimes the check cannot see, whether because
-they embed the VM as described above, because an alternate JVM was selected, or because the version detection does
-not recognize them. Use it when you know the JVMs on the host are new enough for the agent you are injecting.
+the version check existed. This is the way to instrument the runtimes listed above as undetectable. Use it when
+you know the JVMs on the host are new enough for the agent you are injecting, bearing in mind that it also injects
+into every process that is not a JVM at all, and that a JVM older than the agent supports will then fail to start
+with a `java.lang.UnsupportedClassVersionError`.
 
 ## Design
 

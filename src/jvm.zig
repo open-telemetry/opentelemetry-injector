@@ -108,22 +108,24 @@ fn javaVersionAllowsInjection(
         return true;
     }
 
-    var major: ?u32 = null;
-    if (get_java_major_version(io, gpa, get_env)) |detected_major| {
-        major = detected_major;
-    } else |err| {
+    // Beyond this point the agent is injected only into a runtime whose version we have established to be
+    // supported. Anything we cannot verify is left alone: an unchecked injection can stop an application from
+    // starting at all, while a skipped one costs telemetry from a workload that keeps running. Whoever would
+    // rather have the telemetry can say so with a minimum of 0 above.
+    const major = get_java_major_version(io, gpa, get_env) catch |err| {
         // We need to ignore processes that don't have Java because we'll inject into any shell that wraps a Java
         // process, and then, like it or not, this environment variable will propagate to the JVM process.
         if (err == error.JvmLauncherNotFound) {
             print.printDebug("Skipping Java agent injection because no Java launcher is loaded.", .{});
-            return false;
+        } else {
+            print.printInfo("Skipping the injection of the OpenTelemetry Java agent because the Java version could not be determined: {}", .{err});
         }
-        print.printDebug("Cannot detect the JVM's Java version, allowing Java agent injection: {}", .{err});
-    }
+        return false;
+    };
 
     const java_major = major orelse {
-        print.printDebug("No JVM version detected, allowing Java agent injection.", .{});
-        return true;
+        print.printInfo("Skipping the injection of the OpenTelemetry Java agent because no Java version was detected.", .{});
+        return false;
     };
 
     if (java_major < minimum_java_major_version) {
@@ -236,7 +238,7 @@ test "JVM version gate: skips Java 6 and 7 while preserving existing options" {
     }
 }
 
-test "JVM version gate: injects for Java 8+, unknown versions and detection errors" {
+test "JVM version gate: injects for Java 8+" {
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.writeFile(testing.io, .{ .sub_path = "agent.jar", .data = "" });
@@ -245,7 +247,7 @@ test "JVM version gate: injects for Java 8+, unknown versions and detection erro
     const expected = try std.fmt.allocPrint(testing.allocator, "-Dexisting=preserved -javaagent:{s}", .{jar});
     defer testing.allocator.free(expected);
 
-    inline for (.{ @as(?u32, 8), @as(?u32, 21), @as(?u32, null) }) |major| {
+    inline for (.{ @as(?u32, 8), @as(?u32, 21) }) |major| {
         const Detector = struct {
             fn detect(_: std.Io, _: std.mem.Allocator, _: environ.GetenvFn) anyerror!?u32 {
                 return major;
@@ -264,23 +266,45 @@ test "JVM version gate: injects for Java 8+, unknown versions and detection erro
         defer testing.allocator.free(result);
         try testing.expectEqualStrings(expected, result);
     }
-    const FailedDetector = struct {
+}
+
+test "JVM version gate: skips injection when the Java version cannot be established" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "agent.jar", .data = "" });
+    const jar = try tmp.dir.realPathFileAlloc(testing.io, "agent.jar", testing.allocator);
+    defer testing.allocator.free(jar);
+
+    // A detector that reports no version, and one that fails outright: in both cases the runtime about to be
+    // loaded is unknown, so the agent stays out and whatever JAVA_TOOL_OPTIONS already carries is left alone.
+    const Undetected = struct {
+        fn detect(_: std.Io, _: std.mem.Allocator, _: environ.GetenvFn) anyerror!?u32 {
+            return null;
+        }
+    };
+    const Failing = struct {
         fn detect(_: std.Io, _: std.mem.Allocator, _: environ.GetenvFn) anyerror!?u32 {
             return error.AccessDenied;
         }
     };
-    const on_error = doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
-        testing.io,
-        testing.allocator,
-        "-Dexisting=preserved",
-        jar,
-        false,
-        config.default_jvm_auto_instrumentation_minimum_java_major_version,
-        test_util.posixGetenv,
-        FailedDetector.detect,
-    ).?;
-    defer testing.allocator.free(on_error);
-    try testing.expectEqualStrings(expected, on_error);
+
+    inline for (.{ Undetected.detect, Failing.detect }) |detect| {
+        inline for (.{ @as(?[:0]const u8, null), @as(?[:0]const u8, "-Dexisting=preserved") }) |original| {
+            try testing.expectEqual(
+                @as(?[:0]u8, null),
+                doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
+                    testing.io,
+                    testing.allocator,
+                    original,
+                    jar,
+                    false,
+                    config.default_jvm_auto_instrumentation_minimum_java_major_version,
+                    test_util.posixGetenv,
+                    detect,
+                ),
+            );
+        }
+    }
 }
 
 test "JVM version gate: leaves existing agents unchanged on Java 6 and 7" {

@@ -26,6 +26,24 @@ run_test_case \
   "otel.injector.jvm.no_op_agent.has_been_loaded: -" \
   "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=22"
 
+# An alternate VM selection means the VM that will be loaded is not the one the injector can inspect, so the Java
+# version counts as undetermined even though this is unmistakably a JVM. "server" is the VM every supported image
+# ships, so the JVM starts normally and the only thing under test is the injector standing down.
+run_test_case \
+  "skips the Java agent when the Java version cannot be determined" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: -" \
+  "JDK_ALTERNATE_VM=server"
+
+# Turning the version check off reaches that JVM again.
+run_test_case \
+  "a minimum Java version of 0 adds the Java agent when the Java version cannot be determined" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true" \
+  "JDK_ALTERNATE_VM=server JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=0"
+
 # Some JVM images preset JAVA_TOOL_OPTIONS with their own options, so these two cases look for our -javaagent flag
 # specifically instead of comparing the whole variable.
 run_test_case \

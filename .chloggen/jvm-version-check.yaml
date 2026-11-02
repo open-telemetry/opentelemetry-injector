@@ -6,11 +6,13 @@ subtext: |
   Inspect the JVM launcher default bundled JVM binary before the VM is loaded.
   Leave existing Java options and agents unchanged when skipping injection.
   Skip Java agent injection in processes without a loaded JVM launcher, so shells do not pass it to unsupported Java children.
+  Skip Java agent injection whenever the Java version cannot be determined, rather than injecting into a runtime that
+  may not support the agent. This includes runtimes the detection does not recognize, and JVM switching through
+  -XXaltjvm= or JDK_ALTERNATE_VM, where the VM that will be loaded is not the one the injector can inspect.
   Programs that embed a JVM through the JNI Invocation API, such as jsvc, load the VM after the injector has run and
-  therefore no longer receive JAVA_TOOL_OPTIONS. Set the minimum Java major version to 0 to turn the version check off
-  and inject into every process, as the injector did before this change.
-  Allow injection when we know it's Java and we cannot determine the version.
-  Does not handle JVM switching using -XXaltjvm=, when this is detected we allow injection.
+  therefore no longer receive JAVA_TOOL_OPTIONS.
+  Set the minimum Java major version to 0 to turn the version check off and inject into every process, as the injector
+  did before this change. This is the way to keep instrumenting any runtime the check cannot see.
   Configure the minimum Java major version with jvm_auto_instrumentation_minimum_java_major_version in the configuration file
   or JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION in the environment (default: 8). Environment values take priority.
 change_logs: [user]

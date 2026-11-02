@@ -133,7 +133,8 @@ This method requires `root` privileges.
      auto-instrumentation; can also be set via the configuration file key
      `jvm_auto_instrumentation_minimum_java_major_version`. The default is `8`, matching the OpenTelemetry Java
      agent's baseline. Environment values override file values. Non-negative integers are accepted; `0` turns the
-     version check off entirely, and invalid values leave the current setting unchanged.
+     version check off entirely, so that every process is injected regardless of the runtime it loads, and invalid
+     values leave the current setting unchanged.
    - `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Node.js auto-instrumentation agent registration file
    - `PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the Python auto-instrumentation agent files (Python is disabled by default, see [Enabling Auto-Instrumentation for Python](#enabling-auto-instrumentation-for-python))
    - `RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the Ruby auto-instrumentation gem bundle
@@ -443,13 +444,15 @@ The OpenTelemetry Java Agent requires Java 8 or newer, which means that the agen
 a version that is incompatible with JDKs older than JDK 8. Attempting to load the OpenTelemetry Java agent on an
 older JVM would result in an application startup failure with a `java.lang.UnsupportedClassVersionError`.
 
-The detection of the JVM version is performed by scanning the `.rodata` segment of the JVM binaries. The current
-detection supports OpenJDK (and derivatives), GraalVM, OpenJ9 and Azul Prime (Zing). If the injector is unable
-to find the JVM version, the injector will proceed with injecting the instrumentation library.
+The detection of the JVM version is performed by reading the `release` file of the Java home, falling back to
+scanning the `.rodata` segment of the JVM binaries. The current detection supports OpenJDK (and derivatives),
+GraalVM, OpenJ9 and Azul Prime (Zing). If the injector is unable to determine the JVM version, it does not inject
+the instrumentation library: an injection into a runtime that turns out to be unsupported can keep the application
+from starting, while skipping one only costs telemetry from a workload that keeps running.
 
-OpenJDK supports choosing an alternative JVM on the command line through `-XXaltjvm=` or `JDK_ALTERNATE_VM`, the
-injector currently doesn't support detecting the version of the alternate JVM and proceeds with injecting the
-instrumentation library.
+OpenJDK supports choosing an alternative JVM on the command line through `-XXaltjvm=` or `JDK_ALTERNATE_VM`. The
+injector does not support detecting the version of the alternate JVM, so it treats that runtime as undetermined
+and does not inject the instrumentation library.
 
 The default supported JVM version is 8, matching the version support of the OpenTelemetry Java Agent. If you
 are injecting a different instrumentation library with an earlier version support, you can modify the
@@ -460,9 +463,12 @@ The injector recognizes a process as a JVM by the launcher library the dynamic l
 injector initializes. Programs that embed a JVM through the JNI Invocation API instead of the `java` launcher, such
 as `jsvc` from Apache Commons Daemon, load the VM later in their startup and therefore look like any other non-Java
 process at that point. `JAVA_TOOL_OPTIONS` is not set for them, so the VM they go on to create is not instrumented.
-Setting the minimum Java major version to `0` turns the version check off: no detection runs, and `JAVA_TOOL_OPTIONS`
-is set for every process the injector is loaded into, which is how the injector behaved before the version check
-existed. Use it when you host your JVMs this way and you know they are new enough for the agent you are injecting.
+
+Setting the minimum Java major version to `0` turns the version check off: no detection runs, and
+`JAVA_TOOL_OPTIONS` is set for every process the injector is loaded into, which is how the injector behaved before
+the version check existed. This is the way to keep instrumenting runtimes the check cannot see, whether because
+they embed the VM as described above, because an alternate JVM was selected, or because the version detection does
+not recognize them. Use it when you know the JVMs on the host are new enough for the agent you are injecting.
 
 ## Design
 

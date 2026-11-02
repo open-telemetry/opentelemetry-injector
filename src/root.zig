@@ -190,8 +190,21 @@ fn initEnviron() callconv(.c) void {
         libc_info,
         configuration.all_auto_instrumentation_agents_env_vars,
     );
+    modifyJavaAgentExtensions(allocator, libc_info);
 
     print.printInfo("environment injection finished", .{});
+}
+
+fn modifyJavaAgentExtensions(allocator: std.mem.Allocator, lci: types.LibCInfo) void {
+    const value = jvm.getModifiedJavaAgentExtensionsValue(
+        allocator,
+        libcGetenv(lci.getenv_fn_ptr, jvm.javaagent_extensions_env_var_name),
+        libcGetenv(lci.getenv_fn_ptr, jvm.java_extension_paths_env_var_name),
+    ) orelse return;
+    const result = lci.setenv_fn_ptr(jvm.javaagent_extensions_env_var_name, value, true);
+    if (result != 0) {
+        print.printError("failed to set \"{s}\", setenv returned: {d}", .{ jvm.javaagent_extensions_env_var_name, result });
+    }
 }
 
 fn libcGetenv(getenv_fn: types.GetenvFnPtr, name: [:0]const u8) ?[:0]const u8 {

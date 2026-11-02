@@ -11,6 +11,100 @@ const test_util = @import("test_util.zig");
 const testing = std.testing;
 
 pub const java_tool_options_env_var_name = "JAVA_TOOL_OPTIONS";
+pub const java_extension_paths_env_var_name = "OTEL_INJECTOR_JAVA_EXTENSION_PATHS";
+pub const javaagent_extensions_env_var_name = "OTEL_JAVAAGENT_EXTENSIONS";
+
+/// Appends injector-provided extension paths to the Java agent's extension path.
+/// Existing user-provided entries are kept in order and are not duplicated.
+pub fn getModifiedJavaAgentExtensionsValue(
+    gpa: std.mem.Allocator,
+    existing: ?[:0]const u8,
+    injected: ?[:0]const u8,
+) ?[:0]u8 {
+    const paths = injected orelse return null;
+    if (paths.len == 0) return null;
+
+    var result: std.ArrayList(u8) = .empty;
+    defer result.deinit(gpa);
+
+    if (existing) |value| {
+        var existing_iterator = std.mem.splitScalar(u8, value, ',');
+        while (existing_iterator.next()) |path| {
+            if (path.len == 0 or containsPath(result.items, path)) continue;
+            appendPath(gpa, &result, path) catch |err| {
+                print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ javaagent_extensions_env_var_name, err });
+                return null;
+            };
+        }
+    }
+
+    var iterator = std.mem.splitScalar(u8, paths, ',');
+    while (iterator.next()) |path| {
+        if (path.len == 0 or containsPath(result.items, path)) continue;
+        appendPath(gpa, &result, path) catch |err| {
+            print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ javaagent_extensions_env_var_name, err });
+            return null;
+        };
+    }
+
+    if (existing) |value| {
+        if (std.mem.eql(u8, result.items, value)) return null;
+    }
+    if (result.items.len == 0) return null;
+    return gpa.dupeSentinel(u8, result.items, 0) catch |err| {
+        print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ javaagent_extensions_env_var_name, err });
+        return null;
+    };
+}
+
+fn appendPath(gpa: std.mem.Allocator, result: *std.ArrayList(u8), path: []const u8) !void {
+    if (result.items.len > 0) try result.append(gpa, ',');
+    try result.appendSlice(gpa, path);
+}
+
+fn containsPath(value: []const u8, path: []const u8) bool {
+    var iterator = std.mem.splitScalar(u8, value, ',');
+    while (iterator.next()) |entry| {
+        if (std.mem.eql(u8, entry, path)) return true;
+    }
+    return false;
+}
+
+test "getModifiedJavaAgentExtensionsValue: appends new paths and preserves existing paths" {
+    const value = getModifiedJavaAgentExtensionsValue(
+        testing.allocator,
+        "user-a,user-b",
+        "/extensions/a,/extensions/b",
+    ) orelse return error.ExpectedModifiedValue;
+    defer testing.allocator.free(value);
+    try testing.expectEqualStrings("user-a,user-b,/extensions/a,/extensions/b", value);
+}
+
+test "getModifiedJavaAgentExtensionsValue: deduplicates existing and incoming paths" {
+    const value = getModifiedJavaAgentExtensionsValue(
+        testing.allocator,
+        "user-a,/extensions/a",
+        "/extensions/a,/extensions/b,/extensions/b",
+    ) orelse return error.ExpectedModifiedValue;
+    defer testing.allocator.free(value);
+    try testing.expectEqualStrings("user-a,/extensions/a,/extensions/b", value);
+}
+
+test "getModifiedJavaAgentExtensionsValue: removes empty entries" {
+    const value = getModifiedJavaAgentExtensionsValue(
+        testing.allocator,
+        "user-a,,/extensions/a,",
+        "/extensions/a,/extensions/b",
+    ) orelse return error.ExpectedModifiedValue;
+    defer testing.allocator.free(value);
+    try testing.expectEqualStrings("user-a,/extensions/a,/extensions/b", value);
+}
+
+test "getModifiedJavaAgentExtensionsValue: returns null when no path needs appending" {
+    try testing.expect(getModifiedJavaAgentExtensionsValue(testing.allocator, "user-a", null) == null);
+    try testing.expect(getModifiedJavaAgentExtensionsValue(testing.allocator, "user-a", "") == null);
+    try testing.expect(getModifiedJavaAgentExtensionsValue(testing.allocator, "user-a", "user-a") == null);
+}
 
 /// Returns the modified value for JAVA_TOOL_OPTIONS, including the -javaagent flag; based on the original value of
 /// JAVA_TOOL_OPTIONS.

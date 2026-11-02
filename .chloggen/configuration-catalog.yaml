@@ -1,0 +1,6 @@
+change_type: enhancement
+component: configuration
+note: Add a generated reference for injector configuration options in configuration.md.
+issues: [453]
+subtext: Runtime configuration formats and option semantics are unchanged.
+change_logs: [user]

@@ -28,7 +28,7 @@ pub fn checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
         gpa,
         original_value_optional,
         configuration.jvm_auto_instrumentation_agent_path,
-        configuration.jvm_instrumentation_disabled,
+        configuration.auto_instrumentation_disabled.jvm,
     );
 }
 

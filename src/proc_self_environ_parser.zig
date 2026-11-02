@@ -7,12 +7,13 @@ const std = @import("std");
 const proc_self_environ_values = @import("proc_self_environ_values.zig");
 const print = @import("print.zig");
 const types = @import("types.zig");
+const options = @import("config_generated.zig");
 
 const testing = std.testing;
 
 const proc_self_environ_path = "/proc/self/environ";
-const otel_injector_log_level_env_var_name = "OTEL_INJECTOR_LOG_LEVEL";
-pub const otel_injector_disabled_env_var_name = "OTEL_INJECTOR_DISABLED";
+const otel_injector_log_level_env_var_name = options.log_level.env_name.?;
+pub const otel_injector_disabled_env_var_name = options.disabled.env_name.?;
 
 const max_getenv_entry_length = 8192;
 const max_getenv_buffer_len = max_getenv_entry_length * 2;
@@ -102,23 +103,15 @@ fn initFromEnvironFile(io: std.Io, self_environ_path: []const u8) !void {
     defer if (disabled_value) |v| allocator.free(v);
 
     if (disabled_value) |v| {
-        proc_self_environ_values.setOtelInjectorDisabled(parseBooleanValue(v));
+        proc_self_environ_values.setOtelInjectorDisabled(options.disabled.parseEnvironmentScalar(v));
     }
 
     if (log_level_value) |log_level| {
-        if (std.ascii.eqlIgnoreCase("debug", log_level)) {
-            proc_self_environ_values.setLogLevel(.Debug);
-        } else if (std.ascii.eqlIgnoreCase("info", log_level)) {
-            proc_self_environ_values.setLogLevel(.Info);
-        } else if (std.ascii.eqlIgnoreCase("warn", log_level)) {
-            proc_self_environ_values.setLogLevel(.Warn);
-        } else if (std.ascii.eqlIgnoreCase("error", log_level)) {
-            proc_self_environ_values.setLogLevel(.Error);
-        } else if (std.ascii.eqlIgnoreCase("none", log_level)) {
-            proc_self_environ_values.setLogLevel(.None);
-        } else {
+        const parsed = options.log_level.parseEnvironmentScalar(log_level) catch blk: {
             print.printError("unknown value for OTEL_INJECTOR_LOG_LEVEL: \"{s}\" -- valid log levels are \"debug\", \"info\", \"warn\", \"error\", \"none\".", .{log_level});
-        }
+            break :blk proc_self_environ_values.getLogLevel();
+        };
+        proc_self_environ_values.setLogLevel(parsed);
     }
     print.printDebug("log level: {}", .{proc_self_environ_values.getLogLevel()});
 }
@@ -335,22 +328,16 @@ test "initFromEnvironFile: overly long environment variable" {
     try testing.expectEqual(true, proc_self_environ_values.getOtelInjectorDisabled());
 }
 
-inline fn parseBooleanValue(value: []const u8) bool {
-    return std.ascii.eqlIgnoreCase(value, "true") or
-        std.ascii.eqlIgnoreCase(value, "t") or
-        std.mem.eql(u8, value, "1");
-}
-
-test "parseBooleanValue: correctly identifies true and false values" {
+test "OTEL_INJECTOR_DISABLED: correctly identifies true and false values" {
     const true_values = [_][]const u8{ "true", "True", "TRUE", "t", "T", "1" };
-    const false_values = [_][]const u8{ "false", "False", "FALSE", "f", "F", "0", "", "random", "yes", "no", "ON" };
+    const false_values = [_][]const u8{ "false", "False", "FALSE", "f", "F", "0", "", "random", "yes", "no", "ON", " true ", "\t1\n" };
 
     for (true_values) |value| {
-        try testing.expect(parseBooleanValue(value));
+        try testing.expect(options.disabled.parseEnvironmentScalar(value));
     }
 
     for (false_values) |value| {
-        try testing.expect(!parseBooleanValue(value));
+        try testing.expect(!options.disabled.parseEnvironmentScalar(value));
     }
 }
 

@@ -28,7 +28,7 @@ pub fn checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
         gpa,
         original_value_optional,
         configuration.nodejs_auto_instrumentation_agent_path,
-        configuration.nodejs_instrumentation_disabled,
+        configuration.auto_instrumentation_disabled.nodejs,
     );
 }
 

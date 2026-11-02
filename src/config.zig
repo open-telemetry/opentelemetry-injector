@@ -572,7 +572,7 @@ fn applyAutoInstrumentationDisabledValue(trimmed_value: []const u8, source: []co
 }
 
 fn applyDotnetMinimumDotnetMajorVersionValue(value: []const u8, source: []const u8, configuration: *InjectorConfiguration) void {
-    const trimmed_value = std.mem.trim(u8, value, " \t");
+    const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
     const parsed_version = std.fmt.parseUnsigned(u32, trimmed_value, 10) catch {
         print.printWarn(
             "Ignoring invalid value for {s} from {s}: \"{s}\" - a non-negative integer is required.",
@@ -584,7 +584,7 @@ fn applyDotnetMinimumDotnetMajorVersionValue(value: []const u8, source: []const 
 }
 
 fn applyJvmMinimumJavaMajorVersionValue(value: []const u8, source: []const u8, configuration: *InjectorConfiguration) void {
-    const trimmed_value = std.mem.trim(u8, value, " \t");
+    const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
     const parsed_version = std.fmt.parseUnsigned(u32, trimmed_value, 10) catch {
         print.printWarn(
             "Ignoring invalid value for {s} from {s}: \"{s}\" - a non-negative integer is required.",
@@ -602,6 +602,9 @@ test "JVM minimum Java major version: parses values with the same rules as .NET"
         .{ .value = "1", .expected = 1 },
         .{ .value = "6", .expected = 6 },
         .{ .value = " 21\t", .expected = 21 },
+        // A value read from a file keeps its line ending, as one from a ConfigMap created with --from-file does.
+        .{ .value = "0\n", .expected = 0 },
+        .{ .value = "21\r\n", .expected = 21 },
         .{ .value = "4294967295", .expected = std.math.maxInt(u32) },
         .{ .value = "", .expected = 8 },
         .{ .value = "true", .expected = 8 },
@@ -645,6 +648,7 @@ test "JVM minimum Java major version: reads config files and applies environment
         .{ .value = null, .expected = 6 },
         .{ .value = "0", .expected = 0 },
         .{ .value = " 9\t", .expected = 9 },
+        .{ .value = "0\n", .expected = 0 },
         .{ .value = "invalid", .expected = 6 },
         .{ .value = "-1", .expected = 6 },
         .{ .value = "4294967296", .expected = 6 },
@@ -682,6 +686,10 @@ test "applyDotnetMinimumDotnetMajorVersionValue: trims whitespace" {
     applyDotnetMinimumDotnetMajorVersionValue(" 7\t", "test", &configuration);
 
     try testing.expectEqual(@as(u32, 7), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
+
+    applyDotnetMinimumDotnetMajorVersionValue("8\r\n", "test", &configuration);
+
+    try testing.expectEqual(@as(u32, 8), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
 }
 
 test "applyDotnetMinimumDotnetMajorVersionValue: ignores an invalid value and keeps the default" {

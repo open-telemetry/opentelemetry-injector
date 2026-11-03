@@ -719,7 +719,12 @@ fn readConfigurationDirectory(io: std.Io, arena_allocator: std.mem.Allocator, co
     };
     var dir_iter = dir.iterate();
     while (dir_iter.next(io) catch null) |entry| {
-        if (entry.kind != .file) continue;
+        // Symlinks count: a Kubernetes ConfigMap volume materialises every key as a symlink into a
+        // timestamped ..data directory, so skipping them would silently ignore all drop-ins
+        // delivered that way. The ".conf" suffix filter below keeps ConfigMap's own bookkeeping
+        // entries (..data and ..<timestamp>) out, and readConfigurationFile opens by path, which
+        // resolves the link.
+        if (entry.kind != .file and entry.kind != .sym_link) continue;
         if (!std.mem.endsWith(u8, entry.name, ".conf")) continue;
         const name_copy = std.fmt.allocPrint(arena_allocator, "{s}", .{entry.name}) catch continue;
         file_names.append(arena_allocator, name_copy) catch continue;
@@ -2497,6 +2502,44 @@ test "readConfigurationDirectory: conf.d files override values from the main con
     try testing.expectEqualStrings(
         "/conf.d/path/to/jvm/javaagent.jar",
         configuration.jvm_auto_instrumentation_agent_path,
+    );
+}
+
+test "readConfigurationDirectory: reads drop-ins that are symlinks, as mounted Kubernetes ConfigMaps are" {
+    const allocator = testing.allocator;
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    // Reproduce the layout kubelet creates for a ConfigMap volume: the real files live in a
+    // timestamped directory, ..data points at it, and every key is a symlink through ..data.
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDir(testing.io, "..2026_11_03_07_11_51.813479606", .default_dir);
+    {
+        const file = try tmp.dir.createFile(testing.io, "..2026_11_03_07_11_51.813479606/php.conf", .{});
+        defer file.close(testing.io);
+        var buffer: [128]u8 = undefined;
+        var writer = file.writer(testing.io, &buffer);
+        try writer.interface.writeAll("php_auto_instrumentation_agent_path_prefix = /from/configmap/php\n");
+        try writer.interface.flush();
+    }
+    try tmp.dir.symLink(testing.io, "..2026_11_03_07_11_51.813479606", "..data", .{});
+    try tmp.dir.symLink(testing.io, "..data/php.conf", "php.conf", .{});
+
+    const dir_path = try tmp.dir.realPathFileAlloc(testing.io, ".", arena_allocator);
+    const env_entry = try std.fmt.allocPrint(arena_allocator, "OTEL_INJECTOR_CONFIG_DIR={s}", .{dir_path});
+
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{env_entry});
+    defer test_util.resetStdCEnviron(original_environ);
+
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    readConfigurationDirectory(testing.io, arena_allocator, &configuration, test_util.posixGetenv);
+
+    try testing.expectEqualStrings(
+        "/from/configmap/php",
+        configuration.php_auto_instrumentation_agent_path_prefix,
     );
 }
 

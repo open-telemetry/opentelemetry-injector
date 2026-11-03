@@ -313,10 +313,10 @@ test "JVM version gate: leaves existing agents unchanged on Java 6 and 7" {
     try tmp.dir.writeFile(testing.io, .{ .sub_path = "agent.jar", .data = "" });
     const jar = try tmp.dir.realPathFileAlloc(testing.io, "agent.jar", testing.allocator);
     defer testing.allocator.free(jar);
-    const expected = try std.fmt.allocPrint(testing.allocator, "-Dexisting=preserved -javaagent:{s} -Dmessage=\"hello world\" -javaagent:/another.jar", .{jar});
-    defer testing.allocator.free(expected);
-    const original = try std.fmt.allocPrintSentinel(testing.allocator, "{s}", .{expected}, 0);
-    defer testing.allocator.free(original);
+
+    // Agents of the user's own only: with ours in the value already, the duplicate check would answer before the
+    // version gate is ever reached.
+    const original = "-Dexisting=preserved -Dmessage=\"hello world\" -javaagent:/another.jar";
 
     inline for (.{ 6, 7 }) |major| {
         const Detector = struct {
@@ -334,8 +334,8 @@ test "JVM version gate: leaves existing agents unchanged on Java 6 and 7" {
             test_util.posixGetenv,
             Detector.detect,
         );
+        defer if (result) |value| testing.allocator.free(value);
         try testing.expectEqual(@as(?[:0]u8, null), result);
-        try testing.expectEqualStrings(expected, original);
     }
 }
 
@@ -421,10 +421,15 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should do nothi
     defer testing.allocator.free(original);
 
     // Detecting the version is the expensive part of the injection decision, so an already injected
-    // JAVA_TOOL_OPTIONS has to short-circuit before it: this detector fails the test if it is ever reached.
+    // JAVA_TOOL_OPTIONS has to short-circuit before it. An error from the detector would only turn into a skip, the
+    // same null this test expects, so the detector records that it was called instead. It also reports a supported
+    // version, so that reaching it would add our agent a second time.
     const Detector = struct {
+        var called = false;
+
         fn detect(_: std.Io, _: std.mem.Allocator, _: environ.GetenvFn) anyerror!?u32 {
-            return error.TestDetectorMustNotBeCalled;
+            called = true;
+            return 21;
         }
     };
 
@@ -438,7 +443,9 @@ test "doCheckOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue: should do nothi
         test_util.posixGetenv,
         Detector.detect,
     );
+    defer if (modified_java_tool_options) |value| testing.allocator.free(value);
     try test_util.expectWithMessage(modified_java_tool_options == null, "modified_java_tool_options == null");
+    try test_util.expectWithMessage(!Detector.called, "the version detector was not called");
 }
 
 test "JVM version gate: does not add a Java agent to a non-Java parent process" {

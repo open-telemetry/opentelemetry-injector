@@ -2,80 +2,74 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# Puts an OpenTelemetry PHP artifact tree in dist/artifacts, in the layout
-# ghcr.io/opentelemetry-php/autoinstrumentation-php publishes and the loader expects:
+# Stages opentelemetry-php-distro in the layout the injector points PHP_INI_SCAN_DIR at:
 #
-#   dist/artifacts/<module_api>/<libc>/<zts|non-zts>/{opentelemetry.so,autoload.php,...}
+#   dist/php/<libc>/otel-loader.ini      <- the only file the scan directory exposes
+#   dist/php/<libc>/distro/...           <- the distro tree, as its package installs it
 #
-# Prefers the published upstream image, because testing against the real artifacts is the point.
-# Upstream's manifest advertises four architectures but its non-amd64 images currently contain
-# x86-64 binaries, so the extension's ELF machine is checked against the host and a local build
-# is used instead when they disagree. That check is deliberately not a hard-coded "arm64 is
-# broken": it starts using upstream automatically once the image is fixed.
+# The distro ships one universal loader (opentelemetry_php_distro_loader.so) plus the per-PHP
+# extensions it dispatches to, so a single install serves PHP 8.1 through 8.5. We deliberately do
+# not run the distro's post-install script: it discovers the host PHP and writes into each SAPI's
+# conf.d, which is exactly the host-wide mutation the injector exists to avoid. Pointing
+# PHP_INI_SCAN_DIR at an ini with the two documented lines achieves the same activation without
+# touching the image.
 #
-# Usage: prepare-artifacts.sh [php-minor] [module-api]     (default: 8.3 20230831)
+# Usage: prepare-artifacts.sh [version]     (default: the version pinned below)
 
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 repo_root="$(cd ../.. && pwd)"
 
-php_minor="${1:-8.3}"
-module_api="${2:-20230831}"
-libc=glibc
-upstream_image="${UPSTREAM_ARTIFACT_IMAGE:-ghcr.io/opentelemetry-php/autoinstrumentation-php:latest}"
+distro_version="${1:-${OTEL_PHP_DISTRO_VERSION:-0.7.0}}"
+distro_repo="open-telemetry/opentelemetry-php-distro"
 
 case "$(uname -m)" in
-  arm64 | aarch64)
-    arch=arm64
-    expected_machine="b7 00"
-    ;;
-  *)
-    arch=amd64
-    expected_machine="3e 00"
-    ;;
+  arm64 | aarch64) deb_arch=arm64 ;;
+  *) deb_arch=amd64 ;;
 esac
 
-out_root="${repo_root}/dist/artifacts"
-variant_dir="${out_root}/${module_api}/${libc}/non-zts"
+# The distro publishes one package per libc: .deb/.rpm are glibc, .apk is musl. The injector can
+# carry both so that a single install serves either kind of image; it selects between them by
+# pointing PHP_INI_SCAN_DIR at one directory rather than the other.
+libc=glibc
+out_dir="${repo_root}/dist/php/${libc}"
+install_path="/opt/opentelemetry/php/distro"
 
-build_locally() {
-  echo "==> building artifacts locally for ${libc}/${arch} (PHP ${php_minor}, module API ${module_api})"
-  rm -rf "$variant_dir"
-  mkdir -p "$variant_dir"
-  docker buildx build \
-    --platform "linux/${arch}" \
-    --build-arg "PHP_IMAGE=php:${php_minor}-cli" \
-    --target export \
-    --output "type=local,dest=${variant_dir}" \
-    -f Dockerfile.artifacts \
-    "$repo_root"
-}
+rm -rf "$out_dir"
+mkdir -p "$out_dir"
 
-if [[ "${OTEL_PHP_ARTIFACTS_SOURCE:-auto}" == "local" ]]; then
-  build_locally
+asset="opentelemetry-php-distro_${distro_version}_${deb_arch}.deb"
+base_url="https://github.com/${distro_repo}/releases/download/v${distro_version}"
+echo "==> fetching ${asset} from ${distro_repo}"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+# Plain HTTPS rather than `gh release download`: this runs in CI, where gh would need a token for
+# what is an unauthenticated public download.
+curl -fsSL -o "${work}/${asset}" "${base_url}/${asset}"
+curl -fsSL -o "${work}/${asset}.sha512" "${base_url}/${asset}.sha512"
+
+echo "==> verifying checksum"
+(cd "$work" && sha512sum -c "${asset}.sha512" > /dev/null)
+
+echo "==> extracting"
+if command -v dpkg-deb > /dev/null 2>&1; then
+  dpkg-deb -x "${work}/${asset}" "${work}/root"
 else
-  echo "==> extracting artifacts from ${upstream_image} (${arch})"
-  rm -rf "$out_root"
-  mkdir -p "$out_root"
-  container="otel-php-artifacts-$$"
-  docker rm -f "$container" > /dev/null 2>&1 || true
-  docker create --platform "linux/${arch}" --name "$container" "$upstream_image" > /dev/null
-  docker cp "${container}:/autoinstrumentation/." "$out_root/"
-  docker rm -f "$container" > /dev/null
-
-  extension="${variant_dir}/opentelemetry.so"
-  machine=""
-  [[ -f "$extension" ]] && machine="$(od -An -tx1 -j18 -N2 "$extension" | tr -s ' ' | sed 's/^ //;s/ $//')"
-
-  if [[ "$machine" != "$expected_machine" ]]; then
-    echo "    upstream image is unusable on this host: ${extension} has ELF machine '${machine}'," >&2
-    echo "    expected '${expected_machine}' for ${arch}. Falling back to a local build." >&2
-    echo "    (upstream bug: the image's multi-architecture manifest does not match its payload)" >&2
-    build_locally
-  fi
+  # macOS has ar but not dpkg-deb.
+  mkdir -p "${work}/root"
+  (cd "${work}/root" && ar x "${work}/${asset}" && tar xf data.tar.* && rm -f ./*.tar.* debian-binary)
 fi
+cp -R "${work}/root${install_path}" "${out_dir}/distro"
 
-test -f "${variant_dir}/opentelemetry.so"
-test -f "${variant_dir}/autoload.php"
-echo "    -> ${variant_dir}"
+# The loader is activated through PHP_INI_SCAN_DIR rather than the distro's post-install script.
+# Both lines come from the distro's own manual-setup instructions. Paths are absolute because an
+# ini has no notion of its own location, so they must match where the tree is mounted at run time.
+cat > "${out_dir}/otel-loader.ini" << EOF
+extension=${install_path}/opentelemetry_php_distro_loader.so
+opentelemetry_distro.bootstrap_php_part_file=${install_path}/php/bootstrap_php_part.php
+EOF
+
+test -f "${out_dir}/distro/opentelemetry_php_distro_loader.so"
+test -f "${out_dir}/distro/php/bootstrap_php_part.php"
+echo "    -> ${out_dir}"

@@ -36,8 +36,8 @@ if [[ "$TEST_SET" = "jvm-legacy.tests" && ( "$ARCH" != "amd64" || "$LIBC" != "gl
   exit 0
 fi
 
-if [[ "$TEST_SET" = "jvm-ibm8.tests" && "$ARCH" != "amd64" ]]; then
-  echo "skipping jvm-ibm8.tests: IBM Java 8 images are not published for $ARCH"
+if [[ "$TEST_SET" = jvm-ibm8*.tests && "$ARCH" != "amd64" ]]; then
+  echo "skipping $TEST_SET: IBM Java 8 images are not published for $ARCH"
   exit 0
 fi
 
@@ -95,19 +95,19 @@ fi
 if [[ "$TEST_SET" = "empty-gnu-hash-bucket.tests" ]]; then
   test_app="empty-gnu-hash-bucket"
 fi
-# A *-binary-scan test set runs in the image of the JVM test set it is named after, minus the release file of the Java
-# home (see injector-integration-tests/apps/jvm/Dockerfile).
-remove_java_release_file=false
+# A *-binary-scan test set runs in the image of the JVM test set it is named after, minus what names the version of
+# its Java home (see injector-integration-tests/apps/jvm/Dockerfile).
+remove_java_version=false
 if [[ "$TEST_SET" = jvm*-binary-scan.tests ]]; then
   test_app="${TEST_SET%-binary-scan.tests}"
-  remove_java_release_file=true
+  remove_java_version=true
 fi
 
 # We also use the Node.js test app for non-runtime specific tests (e.g. injector-integration-tests/tests/default.tests
 # etc.), so this is the default Dockerfile.
 dockerfile_name="injector-integration-tests/apps/nodejs/Dockerfile"
 image_name="otel-injector-test-$ARCH-$LIBC-$test_app"
-if [[ "$remove_java_release_file" = "true" ]]; then
+if [[ "$remove_java_version" = "true" ]]; then
   image_name="$image_name-binary-scan"
 fi
 
@@ -238,7 +238,7 @@ docker build \
   --build-arg "base_image_run=${base_image_run}" \
   --build-arg "injector_binary=${injector_binary}" \
   --build-arg "create_sdk_dummy_files_script=${create_sdk_dummy_files_script}" \
-  --build-arg "remove_java_release_file=${remove_java_release_file}" \
+  --build-arg "remove_java_version=${remove_java_version}" \
   . \
   -f "$dockerfile_name" \
   -t "$image_name"

@@ -1,0 +1,121 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: php-poc
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: collector-config
+  namespace: php-poc
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http: { endpoint: 0.0.0.0:4318 }
+          grpc: { endpoint: 0.0.0.0:4317 }
+    exporters:
+      debug: { verbosity: detailed }
+    service:
+      pipelines:
+        traces: { receivers: [otlp], exporters: [debug] }
+      telemetry:
+        logs: { level: info }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: collector
+  namespace: php-poc
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: collector } }
+  template:
+    metadata: { labels: { app: collector } }
+    spec:
+      containers:
+        - name: collector
+          image: otel/opentelemetry-collector-contrib:0.137.0
+          volumeMounts:
+            - { name: cfg, mountPath: /etc/otelcol-contrib }
+      volumes:
+        - name: cfg
+          configMap: { name: collector-config }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: collector
+  namespace: php-poc
+spec:
+  selector: { app: collector }
+  ports:
+    - { name: otlp-http, port: 4318, targetPort: 4318 }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: injector-config
+  namespace: php-poc
+data:
+  # The injector's own drop-in: where the PHP artifacts live inside the pod.
+  php.conf: |
+    php_auto_instrumentation_agent_path_prefix = /otel/prefix
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: php-app
+  namespace: php-poc
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: php-app } }
+  template:
+    metadata: { labels: { app: php-app } }
+    spec:
+      # Everything OpenTelemetry arrives through this init container. The application
+      # image below is stock php:8.3-apache with only index.php added -- exactly the
+      # shape an operator's mutating webhook would produce.
+      initContainers:
+        - name: otel-artifacts
+          image: php-poc/artifacts:dev
+          imagePullPolicy: Never
+          command: ["sh", "-c", "cp -a /artifacts/. /otel/"]
+          volumeMounts:
+            - { name: otel, mountPath: /otel }
+      containers:
+        - name: app
+          image: php-poc/app:dev
+          imagePullPolicy: Never
+          ports: [{ containerPort: 80 }]
+          env:
+            - { name: LD_PRELOAD, value: /otel/libotelinject.so }
+            - { name: OTEL_PHP_AUTOLOAD_ENABLED, value: "true" }
+            - { name: OTEL_TRACES_EXPORTER, value: otlp }
+            - { name: OTEL_EXPORTER_OTLP_PROTOCOL, value: http/protobuf }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: http://collector.php-poc.svc.cluster.local:4318 }
+            - { name: OTEL_METRICS_EXPORTER, value: none }
+            - { name: OTEL_LOGS_EXPORTER, value: none }
+            - name: OTEL_INJECTOR_SERVICE_NAME
+              valueFrom: { fieldRef: { fieldPath: "metadata.labels['app']" } }
+            - name: OTEL_INJECTOR_K8S_POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: OTEL_INJECTOR_K8S_NAMESPACE_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+          volumeMounts:
+            - { name: otel, mountPath: /otel }
+            - { name: injector-config, mountPath: /etc/opentelemetry/injector/conf.d }
+      volumes:
+        - { name: otel, emptyDir: {} }
+        - name: injector-config
+          configMap: { name: injector-config }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: php-app
+  namespace: php-poc
+spec:
+  selector: { app: php-app }
+  ports: [{ port: 80, targetPort: 80 }]

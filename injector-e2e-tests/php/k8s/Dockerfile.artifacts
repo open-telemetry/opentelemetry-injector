@@ -1,0 +1,13 @@
+# Carries the injector and opentelemetry-php-distro into the pod. An init container copies this
+# into a shared emptyDir, so the application image needs no OpenTelemetry content of its own --
+# the shape an operator's mutating webhook produces.
+FROM alpine:3.21
+ARG ARCH=arm64
+COPY dist/libotelinject_${ARCH}.so /artifacts/libotelinject.so
+COPY dist/php/glibc/distro /artifacts/distro
+# The ini the injector exposes via PHP_INI_SCAN_DIR. Paths are those the application container
+# sees, i.e. after the init container has copied /artifacts to /otel.
+RUN mkdir -p /artifacts/prefix/glibc && printf '%s\n' \
+      'extension=/otel/distro/opentelemetry_php_distro_loader.so' \
+      'opentelemetry_distro.bootstrap_php_part_file=/otel/distro/php/bootstrap_php_part.php' \
+      > /artifacts/prefix/glibc/otel-loader.ini

@@ -2,19 +2,18 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# End-to-end tests of the complete chain -- injector -> PHP_INI_SCAN_DIR -> loader ->
-# opentelemetry.so -> SDK bootstrap -> spans arriving at a collector over OTLP -- against real
-# PHP applications running under each supported SAPI.
+# End-to-end tests of the complete chain -- injector -> PHP_INI_SCAN_DIR -> opentelemetry-php-distro
+# loader -> per-version extension -> SDK bootstrap -> spans arriving at a collector over OTLP --
+# against real PHP applications running under each supported SAPI.
 #
 # Every case asserts all of:
 #   1. the application ran;
 #   2. the application's own auto_prepend_file still ran -- enabling instrumentation must never
 #      take that single-valued, last-ini-wins directive away from the application;
-#   3. opentelemetry.so is loaded AND its hook API works, proven by a span the application never
-#      created itself (an extension that loads but does not function would pass a mere
-#      extension_loaded() check);
-#   4. both spans left the process over OTLP and were received by a real collector, not just
-#      printed by a console exporter inside the same process.
+#   3. the distro's extension is loaded and its hook API is live;
+#   4. a root span the application never wrote any code to create left the process over OTLP and
+#      was received by a real collector -- the fixture contains no OpenTelemetry code at all, so a
+#      span arriving is the only possible evidence that instrumentation actually works.
 #
 # Usage: run.sh [sapi ...]     (default: all)
 
@@ -26,13 +25,11 @@ repo_root="$(cd ../.. && pwd)"
 if [[ "$(uname -m)" == "arm64" || "$(uname -m)" == "aarch64" ]]; then arch=arm64; else arch=amd64; fi
 libc=glibc
 php_image="${PHP_IMAGE:-php:8.3-cli}"
-module_api="${MODULE_API:-20230831}"
 
 injector="${repo_root}/dist/libotelinject_${arch}.so"
-loader="${repo_root}/dist/php/${libc}/${arch}/otel_loader.so"
-artifacts="${repo_root}/dist/artifacts"
+artifacts="${repo_root}/dist/php/${libc}"
 
-for required in "$injector" "$loader" "$artifacts/${module_api}/${libc}/non-zts/opentelemetry.so"; do
+for required in "$injector" "${artifacts}/otel-loader.ini" "${artifacts}/distro/opentelemetry_php_distro_loader.so"; do
   if [[ ! -e "$required" ]]; then
     echo "missing prerequisite: $required" >&2
     echo "build it first (see README.md in this directory)" >&2
@@ -40,13 +37,10 @@ for required in "$injector" "$loader" "$artifacts/${module_api}/${libc}/non-zts/
   fi
 done
 
-# The install tree the injector points at, assembled the way a distribution package would.
+# The injector's own drop-in, as a distribution package would install it.
 install_dir="${repo_root}/dist/e2e-install"
 rm -rf "$install_dir"
-mkdir -p "$install_dir/php/${libc}" "$install_dir/conf.d"
-cp "$loader" "$install_dir/php/${libc}/otel_loader.so"
-echo "zend_extension=/usr/lib/opentelemetry/php/${libc}/otel_loader.so" \
-  > "$install_dir/php/${libc}/otel-loader.ini"
+mkdir -p "$install_dir/conf.d"
 echo 'php_auto_instrumentation_agent_path_prefix = /usr/lib/opentelemetry/php' \
   > "$install_dir/conf.d/php.conf"
 
@@ -108,13 +102,22 @@ for sapi in "${sapis[@]}"; do
   fi
 
   marker="span-check-${sapi}"
+  # PHP_SAPI as the distro reports it in process.runtime.name. Asserting on this is what proves the
+  # span came from the SAPI under test rather than from some other PHP process in the container.
+  case "$sapi" in
+    cli) runtime_name=cli ;;
+    builtin) runtime_name=cli-server ;;
+    fpm) runtime_name=fpm-fcgi ;;
+    apache) runtime_name=apache2handler ;;
+    *) runtime_name="$sapi" ;;
+  esac
   collector_log_offset=$(( $(docker logs "$collector" 2>&1 | wc -l) + 1 ))
 
   output="$(docker run --rm --platform "linux/${arch}" \
     --network "$network" \
     -v "${injector}:/injector/libotelinject.so:ro" \
-    -v "${install_dir}/php/${libc}:/usr/lib/opentelemetry/php/${libc}:ro" \
-    -v "${artifacts}/${module_api}:/usr/lib/opentelemetry/php/${module_api}:ro" \
+    -v "${artifacts}:/usr/lib/opentelemetry/php/${libc}:ro" \
+    -v "${artifacts}/distro:/opt/opentelemetry/php/distro:ro" \
     -v "${install_dir}/conf.d:/etc/opentelemetry/injector/conf.d:ro" \
     -v "${PWD}/app:/app:ro" \
     -e LD_PRELOAD=/injector/libotelinject.so \
@@ -139,18 +142,22 @@ for sapi in "${sapis[@]}"; do
     problem="the application did not run"
   elif ! grep -q "OWN_PREPEND=ran" <<< "$output"; then
     problem="the application's own auto_prepend_file was displaced"
-  elif ! grep -q "SDK_CONFIGURED=yes" <<< "$output"; then
-    problem="the SDK autoload did not configure a tracer provider"
   elif ! grep -q "EXT_LOADED=yes" <<< "$output"; then
-    problem="opentelemetry.so was not loaded"
+    problem="the distro's extension was not loaded"
   elif ! grep -q "HOOK_API=available" <<< "$output"; then
-    problem="opentelemetry.so exposes no hook API"
+    problem="the distro's extension exposes no hook API"
+  elif ! grep -q "SDK_SCOPED=yes" <<< "$output"; then
+    problem="the distro leaked unscoped SDK classes into the application's namespace"
   elif ! grep -q "service.name: Str(${marker})" <<< "$received"; then
     problem="the collector received no spans over OTLP"
-  elif ! grep -q "Name           : e2e-span" <<< "$received"; then
-    problem="the manually created span did not reach the collector"
-  elif ! grep -q "Name           : auto-hooked-span" <<< "$received"; then
-    problem="no hook-generated span reached the collector (the extension loaded but does not instrument)"
+  elif ! grep -q "telemetry.distro.name: Str(opentelemetry-php-distro)" <<< "$received"; then
+    problem="spans arrived but were not produced by the PHP distro"
+  elif ! grep -q "process.runtime.name: Str(${runtime_name})" <<< "$received"; then
+    problem="no span came from the ${sapi} SAPI"
+  elif ! grep -q "Kind           : Server" <<< "$received"; then
+    problem="the distro produced no root span, so the application is not actually instrumented"
+  elif [[ "$sapi" != "cli" ]] && ! grep -q "http.response.status_code: Int(200)" <<< "$received"; then
+    problem="the server span carries no HTTP semantic attributes"
   fi
 
   if [[ -n "$problem" ]]; then
@@ -164,7 +171,7 @@ for sapi in "${sapis[@]}"; do
     printf '      %s\n' "${received//$'\n'/$'\n'      }"
     failed=$((failed + 1))
   else
-    echo "ok    ${sapi}  (manual + hooked spans received over OTLP, own auto_prepend_file intact)"
+    echo "ok    ${sapi}  (distro root span received over OTLP, own auto_prepend_file intact)"
     passed=$((passed + 1))
   fi
 done

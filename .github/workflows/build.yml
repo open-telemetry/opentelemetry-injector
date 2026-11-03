@@ -40,9 +40,6 @@ jobs:
       - name: Run Injector integration tests
         run: make injector-integration-tests-for-one-architecture ARCH=${{ matrix.ARCH }}
 
-      - name: Build the PHP universal loader
-        run: make php-loader ARCH=${{ matrix.ARCH }}
-
       - name: Upload binary
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -50,36 +47,9 @@ jobs:
           path: ./dist/*.so
           if-no-files-found: error
 
-      - name: Upload the PHP universal loader
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: otel-php-loader-${{ matrix.ARCH }}
-          path: ./dist/php/**/otel_loader.so
-          if-no-files-found: error
-
-  # The single most important property of the loader: one binary per libc is accepted by every
-  # supported PHP. Twenty containers per architecture, so it runs as its own job rather than
-  # lengthening the critical path of the build.
-  php-loader-matrix:
-    runs-on: ${{ matrix.ARCH == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        ARCH: [ "amd64", "arm64" ]
-    steps:
-      - name: Check out the codebase.
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
-
-      - name: Run the PHP loader matrix (8.1-8.5 x glibc/musl x NTS/ZTS)
-        run: make php-loader-tests ARCH=${{ matrix.ARCH }}
-
-  # End to end: injector -> PHP_INI_SCAN_DIR -> loader -> opentelemetry.so -> SDK bootstrap ->
-  # spans received by a real collector over OTLP, under every supported SAPI including mod_php.
+  # End to end: injector -> PHP_INI_SCAN_DIR -> the distro's loader -> per-version extension ->
+  # SDK bootstrap -> spans received by a real collector over OTLP, under every supported SAPI
+  # including mod_php.
   php-e2e:
     runs-on: ${{ matrix.ARCH == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     needs: verify-and-build-binary

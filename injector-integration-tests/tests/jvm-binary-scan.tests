@@ -1,0 +1,19 @@
+# shellcheck shell=sh
+
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+# The jvm test set, in an image whose Java home has no release file (see apps/jvm/Dockerfile), so
+# that the injector has to detect the Java version by scanning the VM binary.
+
+# Should the image still carry a release file, the injector would read it instead, and every case below would pass
+# without reaching the scanner. The debug log is the only place that tells the two apart.
+run_test_case \
+  "detects the Java version by scanning the VM binary" \
+  "app" \
+  "java -version 2>&1 | grep -m 1 -o 'JVM detection: scanning'" \
+  "JVM detection: scanning" \
+  "OTEL_INJECTOR_LOG_LEVEL=debug"
+
+# shellcheck source=injector-integration-tests/tests/jvm.tests
+. tests/jvm.tests

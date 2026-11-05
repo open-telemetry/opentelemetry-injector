@@ -16,5 +16,9 @@ mkdir -p /etc/opentelemetry/injector/conf.d
 
 cp common/injector.conf /etc/opentelemetry/injector/injector.conf
 if [ -d common/conf.d ]; then
-  find common/conf.d -maxdepth 1 -name '*.conf' -exec cp {} /etc/opentelemetry/injector/conf.d/ \;
+  for conf_file in common/conf.d/*.conf; do
+    # An unmatched pattern is left as-is by the shell, so skip it rather than copying a file named "*.conf".
+    [ -e "$conf_file" ] || continue
+    cp "$conf_file" /etc/opentelemetry/injector/conf.d/
+  done
 fi

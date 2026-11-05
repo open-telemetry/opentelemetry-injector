@@ -323,6 +323,7 @@ fn getEnvValue(
             allocator,
             original_value,
             configuration,
+            proc_self_environ_parser.getenv,
         );
     } else if (std.mem.eql(u8, name, nodejs.node_options_env_var_name)) {
         return nodejs.checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(

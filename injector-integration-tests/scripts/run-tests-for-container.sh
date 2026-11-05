@@ -31,6 +31,25 @@ if [ -z "${TEST_SET:-}" ]; then
   TEST_SET=default.tests
 fi
 
+if [[ "$TEST_SET" = "jvm-legacy.tests" && ( "$ARCH" != "amd64" || "$LIBC" != "glibc" ) ]]; then
+  echo "skipping jvm-legacy.tests: the pinned Java 6 image supports only amd64/glibc"
+  exit 0
+fi
+
+if [[ "$TEST_SET" = jvm-ibm8*.tests && "$ARCH" != "amd64" ]]; then
+  echo "skipping $TEST_SET: IBM Java 8 images are not published for $ARCH"
+  exit 0
+fi
+
+case "$TEST_SET" in
+  jvm-openj9*.tests | jvm-graalvm*.tests | jvm-zing*.tests)
+    if [[ "$LIBC" != "glibc" ]]; then
+      echo "skipping $TEST_SET: this JVM image uses glibc"
+      exit 0
+    fi
+    ;;
+esac
+
 # Note: Runtime-independent test sets like default.tests, sdk-does-not-exist.tests, and sdk-cannot-be-accessed.tests
 # also use Node.js as the runtime for the container under test.
 test_app="nodejs"
@@ -39,6 +58,21 @@ if [[ "$TEST_SET" = "dotnet.tests" ]]; then
 fi
 if [[ "$TEST_SET" = "jvm.tests" ]]; then
   test_app="jvm"
+fi
+if [[ "$TEST_SET" = "jvm-openj9.tests" ]]; then
+  test_app="jvm-openj9"
+fi
+if [[ "$TEST_SET" = "jvm-graalvm.tests" ]]; then
+  test_app="jvm-graalvm"
+fi
+if [[ "$TEST_SET" = "jvm-zing.tests" ]]; then
+  test_app="jvm-zing"
+fi
+if [[ "$TEST_SET" = "jvm-ibm8.tests" ]]; then
+  test_app="jvm-ibm8"
+fi
+if [[ "$TEST_SET" = "jvm-legacy.tests" ]]; then
+  test_app="jvm-legacy"
 fi
 if [[ "$TEST_SET" = "no-getenv-symbol.tests" ]]; then
   test_app="no-getenv-symbol"
@@ -61,11 +95,21 @@ fi
 if [[ "$TEST_SET" = "empty-gnu-hash-bucket.tests" ]]; then
   test_app="empty-gnu-hash-bucket"
 fi
+# A *-binary-scan test set runs in the image of the JVM test set it is named after, minus what names the version of
+# its Java home (see injector-integration-tests/apps/jvm/Dockerfile).
+remove_java_version=false
+if [[ "$TEST_SET" = jvm*-binary-scan.tests ]]; then
+  test_app="${TEST_SET%-binary-scan.tests}"
+  remove_java_version=true
+fi
 
 # We also use the Node.js test app for non-runtime specific tests (e.g. injector-integration-tests/tests/default.tests
 # etc.), so this is the default Dockerfile.
 dockerfile_name="injector-integration-tests/apps/nodejs/Dockerfile"
 image_name="otel-injector-test-$ARCH-$LIBC-$test_app"
+if [[ "$remove_java_version" = "true" ]]; then
+  image_name="$image_name-binary-scan"
+fi
 
 base_image_run=unknown
 base_image_build=unknown
@@ -87,6 +131,37 @@ case "$test_app" in
       base_image_build=maven:3.9-eclipse-temurin-21-alpine
       base_image_run=eclipse-temurin:21-jre-alpine
     fi
+    ;;
+  "jvm-openj9")
+    dockerfile_name="injector-integration-tests/apps/jvm/Dockerfile"
+    base_image_build=maven:3.9-eclipse-temurin-21
+    base_image_run=ibm-semeru-runtimes:open-21-jre-jammy
+    ;;
+  "jvm-graalvm")
+    dockerfile_name="injector-integration-tests/apps/jvm/Dockerfile"
+    base_image_build=maven:3.9-eclipse-temurin-21
+    base_image_run=ghcr.io/graalvm/jdk-community:21
+    ;;
+  "jvm-zing")
+    dockerfile_name="injector-integration-tests/apps/jvm/Dockerfile"
+    base_image_build=maven:3.9-eclipse-temurin-21
+    base_image_run=azul/prime:21
+    ;;
+  "jvm-ibm8")
+    dockerfile_name="injector-integration-tests/apps/jvm/Dockerfile"
+    base_image_build=maven:3.9-eclipse-temurin-21
+    base_image_run=ibmjava:8-jre
+    if [[ "$LIBC" = "musl" ]]; then
+      # Last published in 2022, so this also covers an older IBM Java 8 service release.
+      base_image_run=ibmjava:8-jre-alpine
+    fi
+    ;;
+  "jvm-legacy")
+    dockerfile_name="injector-integration-tests/apps/jvm-legacy/Dockerfile"
+    base_image_build=eclipse-temurin:8-jdk
+    # Pin by digest: this image is an archived Java 6 runtime that nothing refreshes, and the build arg below
+    # overrides whatever default the Dockerfile carries, so the digest has to be here to take effect.
+    base_image_run=vulhub/openjdk:oracle-jdk-6@sha256:35e7972fd3bec182151ec5b61832197e1655609b6a7bf7babebda33318ef5eb1
     ;;
   "nodejs")
     base_image_run=node:22.15.0-bookworm-slim
@@ -154,7 +229,7 @@ elif [[ "$TEST_SET" = "sdk-cannot-be-accessed.tests" ]]; then
   create_sdk_dummy_files_script="scripts/create-inaccessible-sdk-dummy-files.sh"
 fi
 
-docker rmi -f "$image_name" 2> /dev/null
+docker rmi -f "$image_name" 2> /dev/null || true
 
 set -x
 docker build \
@@ -163,6 +238,7 @@ docker build \
   --build-arg "base_image_run=${base_image_run}" \
   --build-arg "injector_binary=${injector_binary}" \
   --build-arg "create_sdk_dummy_files_script=${create_sdk_dummy_files_script}" \
+  --build-arg "remove_java_version=${remove_java_version}" \
   . \
   -f "$dockerfile_name" \
   -t "$image_name"

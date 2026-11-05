@@ -26,6 +26,7 @@ const config_dir_path_env_var = "OTEL_INJECTOR_CONFIG_DIR";
 const dotnet_path_prefix_key = "dotnet_auto_instrumentation_agent_path_prefix";
 const dotnet_minimum_dotnet_major_version_key = "dotnet_auto_instrumentation_minimum_dotnet_major_version";
 const jvm_path_key = "jvm_auto_instrumentation_agent_path";
+const jvm_minimum_java_major_version_key = "jvm_auto_instrumentation_minimum_java_major_version";
 const nodejs_path_key = "nodejs_auto_instrumentation_agent_path";
 const python_path_prefix_key = "python_auto_instrumentation_agent_path_prefix";
 const ruby_path_prefix_key = "ruby_auto_instrumentation_agent_path_prefix";
@@ -36,6 +37,7 @@ const auto_instrumentation_disabled_key = "auto_instrumentation_disabled";
 const dotnet_agent_path_prefix_env_var = "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
 const dotnet_minimum_dotnet_major_version_env_var = "DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION";
 const jvm_agent_path_env_var = "JVM_AUTO_INSTRUMENTATION_AGENT_PATH";
+const jvm_minimum_java_major_version_env_var = "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION";
 const nodejs_agent_path_env_var = "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
 const python_agent_path_prefix_env_var = "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
 const ruby_agent_path_prefix_env_var = "RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
@@ -69,6 +71,7 @@ pub const InjectorConfiguration = struct {
     include_args: [][]const u8,
     exclude_args: [][]const u8,
     dotnet_auto_instrumentation_minimum_dotnet_major_version: u32,
+    jvm_auto_instrumentation_minimum_java_major_version: u32,
     dotnet_instrumentation_disabled: bool,
     jvm_instrumentation_disabled: bool,
     nodejs_instrumentation_disabled: bool,
@@ -103,6 +106,7 @@ const default_dotnet_auto_instrumentation_agent_path_prefix = "";
 // auto-instrumentation that support older .NET versions can lower this threshold via the configuration file key
 // dotnet_auto_instrumentation_minimum_dotnet_major_version or the corresponding environment variable.
 pub const default_dotnet_auto_instrumentation_minimum_dotnet_major_version: u32 = 8;
+pub const default_jvm_auto_instrumentation_minimum_java_major_version: u32 = 8;
 const default_jvm_auto_instrumentation_agent_path = "";
 const default_nodejs_auto_instrumentation_agent_path = "";
 
@@ -161,6 +165,7 @@ fn createEmptyConfiguration(allocator: std.mem.Allocator) InjectorConfiguration 
         .include_args = &.{},
         .exclude_args = &.{},
         .dotnet_auto_instrumentation_minimum_dotnet_major_version = default_dotnet_auto_instrumentation_minimum_dotnet_major_version,
+        .jvm_auto_instrumentation_minimum_java_major_version = default_jvm_auto_instrumentation_minimum_java_major_version,
         .dotnet_instrumentation_disabled = false,
         .jvm_instrumentation_disabled = false,
         .nodejs_instrumentation_disabled = false,
@@ -517,6 +522,7 @@ fn createDefaultConfiguration(arena_allocator: std.mem.Allocator) std.mem.Alloca
         .include_args = &.{},
         .exclude_args = &.{},
         .dotnet_auto_instrumentation_minimum_dotnet_major_version = default_dotnet_auto_instrumentation_minimum_dotnet_major_version,
+        .jvm_auto_instrumentation_minimum_java_major_version = default_jvm_auto_instrumentation_minimum_java_major_version,
         .dotnet_instrumentation_disabled = false,
         .jvm_instrumentation_disabled = false,
         .nodejs_instrumentation_disabled = false,
@@ -565,46 +571,89 @@ fn applyAutoInstrumentationDisabledValue(trimmed_value: []const u8, source: []co
     }
 }
 
-fn applyDotnetMinimumDotnetMajorVersionValue(value: []const u8, source: []const u8, configuration: *InjectorConfiguration) void {
-    const trimmed_value = std.mem.trim(u8, value, " \t");
-    const parsed_version = std.fmt.parseUnsigned(u32, trimmed_value, 10) catch {
+/// Sets a minimum runtime major version, such as dotnet_auto_instrumentation_minimum_dotnet_major_version, from
+/// `value`. An invalid value is reported and leaves the setting as it was.
+fn applyMinimumMajorVersionValue(setting: *u32, value: []const u8, key: []const u8, source: []const u8) void {
+    const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
+    setting.* = std.fmt.parseUnsigned(u32, trimmed_value, 10) catch {
         print.printWarn(
             "Ignoring invalid value for {s} from {s}: \"{s}\" - a non-negative integer is required.",
-            .{ dotnet_minimum_dotnet_major_version_key, source, trimmed_value },
+            .{ key, source, trimmed_value },
         );
         return;
     };
-    configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version = parsed_version;
 }
 
-test "applyDotnetMinimumDotnetMajorVersionValue: parses a valid value" {
-    var configuration = createEmptyConfiguration(testing.allocator);
-    defer configuration.all_auto_instrumentation_agents_env_vars.deinit();
+test "applyMinimumMajorVersionValue: accepts a non-negative integer and otherwise keeps the previous value" {
+    const Case = struct { value: []const u8, expected: u32 };
+    for ([_]Case{
+        .{ .value = "0", .expected = 0 },
+        .{ .value = "1", .expected = 1 },
+        .{ .value = "6", .expected = 6 },
+        .{ .value = " 21\t", .expected = 21 },
+        // A value read from a file keeps its line ending, as one from a ConfigMap created with --from-file does.
+        .{ .value = "0\n", .expected = 0 },
+        .{ .value = "21\r\n", .expected = 21 },
+        .{ .value = "4294967295", .expected = std.math.maxInt(u32) },
+        .{ .value = "", .expected = 8 },
+        .{ .value = "true", .expected = 8 },
+        .{ .value = "-1", .expected = 8 },
+        .{ .value = "1.6", .expected = 8 },
+        .{ .value = "4294967296", .expected = 8 },
+    }) |case| {
+        var setting: u32 = 8;
 
-    applyDotnetMinimumDotnetMajorVersionValue("6", "test", &configuration);
+        applyMinimumMajorVersionValue(&setting, case.value, "test_key", "test");
 
-    try testing.expectEqual(@as(u32, 6), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
+        try testing.expectEqual(case.expected, setting);
+    }
 }
 
-test "applyDotnetMinimumDotnetMajorVersionValue: trims whitespace" {
-    var configuration = createEmptyConfiguration(testing.allocator);
-    defer configuration.all_auto_instrumentation_agents_env_vars.deinit();
+test "JVM minimum Java major version: reads config files and applies environment overrides" {
+    const allocator = testing.allocator;
+    defer cached_configuration_optional = null;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
 
-    applyDotnetMinimumDotnetMajorVersionValue(" 7\t", "test", &configuration);
+    try tmp.dir.writeFile(testing.io, .{
+        .sub_path = "injector.conf",
+        .data = "jvm_auto_instrumentation_minimum_java_major_version = 6\n",
+    });
 
-    try testing.expectEqual(@as(u32, 7), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
-}
+    const path = try tmp.dir.realPathFileAlloc(testing.io, "injector.conf", allocator);
+    defer allocator.free(path);
 
-test "applyDotnetMinimumDotnetMajorVersionValue: ignores an invalid value and keeps the default" {
-    var configuration = createEmptyConfiguration(testing.allocator);
-    defer configuration.all_auto_instrumentation_agents_env_vars.deinit();
+    const directory = try tmp.dir.realPathFileAlloc(testing.io, ".", allocator);
+    defer allocator.free(directory);
 
-    applyDotnetMinimumDotnetMajorVersionValue("not-a-number", "test", &configuration);
+    const config_dir_env = try std.fmt.allocPrint(allocator, "OTEL_INJECTOR_CONFIG_DIR={s}/no-conf-dir", .{directory});
+    defer allocator.free(config_dir_env);
 
-    try testing.expectEqual(
-        default_dotnet_auto_instrumentation_minimum_dotnet_major_version,
-        configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version,
-    );
+    const Case = struct { value: ?[]const u8, expected: u32 };
+    for ([_]Case{
+        .{ .value = null, .expected = 6 },
+        .{ .value = "0", .expected = 0 },
+        .{ .value = " 9\t", .expected = 9 },
+        .{ .value = "0\n", .expected = 0 },
+        .{ .value = "invalid", .expected = 6 },
+        .{ .value = "-1", .expected = 6 },
+        .{ .value = "4294967296", .expected = 6 },
+    }) |case| {
+        var env_vars: [2][]const u8 = .{ config_dir_env, "" };
+
+        if (case.value) |value| {
+            env_vars[1] = try std.fmt.allocPrint(allocator, "{s}={s}", .{ jvm_minimum_java_major_version_env_var, value });
+        }
+        defer if (case.value != null) allocator.free(env_vars[1]);
+
+        const original = try test_util.setStdCEnviron(&env_vars);
+        defer test_util.resetStdCEnviron(original);
+
+        var configuration = try readConfigurationFromPath(testing.io, allocator, path, test_util.posixGetenv);
+        defer configuration.deinit(allocator);
+
+        try testing.expectEqual(case.expected, configuration.jvm_auto_instrumentation_minimum_java_major_version);
+    }
 }
 
 fn applyCommaSeparatedPatternsOption(arena_allocator: std.mem.Allocator, setting: *[][]const u8, value: []u8, pattern_name: []const u8, cfg_file_path: []const u8) void {
@@ -622,9 +671,11 @@ fn applyKeyValueToGeneralOptions(arena_allocator: std.mem.Allocator, key: []cons
     if (std.mem.eql(u8, key, dotnet_path_prefix_key)) {
         _configuration.dotnet_auto_instrumentation_agent_path_prefix = value;
     } else if (std.mem.eql(u8, key, dotnet_minimum_dotnet_major_version_key)) {
-        applyDotnetMinimumDotnetMajorVersionValue(value, _cfg_file_path, _configuration);
+        applyMinimumMajorVersionValue(&_configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version, value, key, _cfg_file_path);
     } else if (std.mem.eql(u8, key, jvm_path_key)) {
         _configuration.jvm_auto_instrumentation_agent_path = value;
+    } else if (std.mem.eql(u8, key, jvm_minimum_java_major_version_key)) {
+        applyMinimumMajorVersionValue(&_configuration.jvm_auto_instrumentation_minimum_java_major_version, value, key, _cfg_file_path);
     } else if (std.mem.eql(u8, key, nodejs_path_key)) {
         _configuration.nodejs_auto_instrumentation_agent_path = value;
     } else if (std.mem.eql(u8, key, python_path_prefix_key)) {
@@ -847,6 +898,7 @@ fn copyToPermanentlyAllocatedHeap(
         .include_args = try copyStringArray(allocator, preliminary_configuration.include_args),
         .exclude_args = try copyStringArray(allocator, preliminary_configuration.exclude_args),
         .dotnet_auto_instrumentation_minimum_dotnet_major_version = preliminary_configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version,
+        .jvm_auto_instrumentation_minimum_java_major_version = preliminary_configuration.jvm_auto_instrumentation_minimum_java_major_version,
         .dotnet_instrumentation_disabled = preliminary_configuration.dotnet_instrumentation_disabled,
         .jvm_instrumentation_disabled = preliminary_configuration.jvm_instrumentation_disabled,
         .nodejs_instrumentation_disabled = preliminary_configuration.nodejs_instrumentation_disabled,
@@ -2098,7 +2150,12 @@ fn readConfigurationFromEnvironment(io: std.Io, arena_allocator: std.mem.Allocat
         configuration.dotnet_auto_instrumentation_agent_path_prefix = dotnet_value;
     }
     if (getenv_fn(io, arena_allocator, dotnet_minimum_dotnet_major_version_env_var)) |value| {
-        applyDotnetMinimumDotnetMajorVersionValue(value, dotnet_minimum_dotnet_major_version_env_var, configuration);
+        applyMinimumMajorVersionValue(
+            &configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version,
+            value,
+            dotnet_minimum_dotnet_major_version_key,
+            dotnet_minimum_dotnet_major_version_env_var,
+        );
     }
     if (getenv_fn(io, arena_allocator, jvm_agent_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
@@ -2107,6 +2164,14 @@ fn readConfigurationFromEnvironment(io: std.Io, arena_allocator: std.mem.Allocat
             return;
         };
         configuration.jvm_auto_instrumentation_agent_path = jvm_value;
+    }
+    if (getenv_fn(io, arena_allocator, jvm_minimum_java_major_version_env_var)) |value| {
+        applyMinimumMajorVersionValue(
+            &configuration.jvm_auto_instrumentation_minimum_java_major_version,
+            value,
+            jvm_minimum_java_major_version_key,
+            jvm_minimum_java_major_version_env_var,
+        );
     }
     if (getenv_fn(io, arena_allocator, nodejs_agent_path_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");

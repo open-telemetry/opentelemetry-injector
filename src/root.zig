@@ -191,6 +191,17 @@ fn initEnviron() callconv(.c) void {
         configuration.all_auto_instrumentation_agents_env_vars,
     );
 
+    // OTEL_JAVAAGENT_EXTENSIONS merges the injected extension paths into whatever value the process already has, so
+    // unlike the other variables it has to run after setCustomEnvironmentVariables: an OTEL_JAVAAGENT_EXTENSIONS entry
+    // in default_env.conf/conf.d is applied with overwrite=true and would otherwise discard the merged value.
+    modifyEnvironmentVariable(
+        io,
+        allocator,
+        libc_info,
+        jvm.javaagent_extensions_env_var_name,
+        configuration,
+    );
+
     print.printInfo("environment injection finished", .{});
 }
 
@@ -324,6 +335,13 @@ fn getEnvValue(
             original_value,
             configuration,
             proc_self_environ_parser.getenv,
+        );
+    } else if (std.mem.eql(u8, name, jvm.javaagent_extensions_env_var_name)) {
+        return jvm.checkJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue(
+            allocator,
+            original_value,
+            libcGetenv(lci.getenv_fn_ptr, jvm.java_extension_paths_env_var_name),
+            configuration,
         );
     } else if (std.mem.eql(u8, name, nodejs.node_options_env_var_name)) {
         return nodejs.checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(

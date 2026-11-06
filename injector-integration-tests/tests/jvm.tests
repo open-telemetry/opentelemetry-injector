@@ -12,6 +12,12 @@ run_test_case \
   "java -jar Main.jar verify-javaagent-has-been-injected-and-existing-property-is-still-in-place" \
   "otel.injector.jvm.no_op_agent.has_been_loaded: true; some-property: some-value" \
   "JAVA_TOOL_OPTIONS=-Dsome-property=some-value"
+run_test_case \
+  "appends Java extension paths and preserves existing entries without duplicates" \
+  "app" \
+  "java -jar Main.jar custom-env-var OTEL_JAVAAGENT_EXTENSIONS" \
+  "OTEL_JAVAAGENT_EXTENSIONS: user-extension,/extensions/a,/extensions/b" \
+  "OTEL_JAVAAGENT_EXTENSIONS=user-extension,/extensions/a OTEL_INJECTOR_JAVAAGENT_EXTENSIONS=/extensions/a,/extensions/b"
 
 run_test_case \
   "adds the Java agent when Java is launched through a shell" \
@@ -109,12 +115,31 @@ run_test_case \
   "java -jar Main.jar verify-javaagent-has-been-injected" \
   "otel.injector.jvm.no_op_agent.has_been_loaded: -" \
   "JVM_AUTO_INSTRUMENTATION_AGENT_PATH="
+run_test_case \
+  "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=jvm also disables the Java extension paths" \
+  "app" \
+  "java -jar Main.jar custom-env-var OTEL_JAVAAGENT_EXTENSIONS" \
+  "OTEL_JAVAAGENT_EXTENSIONS: user-extension" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=jvm OTEL_JAVAAGENT_EXTENSIONS=user-extension OTEL_INJECTOR_JAVAAGENT_EXTENSIONS=/extensions/a"
+run_test_case \
+  "setting JVM_AUTO_INSTRUMENTATION_AGENT_PATH to the empty string also disables the Java extension paths" \
+  "app" \
+  "java -jar Main.jar custom-env-var OTEL_JAVAAGENT_EXTENSIONS" \
+  "OTEL_JAVAAGENT_EXTENSIONS: -" \
+  "JVM_AUTO_INSTRUMENTATION_AGENT_PATH= OTEL_INJECTOR_JAVAAGENT_EXTENSIONS=/extensions/a"
 
 run_test_case \
   "OTEL_ custom env var is returned according to the env file provided" \
   "app" \
   "java -jar Main.jar custom-env-var OTEL_SDK_DISABLED" \
   "OTEL_SDK_DISABLED: true"
+
+run_test_case \
+  "Java extension paths are appended to the OTEL_JAVAAGENT_EXTENSIONS value from the env file provided" \
+  "app" \
+  "java -jar Main.jar custom-env-var OTEL_JAVAAGENT_EXTENSIONS" \
+  "OTEL_JAVAAGENT_EXTENSIONS: /env-file/extension.jar,/extensions/a" \
+  "OTEL_INJECTOR_JAVAAGENT_EXTENSIONS=/extensions/a"
 
 run_test_case \
   "non OTEL_ custom env var is ignored" \

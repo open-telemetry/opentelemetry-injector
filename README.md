@@ -206,6 +206,16 @@ Here is an overview of the modifications that the injector will apply:
 * It sets (or appends to) `NODE_OPTIONS` to activate the Node.js instrumentation agent.
 * It sets (or prepends to) `RUBYOPT` to require the Ruby auto-instrumentation gem, and sets `OTEL_RUBY_ADDITIONAL_GEM_PATH` so the gem can locate its bundled dependencies. If `OTEL_RUBY_ADDITIONAL_GEM_PATH` is already set in the process's environment, the injector respects that value and also skips modifying `RUBYOPT` (the two variables are a coupled pair — injecting only the `-r` flag would make the gem look for its dependencies in the user-provided path and fail with `LoadError`).
 * It adds a `-javaagent` flag to `JAVA_TOOL_OPTIONS` to activate the Java OTel SDK.
+* If `OTEL_INJECTOR_JAVAAGENT_EXTENSIONS` is set, the injector appends its
+  comma-separated paths to the process's `OTEL_JAVAAGENT_EXTENSIONS` during
+  process startup, preserving existing nonempty entries and deduplicating exact
+  path entries.
+  Empty entries are discarded; paths are not otherwise normalized. If every
+  injected path is already present, the existing value is left untouched. This
+  is intended for Java extension images mounted by a controller.
+  This only happens when the JVM auto-instrumentation is enabled in the
+  injector configuration; otherwise `OTEL_JAVAAGENT_EXTENSIONS` is left
+  untouched.
 * It conditionally sets the required environment variables for activating the OpenTelemetry SDK for .NET:
     * `CORECLR_ENABLE_PROFILING`
     * `CORECLR_PROFILER`

@@ -118,13 +118,6 @@ fn initEnviron() callconv(.c) void {
         io,
         allocator,
         libc_info,
-        jvm.javaagent_extensions_env_var_name,
-        configuration,
-    );
-    modifyEnvironmentVariable(
-        io,
-        allocator,
-        libc_info,
         python.pythonpath_env_var_name,
         configuration,
     );
@@ -196,6 +189,17 @@ fn initEnviron() callconv(.c) void {
         allocator,
         libc_info,
         configuration.all_auto_instrumentation_agents_env_vars,
+    );
+
+    // OTEL_JAVAAGENT_EXTENSIONS merges the injected extension paths into whatever value the process already has, so
+    // unlike the other variables it has to run after setCustomEnvironmentVariables: an OTEL_JAVAAGENT_EXTENSIONS entry
+    // in default_env.conf/conf.d is applied with overwrite=true and would otherwise discard the merged value.
+    modifyEnvironmentVariable(
+        io,
+        allocator,
+        libc_info,
+        jvm.javaagent_extensions_env_var_name,
+        configuration,
     );
 
     print.printInfo("environment injection finished", .{});

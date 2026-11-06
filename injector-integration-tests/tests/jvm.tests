@@ -71,6 +71,13 @@ run_test_case \
   "OTEL_SDK_DISABLED: true"
 
 run_test_case \
+  "Java extension paths are appended to the OTEL_JAVAAGENT_EXTENSIONS value from the env file provided" \
+  "app" \
+  "java -jar Main.jar custom-env-var OTEL_JAVAAGENT_EXTENSIONS" \
+  "OTEL_JAVAAGENT_EXTENSIONS: /env-file/extension.jar,/extensions/a" \
+  "OTEL_INJECTOR_JAVAAGENT_EXTENSIONS=/extensions/a"
+
+run_test_case \
   "non OTEL_ custom env var is ignored" \
   "app" \
   "java -jar Main.jar custom-env-var CUSTOM_ENV_VAR" \

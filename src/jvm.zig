@@ -14,6 +14,93 @@ pub const java_tool_options_env_var_name = "JAVA_TOOL_OPTIONS";
 pub const java_extension_paths_env_var_name = "OTEL_INJECTOR_JAVAAGENT_EXTENSIONS";
 pub const javaagent_extensions_env_var_name = "OTEL_JAVAAGENT_EXTENSIONS";
 
+/// Returns the modified value for OTEL_JAVAAGENT_EXTENSIONS, based on the original value of OTEL_JAVAAGENT_EXTENSIONS
+/// and the extension paths provided via OTEL_INJECTOR_JAVAAGENT_EXTENSIONS.
+///
+/// The value is only modified for processes for which the JVM auto-instrumentation is enabled: without the Java agent,
+/// nothing would read OTEL_JAVAAGENT_EXTENSIONS, so rewriting a user-provided value would have no upside.
+///
+/// The caller is responsible for freeing the returned string (unless the result is passed on to setenv and needs to
+/// stay in memory).
+pub fn checkJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue(
+    gpa: std.mem.Allocator,
+    original_value_optional: ?[:0]const u8,
+    injected_value_optional: ?[:0]const u8,
+    configuration: config.InjectorConfiguration,
+) ?[:0]u8 {
+    return doCheckJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue(
+        gpa,
+        original_value_optional,
+        injected_value_optional,
+        configuration.jvm_auto_instrumentation_agent_path,
+        configuration.jvm_instrumentation_disabled,
+    );
+}
+
+fn doCheckJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue(
+    gpa: std.mem.Allocator,
+    original_value_optional: ?[:0]const u8,
+    injected_value_optional: ?[:0]const u8,
+    jvm_auto_instrumentation_agent_path: []u8,
+    jvm_instrumentation_disabled: bool,
+) ?[:0]u8 {
+    // Check whether there is anything to inject before evaluating whether the JVM auto-instrumentation is enabled, so
+    // that processes which have not been given any extension paths do not emit a "skipping" message on every start.
+    const injected_value = injected_value_optional orelse return null;
+    if (injected_value.len == 0) return null;
+
+    if (jvm_instrumentation_disabled or jvm_auto_instrumentation_agent_path.len == 0) {
+        print.printInfo("Skipping the injection of the Java agent extension paths in \"{s}\" because the JVM auto-instrumentation has been explicitly disabled.", .{javaagent_extensions_env_var_name});
+        return null;
+    }
+
+    return getModifiedJavaAgentExtensionsValue(gpa, original_value_optional, injected_value);
+}
+
+test "doCheckJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue: should return null if jvm_instrumentation_disabled is true" {
+    const path = try std.fmt.allocPrint(testing.allocator, "/some/valid/path", .{});
+    defer testing.allocator.free(path);
+    try test_util.expectWithMessage(
+        doCheckJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue(
+            testing.allocator,
+            "user-a",
+            "/extensions/a",
+            path,
+            true,
+        ) == null,
+        "modified OTEL_JAVAAGENT_EXTENSIONS == null",
+    );
+}
+
+test "doCheckJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue: should return null if jvm_auto_instrumentation_agent_path is the empty string" {
+    const path = try std.fmt.allocPrint(testing.allocator, "", .{});
+    defer testing.allocator.free(path);
+    try test_util.expectWithMessage(
+        doCheckJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue(
+            testing.allocator,
+            "user-a",
+            "/extensions/a",
+            path,
+            false,
+        ) == null,
+        "modified OTEL_JAVAAGENT_EXTENSIONS == null",
+    );
+}
+
+test "doCheckJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue: should append the extension paths if the JVM auto-instrumentation is enabled" {
+    const path = try std.fmt.allocPrint(testing.allocator, "/some/valid/path", .{});
+    defer testing.allocator.free(path);
+    const value = doCheckJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue(
+        testing.allocator,
+        "user-a",
+        "/extensions/a",
+        path,
+        false,
+    ) orelse return error.ExpectedModifiedValue;
+    defer testing.allocator.free(value);
+    try testing.expectEqualStrings("user-a,/extensions/a", value);
+}
+
 /// Appends injector-provided extension paths to the Java agent's extension path.
 /// Existing user-provided entries are kept in order and are not duplicated.
 pub fn getModifiedJavaAgentExtensionsValue(

@@ -205,6 +205,8 @@ Here is an overview of the modifications that the injector will apply:
   path entries.
   Empty entries are discarded; paths are not otherwise normalized. This is
   intended for Java extension images mounted by a controller.
+  This only happens for processes for which the JVM auto-instrumentation is
+  enabled; otherwise `OTEL_JAVAAGENT_EXTENSIONS` is left untouched.
 * It conditionally sets the required environment variables for activating the OpenTelemetry SDK for .NET:
     * `CORECLR_ENABLE_PROFILING`
     * `CORECLR_PROFILER`

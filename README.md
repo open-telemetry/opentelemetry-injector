@@ -83,23 +83,6 @@ agents:
 
 ## Activation and Configuration
 
-### Naming injector-specific environment variables
-
-Use the `OTEL_INJECTOR_` prefix for environment variables that configure the injector or provide inputs that it
-translates before starting an instrumented application. When an input supplies the value of a corresponding
-OpenTelemetry agent environment variable, keep the agent variable's name after the injector prefix. For example, a
-direct mapping for Java agent extensions would use `OTEL_INJECTOR_JAVAAGENT_EXTENSIONS` as its injector-side input for
-`OTEL_JAVAAGENT_EXTENSIONS`. The naming convention alone does not add support for a new input or imply that all
-injector variables are passed through.
-
-This suffix convention applies only when the injector has defined a direct input-to-agent-variable mapping; it does not
-mean that every `OTEL_INJECTOR_*` variable is copied to the agent or that every injector variable has an agent-variable
-counterpart. Some inputs are injector controls, such as `OTEL_INJECTOR_LOG_LEVEL` and
-`OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED`. Others are translated or combined: for example,
-`OTEL_INJECTOR_RESOURCE_ATTRIBUTES` contributes key-value pairs to `OTEL_RESOURCE_ATTRIBUTES`, while
-`OTEL_INJECTOR_SERVICE_NAME` maps to the `service.name` resource attribute. Follow the documented behavior for each
-variable rather than inferring its behavior from its name.
-
 This method requires `root` privileges.
 
 1. Add the path of the provided `/usr/lib/opentelemetry/libotelinject.so` shared object library to the
@@ -219,6 +202,23 @@ Check the following for details about the auto-instrumentation agents and furthe
 ### Environment Modifications
 
 Here is an overview of the modifications that the injector will apply:
+
+#### Naming injector-specific environment variables
+
+Use the `OTEL_INJECTOR_` prefix for environment variables that configure the injector or provide inputs that it
+translates before starting an instrumented application. When an input supplies the value of a corresponding
+OpenTelemetry agent environment variable, keep the agent variable's name after the injector prefix. For example, a
+direct mapping for Java agent extensions would use `OTEL_INJECTOR_JAVAAGENT_EXTENSIONS` as its injector-side input for
+`OTEL_JAVAAGENT_EXTENSIONS`. The naming convention alone does not add support for a new input or imply that all
+injector variables are passed through.
+
+This suffix convention applies only when the injector has defined a direct input-to-agent-variable mapping; it does not
+mean that every `OTEL_INJECTOR_*` variable is copied to the agent or that every injector variable has an agent-variable
+counterpart. Some inputs are injector controls, such as `OTEL_INJECTOR_LOG_LEVEL` and
+`OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED`. Others are translated or combined: for example,
+`OTEL_INJECTOR_RESOURCE_ATTRIBUTES` contributes key-value pairs to `OTEL_RESOURCE_ATTRIBUTES`, while
+`OTEL_INJECTOR_SERVICE_NAME` maps to the `service.name` resource attribute. Follow the documented behavior for each
+variable rather than inferring its behavior from its name.
 
 * It sets (or appends to) `NODE_OPTIONS` to activate the Node.js instrumentation agent.
 * It sets (or prepends to) `RUBYOPT` to require the Ruby auto-instrumentation gem, and sets `OTEL_RUBY_ADDITIONAL_GEM_PATH` so the gem can locate its bundled dependencies. If `OTEL_RUBY_ADDITIONAL_GEM_PATH` is already set in the process's environment, the injector respects that value and also skips modifying `RUBYOPT` (the two variables are a coupled pair — injecting only the `-r` flag would make the gem look for its dependencies in the user-provided path and fail with `LoadError`).

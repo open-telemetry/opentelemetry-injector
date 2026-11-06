@@ -125,6 +125,7 @@ pub fn getModifiedJavaAgentExtensionsValue(
         }
     }
 
+    var appended_any = false;
     var iterator = std.mem.splitScalar(u8, paths, ',');
     while (iterator.next()) |path| {
         if (path.len == 0 or containsPath(result.items, path)) continue;
@@ -132,12 +133,13 @@ pub fn getModifiedJavaAgentExtensionsValue(
             print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ javaagent_extensions_env_var_name, err });
             return null;
         };
+        appended_any = true;
     }
 
-    if (existing) |value| {
-        if (std.mem.eql(u8, result.items, value)) return null;
-    }
-    if (result.items.len == 0) return null;
+    // If all injected paths are already present, leave the existing value alone instead of writing back a value that
+    // only differs in the entries we have normalized away.
+    if (!appended_any) return null;
+
     return gpa.dupeSentinel(u8, result.items, 0) catch |err| {
         print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ javaagent_extensions_env_var_name, err });
         return null;
@@ -191,6 +193,16 @@ test "getModifiedJavaAgentExtensionsValue: returns null when no path needs appen
     try testing.expect(getModifiedJavaAgentExtensionsValue(testing.allocator, "user-a", null) == null);
     try testing.expect(getModifiedJavaAgentExtensionsValue(testing.allocator, "user-a", "") == null);
     try testing.expect(getModifiedJavaAgentExtensionsValue(testing.allocator, "user-a", "user-a") == null);
+}
+
+test "getModifiedJavaAgentExtensionsValue: leaves the existing value alone if there is nothing to append" {
+    // The existing value has entries that would be normalized away, but since all injected paths are already present,
+    // we must not rewrite the value the user has provided.
+    try testing.expect(getModifiedJavaAgentExtensionsValue(
+        testing.allocator,
+        ",user-a,,user-b,",
+        "user-a,user-b",
+    ) == null);
 }
 
 /// Returns the modified value for JAVA_TOOL_OPTIONS, including the -javaagent flag; based on the original value of

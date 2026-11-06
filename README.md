@@ -203,8 +203,9 @@ Here is an overview of the modifications that the injector will apply:
   comma-separated paths to the process's `OTEL_JAVAAGENT_EXTENSIONS` during
   process startup, preserving existing nonempty entries and deduplicating exact
   path entries.
-  Empty entries are discarded; paths are not otherwise normalized. This is
-  intended for Java extension images mounted by a controller.
+  Empty entries are discarded; paths are not otherwise normalized. If every
+  injected path is already present, the existing value is left untouched. This
+  is intended for Java extension images mounted by a controller.
   This only happens for processes for which the JVM auto-instrumentation is
   enabled; otherwise `OTEL_JAVAAGENT_EXTENSIONS` is left untouched.
 * It conditionally sets the required environment variables for activating the OpenTelemetry SDK for .NET:

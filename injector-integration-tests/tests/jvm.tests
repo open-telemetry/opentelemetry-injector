@@ -17,7 +17,7 @@ run_test_case \
   "app" \
   "java -jar Main.jar custom-env-var OTEL_JAVAAGENT_EXTENSIONS" \
   "OTEL_JAVAAGENT_EXTENSIONS: user-extension,/extensions/a,/extensions/b" \
-  "OTEL_JAVAAGENT_EXTENSIONS=user-extension,/extensions/a OTEL_INJECTOR_JAVA_EXTENSION_PATHS=/extensions/a,/extensions/b"
+  "OTEL_JAVAAGENT_EXTENSIONS=user-extension,/extensions/a OTEL_INJECTOR_JAVAAGENT_EXTENSIONS=/extensions/a,/extensions/b"
 
 # For test cases with the "default configuration file" substring in their label, run-tests-within-container.sh
 # will provide a configuration file in the expected location (/etc/opentelemetry/injector/injector.conf).

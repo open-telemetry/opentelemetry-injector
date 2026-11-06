@@ -11,7 +11,7 @@ const test_util = @import("test_util.zig");
 const testing = std.testing;
 
 pub const java_tool_options_env_var_name = "JAVA_TOOL_OPTIONS";
-pub const java_extension_paths_env_var_name = "OTEL_INJECTOR_JAVA_EXTENSION_PATHS";
+pub const java_extension_paths_env_var_name = "OTEL_INJECTOR_JAVAAGENT_EXTENSIONS";
 pub const javaagent_extensions_env_var_name = "OTEL_JAVAAGENT_EXTENSIONS";
 
 /// Appends injector-provided extension paths to the Java agent's extension path.

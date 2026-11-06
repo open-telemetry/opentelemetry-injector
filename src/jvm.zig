@@ -17,8 +17,9 @@ pub const javaagent_extensions_env_var_name = "OTEL_JAVAAGENT_EXTENSIONS";
 /// Returns the modified value for OTEL_JAVAAGENT_EXTENSIONS, based on the original value of OTEL_JAVAAGENT_EXTENSIONS
 /// and the extension paths provided via OTEL_INJECTOR_JAVAAGENT_EXTENSIONS.
 ///
-/// The value is only modified for processes for which the JVM auto-instrumentation is enabled: without the Java agent,
-/// nothing would read OTEL_JAVAAGENT_EXTENSIONS, so rewriting a user-provided value would have no upside.
+/// The value is only modified when the JVM auto-instrumentation is enabled in the injector configuration: without the
+/// Java agent, nothing would read OTEL_JAVAAGENT_EXTENSIONS, so rewriting a user-provided value would have no upside.
+/// Note that, unlike the -javaagent injection, this does not check whether the agent Jar is actually accessible.
 ///
 /// The caller is responsible for freeing the returned string (unless the result is passed on to setenv and needs to
 /// stay in memory).
@@ -50,7 +51,7 @@ fn doCheckJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue(
     if (injected_value.len == 0) return null;
 
     if (jvm_instrumentation_disabled or jvm_auto_instrumentation_agent_path.len == 0) {
-        print.printInfo("Skipping the injection of the Java agent extension paths in \"{s}\" because the JVM auto-instrumentation has been explicitly disabled.", .{javaagent_extensions_env_var_name});
+        print.printInfo("Skipping the injection of the Java agent extension paths in \"{s}\" because the JVM auto-instrumentation is not enabled for this process.", .{javaagent_extensions_env_var_name});
         return null;
     }
 

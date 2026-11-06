@@ -2,7 +2,7 @@
 
 change_type: enhancement
 component: injector
-note: Append controller-provided Java extension paths to `OTEL_JAVAAGENT_EXTENSIONS` while preserving existing paths.
+note: Append Java extension paths provided via `OTEL_INJECTOR_JAVAAGENT_EXTENSIONS` to `OTEL_JAVAAGENT_EXTENSIONS` while preserving existing paths.
 issues: [452]
 subtext:
 change_logs: [user]

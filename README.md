@@ -564,7 +564,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [Antoine Toulme](https://github.com/atoulme), [Splunk](https://www.splunk.com/)
 - [Bastian Krol](https://github.com/basti1302), [Dash0](https://www.dash0.com/)
 - [Jack Berg](https://github.com/jack-berg), [Grafana Labs](https://grafana.com/)
-- [Jacob Aronoff](https://github.com/jaronoff97), [Tero](https://www.usetero.com/)
+- [Jacob Aronoff](https://github.com/jaronoff97), [Cribl](https://www.cribl.io/)
 - [Michele Mancioppi](https://github.com/mmanciop), [Dash0](https://www.dash0.com/)
 - [Nikola Grcevski](https://github.com/grcevski), [Grafana Labs](https://grafana.com/)
 

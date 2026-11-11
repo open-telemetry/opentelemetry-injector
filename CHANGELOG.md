@@ -8,8 +8,7 @@
 
 ### 💡 Enhancements 💡
 
-- `injector`: Build the injector with Zig 0.16.0 and pass an explicit `std.Io` through all file system access. (#429)
-- `injector`: Build the injector with Zig 0.17.0. (#443)
+- `injector`: Build the injector with Zig 0.17.0, passing an explicit `std.Io` through all file system access as required by the new Zig I/O API. (#429, #443)
 - `docs`: Document injector environment variable naming conventions. (#455)
 - `injector`: Append Java extension paths provided via `OTEL_INJECTOR_JAVAAGENT_EXTENSIONS` to `OTEL_JAVAAGENT_EXTENSIONS` while preserving existing paths. (#452)
 - `injector`: Detect incompatible Java versions during normal Java launches and skip Java agent injection. (#441)

@@ -1,6 +1,0 @@
-change_type: enhancement
-component: docs
-note: Document injector environment variable naming conventions.
-issues: [455]
-subtext:
-change_logs: [user]

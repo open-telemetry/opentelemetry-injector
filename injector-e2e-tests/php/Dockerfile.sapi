@@ -1,0 +1,26 @@
+# One image per SAPI under test. The injector, the loader and the artifact tree are mounted at
+# run time so a rebuild is not needed when any of them changes.
+ARG PHP_IMAGE=php:8.3-cli
+FROM ${PHP_IMAGE}
+
+ARG SAPI=cli
+ENV SAPI=${SAPI}
+
+RUN set -eux; \
+    if [ "$SAPI" = "fpm" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends nginx curl && rm -rf /var/lib/apt/lists/*; \
+    elif [ "$SAPI" = "apache" ] || [ "$SAPI" = "builtin" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*; \
+    fi; \
+    if [ "$SAPI" = "apache" ]; then \
+      sed -i 's#/var/www/html#/app#g' /etc/apache2/sites-available/000-default.conf; \
+      printf '<Directory /app>\n  Require all granted\n</Directory>\n' >> /etc/apache2/apache2.conf; \
+    fi
+
+# The application sets its own auto_prepend_file, which instrumentation must not displace.
+RUN printf 'auto_prepend_file=/app/prepend.php\n' > /usr/local/etc/php/conf.d/zz-app.ini
+
+COPY entrypoint.sh /entrypoint.sh
+COPY nginx.conf /etc/nginx/sites-available/default
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]

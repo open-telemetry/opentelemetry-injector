@@ -29,6 +29,7 @@ const jvm_path_key = "jvm_auto_instrumentation_agent_path";
 const jvm_minimum_java_major_version_key = "jvm_auto_instrumentation_minimum_java_major_version";
 const nodejs_path_key = "nodejs_auto_instrumentation_agent_path";
 const python_path_prefix_key = "python_auto_instrumentation_agent_path_prefix";
+const php_path_prefix_key = "php_auto_instrumentation_agent_path_prefix";
 const ruby_path_prefix_key = "ruby_auto_instrumentation_agent_path_prefix";
 
 const all_agents_env_path_key = "all_auto_instrumentation_agents_env_path";
@@ -40,6 +41,7 @@ const jvm_agent_path_env_var = "JVM_AUTO_INSTRUMENTATION_AGENT_PATH";
 const jvm_minimum_java_major_version_env_var = "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION";
 const nodejs_agent_path_env_var = "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
 const python_agent_path_prefix_env_var = "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
+const php_agent_path_prefix_env_var = "PHP_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
 const ruby_agent_path_prefix_env_var = "RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
 
 /// Configuration options for choosing what to instrument or exclude from instrumentation
@@ -63,6 +65,7 @@ pub const InjectorConfiguration = struct {
     jvm_auto_instrumentation_agent_path: []u8,
     nodejs_auto_instrumentation_agent_path: []u8,
     python_auto_instrumentation_agent_path_prefix: []u8,
+    php_auto_instrumentation_agent_path_prefix: []u8,
     ruby_auto_instrumentation_agent_path_prefix: []u8,
     all_auto_instrumentation_agents_env_path: []u8,
     all_auto_instrumentation_agents_env_vars: std.StringHashMap([]u8),
@@ -76,6 +79,7 @@ pub const InjectorConfiguration = struct {
     jvm_instrumentation_disabled: bool,
     nodejs_instrumentation_disabled: bool,
     python_instrumentation_disabled: bool,
+    php_instrumentation_disabled: bool,
     ruby_instrumentation_disabled: bool,
 
     pub fn deinit(self: *InjectorConfiguration, allocator: std.mem.Allocator) void {
@@ -83,6 +87,7 @@ pub const InjectorConfiguration = struct {
         allocator.free(self.jvm_auto_instrumentation_agent_path);
         allocator.free(self.nodejs_auto_instrumentation_agent_path);
         allocator.free(self.python_auto_instrumentation_agent_path_prefix);
+        allocator.free(self.php_auto_instrumentation_agent_path_prefix);
         allocator.free(self.ruby_auto_instrumentation_agent_path_prefix);
         allocator.free(self.all_auto_instrumentation_agents_env_path);
         var it = self.all_auto_instrumentation_agents_env_vars.iterator();
@@ -117,6 +122,10 @@ const default_python_auto_instrumentation_agent_path = "";
 // Ruby auto-instrumentation defaults to the empty string (disabled). It is enabled by installing the
 // conf.d drop-in file from the Ruby auto-instrumentation package (ruby.conf), which sets the path prefix.
 const default_ruby_auto_instrumentation_agent_path = "";
+
+// PHP auto-instrumentation defaults to the empty string (disabled). It is enabled by installing the
+// conf.d drop-in file from the PHP auto-instrumentation package (php.conf), which sets the path prefix.
+const default_php_auto_instrumentation_agent_path = "";
 
 var cached_configuration_optional: ?InjectorConfiguration = null;
 
@@ -157,6 +166,7 @@ fn createEmptyConfiguration(allocator: std.mem.Allocator) InjectorConfiguration 
         .jvm_auto_instrumentation_agent_path = "",
         .nodejs_auto_instrumentation_agent_path = "",
         .python_auto_instrumentation_agent_path_prefix = "",
+        .php_auto_instrumentation_agent_path_prefix = "",
         .ruby_auto_instrumentation_agent_path_prefix = "",
         .all_auto_instrumentation_agents_env_path = "",
         .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(allocator),
@@ -170,6 +180,7 @@ fn createEmptyConfiguration(allocator: std.mem.Allocator) InjectorConfiguration 
         .jvm_instrumentation_disabled = false,
         .nodejs_instrumentation_disabled = false,
         .python_instrumentation_disabled = false,
+        .php_instrumentation_disabled = false,
         .ruby_instrumentation_disabled = false,
     };
 }
@@ -514,6 +525,7 @@ fn createDefaultConfiguration(arena_allocator: std.mem.Allocator) std.mem.Alloca
         .jvm_auto_instrumentation_agent_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_jvm_auto_instrumentation_agent_path}),
         .nodejs_auto_instrumentation_agent_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_nodejs_auto_instrumentation_agent_path}),
         .python_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_python_auto_instrumentation_agent_path}),
+        .php_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_php_auto_instrumentation_agent_path}),
         .ruby_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_ruby_auto_instrumentation_agent_path}),
         .all_auto_instrumentation_agents_env_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_all_auto_instrumentation_agents_env_path}),
         .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(arena_allocator),
@@ -527,6 +539,7 @@ fn createDefaultConfiguration(arena_allocator: std.mem.Allocator) std.mem.Alloca
         .jvm_instrumentation_disabled = false,
         .nodejs_instrumentation_disabled = false,
         .python_instrumentation_disabled = false,
+        .php_instrumentation_disabled = false,
         .ruby_instrumentation_disabled = false,
     };
 }
@@ -537,6 +550,7 @@ fn applyAutoInstrumentationDisabledValue(trimmed_value: []const u8, source: []co
         configuration.jvm_instrumentation_disabled = true;
         configuration.nodejs_instrumentation_disabled = true;
         configuration.python_instrumentation_disabled = true;
+        configuration.php_instrumentation_disabled = true;
         configuration.ruby_instrumentation_disabled = true;
     } else {
         // In case the configuration file specifies auto_instrumentation_disabled and this is the second call of
@@ -547,6 +561,7 @@ fn applyAutoInstrumentationDisabledValue(trimmed_value: []const u8, source: []co
         configuration.jvm_instrumentation_disabled = false;
         configuration.nodejs_instrumentation_disabled = false;
         configuration.python_instrumentation_disabled = false;
+        configuration.php_instrumentation_disabled = false;
         configuration.ruby_instrumentation_disabled = false;
         var it = std.mem.splitScalar(u8, trimmed_value, ',');
         while (it.next()) |part| {
@@ -559,6 +574,8 @@ fn applyAutoInstrumentationDisabledValue(trimmed_value: []const u8, source: []co
                 configuration.nodejs_instrumentation_disabled = true;
             } else if (std.mem.eql(u8, trimmed_part, "python")) {
                 configuration.python_instrumentation_disabled = true;
+            } else if (std.mem.eql(u8, trimmed_part, "php")) {
+                configuration.php_instrumentation_disabled = true;
             } else if (std.mem.eql(u8, trimmed_part, "ruby")) {
                 configuration.ruby_instrumentation_disabled = true;
             } else if (trimmed_part.len > 0) {
@@ -680,6 +697,8 @@ fn applyKeyValueToGeneralOptions(arena_allocator: std.mem.Allocator, key: []cons
         _configuration.nodejs_auto_instrumentation_agent_path = value;
     } else if (std.mem.eql(u8, key, python_path_prefix_key)) {
         _configuration.python_auto_instrumentation_agent_path_prefix = value;
+    } else if (std.mem.eql(u8, key, php_path_prefix_key)) {
+        _configuration.php_auto_instrumentation_agent_path_prefix = value;
     } else if (std.mem.eql(u8, key, ruby_path_prefix_key)) {
         _configuration.ruby_auto_instrumentation_agent_path_prefix = value;
     } else if (std.mem.eql(u8, key, all_agents_env_path_key)) {
@@ -751,7 +770,12 @@ fn readConfigurationDirectory(io: std.Io, arena_allocator: std.mem.Allocator, co
     };
     var dir_iter = dir.iterate();
     while (dir_iter.next(io) catch null) |entry| {
-        if (entry.kind != .file) continue;
+        // Symlinks count: a Kubernetes ConfigMap volume materialises every key as a symlink into a
+        // timestamped ..data directory, so skipping them would silently ignore all drop-ins
+        // delivered that way. The ".conf" suffix filter below keeps ConfigMap's own bookkeeping
+        // entries (..data and ..<timestamp>) out, and readConfigurationFile opens by path, which
+        // resolves the link.
+        if (entry.kind != .file and entry.kind != .sym_link) continue;
         if (!std.mem.endsWith(u8, entry.name, ".conf")) continue;
         const name_copy = std.fmt.allocPrint(arena_allocator, "{s}", .{entry.name}) catch continue;
         file_names.append(arena_allocator, name_copy) catch continue;
@@ -879,6 +903,11 @@ fn copyToPermanentlyAllocatedHeap(
             "{s}",
             .{preliminary_configuration.python_auto_instrumentation_agent_path_prefix},
         ),
+        .php_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(
+            allocator,
+            "{s}",
+            .{preliminary_configuration.php_auto_instrumentation_agent_path_prefix},
+        ),
         .ruby_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(
             allocator,
             "{s}",
@@ -903,6 +932,7 @@ fn copyToPermanentlyAllocatedHeap(
         .jvm_instrumentation_disabled = preliminary_configuration.jvm_instrumentation_disabled,
         .nodejs_instrumentation_disabled = preliminary_configuration.nodejs_instrumentation_disabled,
         .python_instrumentation_disabled = preliminary_configuration.python_instrumentation_disabled,
+        .php_instrumentation_disabled = preliminary_configuration.php_instrumentation_disabled,
         .ruby_instrumentation_disabled = preliminary_configuration.ruby_instrumentation_disabled,
     };
 }
@@ -2189,6 +2219,14 @@ fn readConfigurationFromEnvironment(io: std.Io, arena_allocator: std.mem.Allocat
         };
         configuration.python_auto_instrumentation_agent_path_prefix = python_value;
     }
+    if (getenv_fn(io, arena_allocator, php_agent_path_prefix_env_var)) |value| {
+        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
+        const php_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
+            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
+            return;
+        };
+        configuration.php_auto_instrumentation_agent_path_prefix = php_value;
+    }
     if (getenv_fn(io, arena_allocator, ruby_agent_path_prefix_env_var)) |value| {
         const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
         const ruby_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
@@ -2529,6 +2567,44 @@ test "readConfigurationDirectory: conf.d files override values from the main con
     try testing.expectEqualStrings(
         "/conf.d/path/to/jvm/javaagent.jar",
         configuration.jvm_auto_instrumentation_agent_path,
+    );
+}
+
+test "readConfigurationDirectory: reads drop-ins that are symlinks, as mounted Kubernetes ConfigMaps are" {
+    const allocator = testing.allocator;
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    // Reproduce the layout kubelet creates for a ConfigMap volume: the real files live in a
+    // timestamped directory, ..data points at it, and every key is a symlink through ..data.
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDir(testing.io, "..2026_11_03_07_11_51.813479606", .default_dir);
+    {
+        const file = try tmp.dir.createFile(testing.io, "..2026_11_03_07_11_51.813479606/php.conf", .{});
+        defer file.close(testing.io);
+        var buffer: [128]u8 = undefined;
+        var writer = file.writer(testing.io, &buffer);
+        try writer.interface.writeAll("php_auto_instrumentation_agent_path_prefix = /from/configmap/php\n");
+        try writer.interface.flush();
+    }
+    try tmp.dir.symLink(testing.io, "..2026_11_03_07_11_51.813479606", "..data", .{});
+    try tmp.dir.symLink(testing.io, "..data/php.conf", "php.conf", .{});
+
+    const dir_path = try tmp.dir.realPathFileAlloc(testing.io, ".", arena_allocator);
+    const env_entry = try std.fmt.allocPrint(arena_allocator, "OTEL_INJECTOR_CONFIG_DIR={s}", .{dir_path});
+
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{env_entry});
+    defer test_util.resetStdCEnviron(original_environ);
+
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    readConfigurationDirectory(testing.io, arena_allocator, &configuration, test_util.posixGetenv);
+
+    try testing.expectEqualStrings(
+        "/from/configmap/php",
+        configuration.php_auto_instrumentation_agent_path_prefix,
     );
 }
 

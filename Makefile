@@ -54,6 +54,29 @@ $(DIST_TARGET): $(DIST_SRCS)
 .PHONY: dist
 dist: $(DIST_TARGET)
 
+# Stages opentelemetry-php-distro into dist/php/<libc>/, together with the ini the injector
+# exposes through PHP_INI_SCAN_DIR. The distro ships one universal loader that serves every
+# supported PHP version and thread-safety flavor, so there is nothing for us to compile.
+.PHONY: php-artifacts
+php-artifacts:
+	injector-e2e-tests/php/prepare-artifacts.sh
+
+# End-to-end: the injector sets PHP_INI_SCAN_DIR, the distro's loader selects and activates the
+# matching extension, the SDK bootstraps, and spans reach a real collector over OTLP -- under
+# CLI, the built-in server, php-fpm behind nginx, and Apache mod_php.
+#
+# Depends on $(DIST_TARGET) rather than dist so that a prebuilt binary (for example one
+# downloaded in CI) is not rebuilt unnecessarily.
+.PHONY: php-e2e-tests
+php-e2e-tests: $(DIST_TARGET) php-artifacts
+	injector-e2e-tests/php/run.sh
+
+# The same chain in Kubernetes: a stock PHP image, with the injector and the distro delivered by
+# an init container into an emptyDir, instrumented with no change to the application image.
+.PHONY: php-k8s-poc
+php-k8s-poc: $(DIST_TARGET) php-artifacts
+	injector-e2e-tests/php/k8s/run.sh
+
 # Run this to install and enable the auto-instrumentation files. Mostly intended for development.
 .PHONY: install
 install: all uninstall

@@ -4,6 +4,34 @@
 
 <!-- next version -->
 
+## v0.12.0
+
+### 💡 Enhancements 💡
+
+- `injector`: Build the injector with Zig 0.17.0, passing an explicit `std.Io` through all file system access as required by the new Zig I/O API. (#429, #443)
+- `docs`: Document injector environment variable naming conventions. (#455)
+- `injector`: Append Java extension paths provided via `OTEL_INJECTOR_JAVAAGENT_EXTENSIONS` to `OTEL_JAVAAGENT_EXTENSIONS` while preserving existing paths. (#452)
+- `injector`: Detect incompatible Java versions during normal Java launches and skip Java agent injection. (#441)
+  Inspect the JVM launcher default bundled JVM binary before the VM is loaded.
+  Leave existing Java options and agents unchanged when skipping injection.
+  Skip Java agent injection in processes without a loaded JVM launcher, so shells do not pass it to unsupported Java children.
+  Skip Java agent injection whenever the Java version cannot be determined, rather than injecting into a runtime that
+  may not support the agent. This includes runtimes the detection does not recognize, and JVM switching through
+  -XXaltjvm= or JDK_ALTERNATE_VM, where the VM that will be loaded is not the one the injector can inspect.
+  Programs that embed a JVM through the JNI Invocation API, such as jsvc, load the VM after the injector has run and
+  therefore no longer receive JAVA_TOOL_OPTIONS.
+  Set the minimum Java major version to 0 to turn the version check off and inject into every process, as the injector
+  did before this change. This is the way to keep instrumenting any runtime the check cannot see.
+  Configure the minimum Java major version with jvm_auto_instrumentation_minimum_java_major_version in the configuration file
+  or JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION in the environment (default: 8). Environment values take priority.
+  
+- `release`: Sign GitHub release artifacts with Sigstore Cosign. (#350)
+  Each libotelinject_*.so release asset now includes a Sigstore bundle that can be
+  verified against the exact GitHub Actions release workflow and tag.
+  
+
+<!-- previous-version -->
+
 ## v0.11.0
 
 ### 💡 Enhancements 💡

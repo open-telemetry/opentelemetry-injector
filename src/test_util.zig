@@ -9,7 +9,6 @@ const types = @import("types.zig");
 const _print = @import("print.zig");
 
 const testing = std.testing;
-
 // An allocator just for clearStdCEnviron/setStdCEnviron. Since this is never part of production code but only used in
 // tests, it is not a concern whether we leak memory in these two helper functions, so there is no need to use
 // std.test.allocator here.
@@ -161,4 +160,39 @@ fn printLine(line: []const u8) void {
         else => {},
     };
     print("{s}\n", .{line});
+}
+
+/// A comptime string made of `count` copies of `byte`, for padding test fixtures.
+/// Zig 0.17 no longer has the `**` array repeat operator.
+pub fn repeat(comptime byte: u8, comptime count: usize) *const [count]u8 {
+    const bytes: [count]u8 = @splat(byte);
+    return &bytes;
+}
+
+/// A small ELF64 VM fixture without section headers. Tests use real program
+/// headers so they exercise the same file scanning as installed JVM binaries.
+pub fn writeElf(dir: std.Io.Dir, path: []const u8, content: []const u8, flags: u32) !void {
+    var header = std.mem.zeroes(std.elf.Elf64_Ehdr);
+    header.e_ident[0..4].* = .{ 0x7f, 'E', 'L', 'F' };
+    header.e_ident[std.elf.EI.CLASS] = std.elf.ELFCLASS64;
+    header.e_ident[std.elf.EI.DATA] = if (@import("builtin").cpu.arch.endian() == .little) std.elf.ELFDATA2LSB else std.elf.ELFDATA2MSB;
+    header.e_ident[std.elf.EI.VERSION] = 1;
+    header.e_type = .DYN;
+    header.e_machine = .X86_64;
+    header.e_version = 1;
+    header.e_ehsize = @sizeOf(std.elf.Elf64_Ehdr);
+    header.e_phoff = @sizeOf(std.elf.Elf64_Ehdr);
+    header.e_phentsize = @sizeOf(std.elf.Elf64.Phdr);
+    header.e_phnum = 1;
+    var segment = std.mem.zeroes(std.elf.Elf64.Phdr);
+    segment.type = .LOAD;
+    segment.flags = @bitCast(flags);
+    segment.offset = @sizeOf(std.elf.Elf64_Ehdr) + @sizeOf(std.elf.Elf64.Phdr);
+    segment.filesz = content.len;
+    segment.memsz = content.len;
+    const file = try dir.createFile(testing.io, path, .{});
+    defer file.close(testing.io);
+    try file.writeStreamingAll(testing.io, std.mem.asBytes(&header));
+    try file.writeStreamingAll(testing.io, std.mem.asBytes(&segment));
+    try file.writeStreamingAll(testing.io, content);
 }

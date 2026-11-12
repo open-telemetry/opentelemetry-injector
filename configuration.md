@@ -90,6 +90,7 @@ Generated from `config/options.yaml` using `make generate-config`. Defaults belo
 - [`dotnet_auto_instrumentation_agent_path_prefix` / `DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`](#dotnet_agent_path)
 - [`dotnet_auto_instrumentation_minimum_dotnet_major_version` / `DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION`](#dotnet_minimum_major_version)
 - [`jvm_auto_instrumentation_agent_path` / `JVM_AUTO_INSTRUMENTATION_AGENT_PATH`](#jvm_agent_path)
+- [`jvm_auto_instrumentation_minimum_java_major_version` / `JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION`](#jvm_minimum_major_version)
 - [`nodejs_auto_instrumentation_agent_path` / `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH`](#nodejs_agent_path)
 - [`python_auto_instrumentation_agent_path_prefix` / `PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`](#python_agent_path)
 - [`ruby_auto_instrumentation_agent_path_prefix` / `RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`](#ruby_agent_path)
@@ -237,12 +238,12 @@ Minimum .NET major version eligible for auto-instrumentation.
 - Environment variable: `DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION`
 - Environment pre-trim: false
 - Empty environment policy: `value`
-- Type-specific whitespace trimming: spaces and tabs around the integer
+- Type-specific whitespace trimming: spaces, tabs, CR, and LF around the integer
 - Environment override: replaces file values when successfully parsed
 
 **Empty value:** Warn and retain the previously resolved value.
 
-Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces and tabs. Invalid values warn and retain the previously resolved value. Applies when the application's `runtimeconfig.json` identifies a runtime version. Distributions supporting older .NET versions can lower this threshold.
+Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Invalid values warn and retain the previously resolved value. Applies when the application's `runtimeconfig.json` identifies a runtime version. Distributions supporting older .NET versions can lower this threshold.
 
 **Examples:**
 
@@ -274,6 +275,34 @@ An empty path disables only JVM instrumentation, not [resource-attribute injecti
 
 - `jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/jvm/javaagent.jar`
 - `jvm_auto_instrumentation_agent_path=`
+
+[Back to options](#options)
+
+<a id="jvm_minimum_major_version"></a>
+
+### `jvm_auto_instrumentation_minimum_java_major_version` / `JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION`
+
+Minimum Java major version eligible for auto-instrumentation.
+
+- Type: `uint32`
+- Default: `8`
+- File key: `jvm_auto_instrumentation_minimum_java_major_version`
+- Repeated file keys: `replace`
+- Environment variable: `JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION`
+- Environment pre-trim: false
+- Empty environment policy: `value`
+- Type-specific whitespace trimming: spaces, tabs, CR, and LF around the integer
+- Environment override: replaces file values when successfully parsed
+
+**Empty value:** Warn and retain the previously resolved value.
+
+Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Invalid values warn and retain the previously resolved value. Set to `0` to skip Java version detection. If the Java version cannot be determined, injection is skipped. Distributions supporting older Java versions can lower this threshold.
+
+**Examples:**
+
+- `jvm_auto_instrumentation_minimum_java_major_version=8`
+- `jvm_auto_instrumentation_minimum_java_major_version=6`
+- `jvm_auto_instrumentation_minimum_java_major_version=0`
 
 [Back to options](#options)
 

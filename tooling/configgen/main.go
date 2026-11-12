@@ -318,7 +318,7 @@ func generateDocs(options []option) []byte {
 		if o.Env != nil {
 			fmt.Fprintf(&b, "- Environment variable: %s\n- Environment pre-trim: %t\n- Empty environment policy: %s\n", inline(o.Env.Name), o.Trim(), inline(o.Empty()))
 			if o.Type == uint32Type {
-				b.WriteString("- Type-specific whitespace trimming: spaces and tabs around the integer\n")
+				b.WriteString("- Type-specific whitespace trimming: spaces, tabs, CR, and LF around the integer\n")
 			}
 			if o.File != nil {
 				b.WriteString("- Environment override: replaces file values when successfully parsed\n")

@@ -35,8 +35,8 @@ jobs:
           # That is, the pull request created by this workflow would not trigger .github/workflows/build.yml, and its
           # (expected) failure is precisely the information the maintainers need to see here.
           # See https://github.com/open-telemetry/community/blob/9eaa934620638a2f5537d3d74372b389098a8f5e/assets.md#otelbot.
-          client-id: ${{ vars.OTELBOT_CLIENT_ID }}
-          private-key: ${{ secrets.OTELBOT_PRIVATE_KEY }}
+          client-id: ${{ vars.OTELBOT_INJECTOR_CLIENT_ID }}
+          private-key: ${{ secrets.OTELBOT_INJECTOR_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
 

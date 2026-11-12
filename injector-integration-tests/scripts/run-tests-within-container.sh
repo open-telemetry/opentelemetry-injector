@@ -8,6 +8,15 @@ set -euo noglob
 
 home_directory=$(pwd)
 
+# Remove the conf.d drop-in files, so that a test case can exercise a single configuration file in isolation.
+# This script runs with noglob, so pathname expansion is enabled just for this one pattern and switched off again
+# right after. An unmatched pattern is left as-is by the shell, which rm -f ignores along with a missing directory.
+remove_conf_d_drop_ins() {
+  set +f
+  rm -f /etc/opentelemetry/injector/conf.d/*.conf
+  set -f
+}
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
@@ -134,8 +143,7 @@ run_test_case() {
     echo "providing configuration file at default location /etc/opentelemetry/injector/injector.conf for test case \"$test_case_label\""
     cp common/injector.conf /etc/opentelemetry/injector/injector.conf
     # Remove conf.d drop-in files so the main configuration file is tested in isolation.
-    # Note: We use find instead of a glob pattern because the shell runs with noglob.
-    find /etc/opentelemetry/injector/conf.d -name '*.conf' -delete 2>/dev/null || true
+    remove_conf_d_drop_ins
   fi
 
   set +e
@@ -143,7 +151,7 @@ run_test_case() {
   set -e
   if [ "$match" -gt 0 ]; then
     # Remove conf.d drop-in files so the custom configuration file is tested in isolation.
-    find /etc/opentelemetry/injector/conf.d -name '*.conf' -delete 2>/dev/null || true
+    remove_conf_d_drop_ins
   fi
 
   set +e

@@ -60,7 +60,7 @@ pub fn Option(comptime kind: Kind) type {
 
         pub fn parseScalar(_: Self, raw: []const u8) ScalarResult {
             return switch (kind) {
-                .uint32 => std.fmt.parseUnsigned(u32, std.mem.trim(u8, raw, " \t"), 10) catch error.InvalidValue,
+                .uint32 => std.fmt.parseUnsigned(u32, std.mem.trim(u8, raw, " \t\r\n"), 10) catch error.InvalidValue,
                 .boolean => std.ascii.eqlIgnoreCase(raw, "true") or std.ascii.eqlIgnoreCase(raw, "t") or std.mem.eql(u8, raw, "1"),
                 .log_level => blk: {
                     inline for (@typeInfo(LogLevel).@"enum".field_names) |name| {
@@ -120,7 +120,7 @@ pub fn Option(comptime kind: Kind) type {
         pub fn warnInvalidValue(self: Self, raw: []const u8, source: []const u8) void {
             const name = self.file_key orelse self.env_name.?;
             if (kind == .uint32) {
-                print.printWarn("Ignoring invalid value for {s} from {s}: \"{s}\" - a non-negative integer is required.", .{ name, source, std.mem.trim(u8, raw, " \t") });
+                print.printWarn("Ignoring invalid value for {s} from {s}: \"{s}\" - a non-negative integer is required.", .{ name, source, std.mem.trim(u8, raw, " \t\r\n") });
             } else {
                 print.printWarn("Ignoring invalid value for {s} from {s}: \"{s}\"", .{ name, source, raw });
             }
@@ -214,7 +214,9 @@ test "parse: uint32 bounds and invalid values" {
     const option = Option(.uint32){ .default_value = 8 };
     try testing.expectEqual(@as(u32, 0), try option.parse(testing.allocator, "0", "test"));
     try testing.expectEqual(std.math.maxInt(u32), try option.parse(testing.allocator, "4294967295", "test"));
-    for ([_][]const u8{ "", "-1", "4294967296", "1.0", "8\n" }) |value| {
+    try testing.expectEqual(@as(u32, 0), try option.parse(testing.allocator, "0\n", "test"));
+    try testing.expectEqual(@as(u32, 21), try option.parse(testing.allocator, " 21\t\r\n", "test"));
+    for ([_][]const u8{ "", "true", "-1", "4294967296", "1.0" }) |value| {
         try testing.expectError(error.InvalidValue, option.parse(testing.allocator, value, "test"));
     }
 }

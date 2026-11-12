@@ -61,6 +61,15 @@ pub const jvm_agent_path = support.Option(.string){
     .default_value = "",
 };
 
+pub const jvm_minimum_major_version = support.Option(.uint32){
+    .file_key = "jvm_auto_instrumentation_minimum_java_major_version",
+    .repeated = .replace,
+    .env_name = "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION",
+    .trim = false,
+    .empty = .value,
+    .default_value = 8,
+};
+
 pub const nodejs_agent_path = support.Option(.string){
     .file_key = "nodejs_auto_instrumentation_agent_path",
     .repeated = .replace,
@@ -199,6 +208,7 @@ pub const file_options = .{
     dotnet_agent_path,
     dotnet_minimum_major_version,
     jvm_agent_path,
+    jvm_minimum_major_version,
     nodejs_agent_path,
     python_agent_path,
     ruby_agent_path,
@@ -224,6 +234,7 @@ pub const Configuration = struct {
     dotnet_auto_instrumentation_agent_path_prefix: []u8,
     dotnet_auto_instrumentation_minimum_dotnet_major_version: u32,
     jvm_auto_instrumentation_agent_path: []u8,
+    jvm_auto_instrumentation_minimum_java_major_version: u32,
     nodejs_auto_instrumentation_agent_path: []u8,
     python_auto_instrumentation_agent_path_prefix: []u8,
     ruby_auto_instrumentation_agent_path_prefix: []u8,
@@ -240,6 +251,7 @@ pub const Configuration = struct {
             .dotnet_auto_instrumentation_agent_path_prefix = "",
             .dotnet_auto_instrumentation_minimum_dotnet_major_version = dotnet_minimum_major_version.initialValue(),
             .jvm_auto_instrumentation_agent_path = "",
+            .jvm_auto_instrumentation_minimum_java_major_version = jvm_minimum_major_version.initialValue(),
             .nodejs_auto_instrumentation_agent_path = "",
             .python_auto_instrumentation_agent_path_prefix = "",
             .ruby_auto_instrumentation_agent_path_prefix = "",

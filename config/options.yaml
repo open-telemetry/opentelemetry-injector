@@ -64,7 +64,7 @@
     name: DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION
     trim: false
   empty_value: Warn and retain the previously resolved value.
-  details: Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces and tabs. Invalid values warn and retain the previously resolved value. Applies when the application's `runtimeconfig.json` identifies a runtime version. Distributions supporting older .NET versions can lower this threshold.
+  details: Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Invalid values warn and retain the previously resolved value. Applies when the application's `runtimeconfig.json` identifies a runtime version. Distributions supporting older .NET versions can lower this threshold.
   examples: ["8", "6"]
 
 - id: jvm_agent_path
@@ -78,6 +78,19 @@
   empty_value: Disable JVM auto-instrumentation.
   details: An empty path disables only JVM instrumentation, not [resource-attribute injection](#resource_attributes). It can disable Java for one process without changing shared configuration.
   examples: [/usr/lib/opentelemetry/jvm/javaagent.jar, ""]
+
+- id: jvm_minimum_major_version
+  type: uint32
+  default: 8
+  description: Minimum Java major version eligible for auto-instrumentation.
+  file:
+    key: jvm_auto_instrumentation_minimum_java_major_version
+  env:
+    name: JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION
+    trim: false
+  empty_value: Warn and retain the previously resolved value.
+  details: Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Invalid values warn and retain the previously resolved value. Set to `0` to skip Java version detection. If the Java version cannot be determined, injection is skipped. Distributions supporting older Java versions can lower this threshold.
+  examples: ["8", "6", "0"]
 
 - id: nodejs_agent_path
   type: string

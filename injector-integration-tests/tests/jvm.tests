@@ -12,6 +12,76 @@ run_test_case \
   "java -jar Main.jar verify-javaagent-has-been-injected-and-existing-property-is-still-in-place" \
   "otel.injector.jvm.no_op_agent.has_been_loaded: true; some-property: some-value" \
   "JAVA_TOOL_OPTIONS=-Dsome-property=some-value"
+run_test_case \
+  "appends Java extension paths and preserves existing entries without duplicates" \
+  "app" \
+  "java -jar Main.jar custom-env-var OTEL_JAVAAGENT_EXTENSIONS" \
+  "OTEL_JAVAAGENT_EXTENSIONS: user-extension,/extensions/a,/extensions/b" \
+  "OTEL_JAVAAGENT_EXTENSIONS=user-extension,/extensions/a OTEL_INJECTOR_JAVAAGENT_EXTENSIONS=/extensions/a,/extensions/b"
+
+run_test_case \
+  "adds the Java agent when Java is launched through a shell" \
+  "app" \
+  "sh -c 'exec java -jar Main.jar verify-javaagent-has-been-injected'" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true"
+
+# Together with the next case, this pins the detected version to exactly 21: a detection that is off in either direction
+# fails one of them, which a minimum of 8 alone would not notice.
+run_test_case \
+  "adds the Java agent when the configured minimum Java version is Java 21" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true" \
+  "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=21"
+run_test_case \
+  "skips the Java agent when the configured minimum Java version is above Java 21" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: -" \
+  "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=22"
+
+# An alternate VM selection means the VM that will be loaded is not the one the injector can inspect, so the Java
+# version counts as undetermined even though this is unmistakably a JVM. "server" is the VM every supported image
+# ships, so the JVM starts normally and the only thing under test is the injector standing down.
+run_test_case \
+  "skips the Java agent when the Java version cannot be determined" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: -" \
+  "JDK_ALTERNATE_VM=server"
+
+# Turning the version check off reaches that JVM again.
+run_test_case \
+  "a minimum Java version of 0 adds the Java agent when the Java version cannot be determined" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true" \
+  "JDK_ALTERNATE_VM=server JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=0"
+
+# Some JVM images preset JAVA_TOOL_OPTIONS with their own options, so these two cases look for our -javaagent flag
+# specifically instead of comparing the whole variable.
+run_test_case \
+  "does not add the Java agent to JAVA_TOOL_OPTIONS for a process that is not a JVM" \
+  "app" \
+  "sh -c 'case \"\$JAVA_TOOL_OPTIONS\" in *-javaagent:/usr/lib/opentelemetry/jvm/javaagent.jar*) echo \"our javaagent: present\";; *) echo \"our javaagent: -\";; esac'" \
+  "our javaagent: -"
+
+# A minimum of 0 turns the version check off, restoring the pre-check behavior of injecting into every process. This
+# is the only way to reach JVMs that are created through the JNI Invocation API (jsvc and similar), which load the VM
+# after the injector has run and are indistinguishable from any other non-Java process at that point.
+run_test_case \
+  "a minimum Java version of 0 adds the Java agent to JAVA_TOOL_OPTIONS for a process that is not a JVM" \
+  "app" \
+  "sh -c 'case \"\$JAVA_TOOL_OPTIONS\" in *-javaagent:/usr/lib/opentelemetry/jvm/javaagent.jar*) echo \"our javaagent: present\";; *) echo \"our javaagent: -\";; esac'" \
+  "our javaagent: present" \
+  "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=0"
+
+run_test_case \
+  "preserves existing Java options when Java is launched through a shell" \
+  "app" \
+  "sh -c 'exec java -jar Main.jar verify-javaagent-has-been-injected-and-existing-property-is-still-in-place'" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true; some-property: some-value" \
+  "JAVA_TOOL_OPTIONS=-Dsome-property=some-value"
 
 # For test cases with the "default configuration file" substring in their label, run-tests-within-container.sh
 # will provide a configuration file in the expected location (/etc/opentelemetry/injector/injector.conf).
@@ -45,12 +115,31 @@ run_test_case \
   "java -jar Main.jar verify-javaagent-has-been-injected" \
   "otel.injector.jvm.no_op_agent.has_been_loaded: -" \
   "JVM_AUTO_INSTRUMENTATION_AGENT_PATH="
+run_test_case \
+  "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=jvm also disables the Java extension paths" \
+  "app" \
+  "java -jar Main.jar custom-env-var OTEL_JAVAAGENT_EXTENSIONS" \
+  "OTEL_JAVAAGENT_EXTENSIONS: user-extension" \
+  "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=jvm OTEL_JAVAAGENT_EXTENSIONS=user-extension OTEL_INJECTOR_JAVAAGENT_EXTENSIONS=/extensions/a"
+run_test_case \
+  "setting JVM_AUTO_INSTRUMENTATION_AGENT_PATH to the empty string also disables the Java extension paths" \
+  "app" \
+  "java -jar Main.jar custom-env-var OTEL_JAVAAGENT_EXTENSIONS" \
+  "OTEL_JAVAAGENT_EXTENSIONS: -" \
+  "JVM_AUTO_INSTRUMENTATION_AGENT_PATH= OTEL_INJECTOR_JAVAAGENT_EXTENSIONS=/extensions/a"
 
 run_test_case \
   "OTEL_ custom env var is returned according to the env file provided" \
   "app" \
   "java -jar Main.jar custom-env-var OTEL_SDK_DISABLED" \
   "OTEL_SDK_DISABLED: true"
+
+run_test_case \
+  "Java extension paths are appended to the OTEL_JAVAAGENT_EXTENSIONS value from the env file provided" \
+  "app" \
+  "java -jar Main.jar custom-env-var OTEL_JAVAAGENT_EXTENSIONS" \
+  "OTEL_JAVAAGENT_EXTENSIONS: /env-file/extension.jar,/extensions/a" \
+  "OTEL_INJECTOR_JAVAAGENT_EXTENSIONS=/extensions/a"
 
 run_test_case \
   "non OTEL_ custom env var is ignored" \

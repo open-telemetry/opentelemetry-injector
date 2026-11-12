@@ -16,6 +16,7 @@ const empty_string = @constCast("");
 const allowed_env_var_prefixes = build_options.allowed_env_var_prefixes;
 
 pub const InjectorConfiguration = options.Configuration;
+pub const default_jvm_auto_instrumentation_minimum_java_major_version = options.jvm_minimum_major_version.default_value;
 
 const ConfigApplier = fn (gpa: std.mem.Allocator, key: []const u8, value: []u8, file_path: []const u8, configuration: *InjectorConfiguration) void;
 
@@ -48,6 +49,7 @@ test "createEmptyConfiguration: safe to deinit without allocations" {
 
     try testing.expectEqualStrings("", configuration.all_auto_instrumentation_agents_env_path);
     try testing.expectEqual(@as(u32, 8), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
+    try testing.expectEqual(@as(u32, 8), configuration.jvm_auto_instrumentation_minimum_java_major_version);
 }
 
 fn readConfigurationFromPath(io: std.Io, allocator: std.mem.Allocator, cfg_file_path: []const u8, getenv_fn: proc_self_environ_parser.GetenvFn) std.mem.Allocator.Error!InjectorConfiguration {
@@ -392,34 +394,78 @@ fn createDefaultConfiguration(arena_allocator: std.mem.Allocator) std.mem.Alloca
     return configuration;
 }
 
-test "applyKeyValueToGeneralOptions: parses an integer" {
-    var configuration = createEmptyConfiguration(testing.allocator);
-    defer configuration.all_auto_instrumentation_agents_env_vars.deinit();
+test "applyKeyValueToGeneralOptions: parses runtime minimum versions and retains previous values for invalid input" {
+    const Case = struct { value: []const u8, expected: u32 };
+    inline for (.{ options.dotnet_minimum_major_version, options.jvm_minimum_major_version }) |option| {
+        for ([_]Case{
+            .{ .value = "0", .expected = 0 },
+            .{ .value = "1", .expected = 1 },
+            .{ .value = "6", .expected = 6 },
+            .{ .value = " 21\t", .expected = 21 },
+            .{ .value = "0\n", .expected = 0 },
+            .{ .value = "21\r\n", .expected = 21 },
+            .{ .value = "4294967295", .expected = std.math.maxInt(u32) },
+            .{ .value = "", .expected = 8 },
+            .{ .value = "true", .expected = 8 },
+            .{ .value = "-1", .expected = 8 },
+            .{ .value = "1.6", .expected = 8 },
+            .{ .value = "4294967296", .expected = 8 },
+        }) |case| {
+            var configuration = createEmptyConfiguration(testing.allocator);
+            defer configuration.deinit(testing.allocator);
 
-    applyKeyValueToGeneralOptions(testing.allocator, options.dotnet_minimum_major_version.file_key.?, @constCast("6"), "test", &configuration);
+            applyKeyValueToGeneralOptions(testing.allocator, option.file_key.?, @constCast(case.value), "test", &configuration);
 
-    try testing.expectEqual(@as(u32, 6), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
+            try testing.expectEqual(case.expected, @field(configuration, option.file_key.?));
+        }
+    }
 }
 
-test "applyKeyValueToGeneralOptions: trims integer whitespace" {
-    var configuration = createEmptyConfiguration(testing.allocator);
-    defer configuration.all_auto_instrumentation_agents_env_vars.deinit();
+test "JVM minimum Java major version: reads config files and applies environment overrides" {
+    const allocator = testing.allocator;
+    defer cached_configuration_optional = null;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
 
-    applyKeyValueToGeneralOptions(testing.allocator, options.dotnet_minimum_major_version.file_key.?, @constCast(" 7\t"), "test", &configuration);
+    try tmp.dir.writeFile(testing.io, .{
+        .sub_path = "injector.conf",
+        .data = "jvm_auto_instrumentation_minimum_java_major_version = 6\n",
+    });
 
-    try testing.expectEqual(@as(u32, 7), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
-}
+    const path = try tmp.dir.realPathFileAlloc(testing.io, "injector.conf", allocator);
+    defer allocator.free(path);
 
-test "applyKeyValueToGeneralOptions: ignores an invalid integer and keeps the default" {
-    var configuration = createEmptyConfiguration(testing.allocator);
-    defer configuration.all_auto_instrumentation_agents_env_vars.deinit();
+    const directory = try tmp.dir.realPathFileAlloc(testing.io, ".", allocator);
+    defer allocator.free(directory);
 
-    applyKeyValueToGeneralOptions(testing.allocator, options.dotnet_minimum_major_version.file_key.?, @constCast("not-a-number"), "test", &configuration);
+    const config_dir_env = try std.fmt.allocPrint(allocator, "OTEL_INJECTOR_CONFIG_DIR={s}/no-conf-dir", .{directory});
+    defer allocator.free(config_dir_env);
 
-    try testing.expectEqual(
-        @as(u32, 8),
-        configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version,
-    );
+    const Case = struct { value: ?[]const u8, expected: u32 };
+    for ([_]Case{
+        .{ .value = null, .expected = 6 },
+        .{ .value = "0", .expected = 0 },
+        .{ .value = " 9\t", .expected = 9 },
+        .{ .value = "0\n", .expected = 0 },
+        .{ .value = "invalid", .expected = 6 },
+        .{ .value = "-1", .expected = 6 },
+        .{ .value = "4294967296", .expected = 6 },
+    }) |case| {
+        var env_vars: [2][]const u8 = .{ config_dir_env, "" };
+
+        if (case.value) |value| {
+            env_vars[1] = try std.fmt.allocPrint(allocator, "{s}={s}", .{ options.jvm_minimum_major_version.env_name.?, value });
+        }
+        defer if (case.value != null) allocator.free(env_vars[1]);
+
+        const original = try test_util.setStdCEnviron(&env_vars);
+        defer test_util.resetStdCEnviron(original);
+
+        var configuration = try readConfigurationFromPath(testing.io, allocator, path, test_util.posixGetenv);
+        defer configuration.deinit(allocator);
+
+        try testing.expectEqual(case.expected, configuration.jvm_auto_instrumentation_minimum_java_major_version);
+    }
 }
 
 fn applyKeyValueToGeneralOptions(arena_allocator: std.mem.Allocator, key: []const u8, value: []u8, cfg_file_path: []const u8, configuration: *InjectorConfiguration) void {

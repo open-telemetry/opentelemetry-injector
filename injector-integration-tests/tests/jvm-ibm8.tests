@@ -1,0 +1,59 @@
+# shellcheck shell=sh
+
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+# IBM Java 8 ships no release file. Its class library names the Java release in lib/classlib.properties instead, and
+# without that entry the injector scans the J9 VM library, which it reaches through the forwarder libjvm.so in the
+# j9vm directory. The jvm.tests cases assume Java 21 and a server VM directory, so only the cases that depend on the
+# version detection are repeated here.
+
+run_test_case \
+  "uses the IBM J9 VM" \
+  "app" \
+  "java -version 2>&1 | grep -m 1 -o 'IBM J9 VM'" \
+  "IBM J9 VM"
+
+# The binary-scan variant of this set removes the version entry from classlib.properties, so only this set can check
+# that the entry is read.
+if [ "$TEST_SET" = "jvm-ibm8.tests" ]; then
+  run_test_case \
+    "reads the Java version from classlib.properties" \
+    "app" \
+    "java -version 2>&1 | grep -m 1 -o 'classlib.properties\" reports Java 8'" \
+    "classlib.properties\" reports Java 8" \
+    "OTEL_INJECTOR_LOG_LEVEL=debug"
+fi
+
+run_test_case \
+  "adds the Java agent by adding a new JAVA_TOOL_OPTIONS environment variable" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true"
+
+run_test_case \
+  "adds the Java agent to an existing JAVA_TOOL_OPTIONS environment variable" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected-and-existing-property-is-still-in-place" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true; some-property: some-value" \
+  "JAVA_TOOL_OPTIONS=-Dsome-property=some-value"
+
+run_test_case \
+  "adds the Java agent when Java is launched through a shell" \
+  "app" \
+  "sh -c 'exec java -jar Main.jar verify-javaagent-has-been-injected'" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true"
+
+# Together with the next case, this pins the detected version to exactly 8.
+run_test_case \
+  "adds the Java agent when the configured minimum Java version is Java 8" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: true" \
+  "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=8"
+run_test_case \
+  "skips the Java agent when the configured minimum Java version is above Java 8" \
+  "app" \
+  "java -jar Main.jar verify-javaagent-has-been-injected" \
+  "otel.injector.jvm.no_op_agent.has_been_loaded: -" \
+  "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION=9"

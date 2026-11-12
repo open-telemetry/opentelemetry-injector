@@ -101,6 +101,7 @@ This method requires `root` privileges.
    ```
    dotnet_auto_instrumentation_agent_path_prefix=/usr/lib/opentelemetry/dotnet
    jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/jvm/javaagent.jar
+   jvm_auto_instrumentation_minimum_java_major_version=8
    nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
    ```
 
@@ -128,6 +129,12 @@ This method requires `root` privileges.
      supported by the upstream OpenTelemetry .NET auto-instrumentation. Distributions of the .NET
      auto-instrumentation that support older .NET versions can lower this threshold accordingly.
    - `JVM_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Java auto-instrumentation agent JAR file
+   - `JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION`: the minimum Java major version required for Java
+     auto-instrumentation; can also be set via the configuration file key
+     `jvm_auto_instrumentation_minimum_java_major_version`. The default is `8`, matching the OpenTelemetry Java
+     agent's baseline. Environment values override file values. Non-negative integers are accepted; `0` turns the
+     version check off entirely, so that every process is injected regardless of the runtime it loads, and invalid
+     values leave the current setting unchanged.
    - `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH`: the path to the Node.js auto-instrumentation agent registration file
    - `PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the Python auto-instrumentation agent files (Python is disabled by default, see [Enabling Auto-Instrumentation for Python](#enabling-auto-instrumentation-for-python))
    - `RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`: the path to the directory containing the Ruby auto-instrumentation gem bundle
@@ -199,6 +206,16 @@ Here is an overview of the modifications that the injector will apply:
 * It sets (or appends to) `NODE_OPTIONS` to activate the Node.js instrumentation agent.
 * It sets (or prepends to) `RUBYOPT` to require the Ruby auto-instrumentation gem, and sets `OTEL_RUBY_ADDITIONAL_GEM_PATH` so the gem can locate its bundled dependencies. If `OTEL_RUBY_ADDITIONAL_GEM_PATH` is already set in the process's environment, the injector respects that value and also skips modifying `RUBYOPT` (the two variables are a coupled pair — injecting only the `-r` flag would make the gem look for its dependencies in the user-provided path and fail with `LoadError`).
 * It adds a `-javaagent` flag to `JAVA_TOOL_OPTIONS` to activate the Java OTel SDK.
+* If `OTEL_INJECTOR_JAVAAGENT_EXTENSIONS` is set, the injector appends its
+  comma-separated paths to the process's `OTEL_JAVAAGENT_EXTENSIONS` during
+  process startup, preserving existing nonempty entries and deduplicating exact
+  path entries.
+  Empty entries are discarded; paths are not otherwise normalized. If every
+  injected path is already present, the existing value is left untouched. This
+  is intended for Java extension images mounted by a controller.
+  This only happens when the JVM auto-instrumentation is enabled in the
+  injector configuration; otherwise `OTEL_JAVAAGENT_EXTENSIONS` is left
+  untouched.
 * It conditionally sets the required environment variables for activating the OpenTelemetry SDK for .NET:
     * `CORECLR_ENABLE_PROFILING`
     * `CORECLR_PROFILER`
@@ -276,6 +293,23 @@ See also:
 * https://opentelemetry.io/docs/specs/semconv/resource/k8s/
 * https://opentelemetry.io/docs/specs/semconv/non-normative/k8s-attributes/
 * https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/#use-pod-fields-as-values-for-environment-variables
+
+#### Naming injector-specific environment variables
+
+Use the `OTEL_INJECTOR_` prefix for environment variables that configure the injector or provide inputs that it
+translates before starting an instrumented application. When an input supplies the value of a corresponding
+OpenTelemetry agent environment variable, keep the agent variable's name after the injector prefix. For example, a
+direct mapping for Java agent extensions would use `OTEL_INJECTOR_JAVAAGENT_EXTENSIONS` as its injector-side input for
+`OTEL_JAVAAGENT_EXTENSIONS`. The naming convention alone does not add support for a new input or imply that all
+injector variables are passed through.
+
+This suffix convention applies only when the injector has defined a direct input-to-agent-variable mapping; it does not
+mean that every `OTEL_INJECTOR_*` variable is copied to the agent or that every injector variable has an agent-variable
+counterpart. Some inputs are injector controls, such as `OTEL_INJECTOR_LOG_LEVEL` and
+`OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED`. Others are translated or combined: for example,
+`OTEL_INJECTOR_RESOURCE_ATTRIBUTES` contributes key-value pairs to `OTEL_RESOURCE_ATTRIBUTES`, while
+`OTEL_INJECTOR_SERVICE_NAME` maps to the `service.name` resource attribute. Follow the documented behavior for each
+variable rather than inferring its behavior from its name.
 
 ### Enabling Auto-Instrumentation for Python
 
@@ -413,6 +447,91 @@ or for all workloads in a Kubernetes cluster/namespace. Therefore, we provide an
 injector for a specific program launch or workload by setting the environment variable `OTEL_INJECTOR_DISABLED=true`.
 When `OTEL_INJECTOR_DISABLED` is set to `true`, no environment variables will be modified by the injector.
 
+## Limitations
+
+Safe activation is a contract between the injector and the instrumentation library being injected. The library
+documents the prerequisites for activating it safely and states which of them it verifies itself; the injector
+verifies the prerequisites assigned to it, and does not activate a library whose prerequisites it cannot confirm.
+This division is being specified in the OpenTelemetry library guidelines, see
+[open-telemetry/opentelemetry-specification#5267](https://github.com/open-telemetry/opentelemetry-specification/issues/5267).
+
+Within that division, most compatibility checking belongs to the instrumentation library: if your application is
+incompatible with the library being injected, the injector makes no guarantee that your application will work
+afterwards. For some runtimes the library cannot check anything, because loading it is already the failure: an
+incompatible Java agent aborts JVM startup before any of its own code runs. The injector therefore performs
+best-effort runtime version checks for .NET and Java before activating them.
+
+When the injector declines to inject because such a check did not pass, it logs why at the `info` level, naming the
+detected version and the configured minimum where it has them. The injector only logs errors by default, so set
+`OTEL_INJECTOR_LOG_LEVEL=info` (see [Configure the Injector's Logging](#configure-the-injectors-logging)) to diagnose
+an uninstrumented workload from the application's own output. Processes that carry no runtime at all are the common
+case on a host and are reported at `debug` level only.
+
+### Limitations of the .NET runtime version checks
+
+The minimum .NET major version of an application is determined by inspecting its `*.runtimeconfig.json` file. If this
+file is not found in the deployment (or it is malformed), the injector will proceed with injecting the instrumentation.
+The default minimum .NET major version required is 8, matching the current support of the OpenTelemetry .NET SDK. You
+can modify the supported .NET version by setting the `DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION`
+environment variable or the equivalent configuration option `dotnet_auto_instrumentation_minimum_dotnet_major_version`.
+
+### Limitations of the Java runtime version checks
+
+The OpenTelemetry Java Agent requires Java 8 or newer, which means that the agent jar file contains class files with
+a version that is incompatible with JDKs older than JDK 8. Attempting to load the OpenTelemetry Java agent on an
+older JVM would result in an application startup failure with a `java.lang.UnsupportedClassVersionError`.
+
+**The Java agent is injected only into a JVM whose version the injector could determine.** When the version cannot
+be established, the injector leaves `JAVA_TOOL_OPTIONS` alone and the workload runs uninstrumented. This is the
+deliberate trade-off: injecting into a runtime that turns out to be unsupported can stop an application from
+starting, while skipping an injection only costs telemetry from a workload that keeps running. Whether your
+runtime can be detected therefore decides whether you get telemetry at all, so it is the first thing to check if
+a Java workload is not reporting.
+
+#### Runtimes with supported version detection
+
+The version is read from the `JAVA_VERSION` entry of the Java home's `release` file, which most runtime images
+ship, including `jlink` and `jpackage` images. A Java home without one can still name its version in the `version`
+entry of `lib/classlib.properties`, which J9 class libraries ship. When there is neither, the injector falls back to
+scanning the read-only segments of the VM binaries for the vendor's version banner.
+
+| Runtime | Detection |
+| --- | --- |
+| OpenJDK and derivatives (Temurin, Corretto, Zulu, Liberica, Oracle JDK, ...) | `release` file, falling back to the HotSpot banner |
+| GraalVM (JVM mode) | `release` file, falling back to the HotSpot banner |
+| Eclipse OpenJ9 and IBM Semeru | `release` file, falling back to the OpenJ9 internal version string or the J9 version label |
+| IBM SDK, Java Technology Edition 8 (IBM J9 VM) | `classlib.properties` (it ships no `release` file), falling back to the J9 version label |
+| Azul Prime (Zing) | `release` file, falling back to the Zing version string |
+
+Other runtimes are not recognized. They are not instrumented unless the version check is turned off, as described
+below.
+
+#### When the version cannot be determined
+
+Even on a runtime from the table above, the injector does not instrument a process in any of these cases:
+
+- **The VM is not loaded through the `java` launcher.** A process is recognized as a JVM by the launcher library
+  the dynamic loader has already mapped when the injector initializes. Programs that embed a VM through the JNI
+  Invocation API, such as `jsvc` from Apache Commons Daemon, load it later in their startup and look like any
+  other non-Java process at that point. No check that runs at process startup can see them.
+- **An alternate VM is selected** through `-XXaltjvm=` on the command line or the `JDK_ALTERNATE_VM` environment
+  variable. The VM that will be loaded is not the one the injector can inspect, so its version is unknown.
+- **The runtime image carries no usable `release` file and no recognizable version banner**, for example a
+  heavily stripped or repackaged image.
+
+#### Configuring the check
+
+The default minimum version is 8, matching the version support of the OpenTelemetry Java Agent. If you are
+injecting a different instrumentation library with an earlier version support, you can modify the supported
+version by setting the `JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION` environment variable or the
+equivalent `jvm_auto_instrumentation_minimum_java_major_version` config file option.
+
+Setting the minimum Java major version to `0` turns the version check off: no detection runs, and
+`JAVA_TOOL_OPTIONS` is set for every process the injector is loaded into, which is how the injector behaved before
+the version check existed. This is the way to instrument the runtimes listed above as undetectable. Use it when
+you know the JVMs on the host are new enough for the agent you are injecting, bearing in mind that it also injects
+into every process that is not a JVM at all, and that a JVM older than the agent supports will then fail to start
+with a `java.lang.UnsupportedClassVersionError`.
 
 ## Design
 
@@ -445,7 +564,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [Antoine Toulme](https://github.com/atoulme), [Splunk](https://www.splunk.com/)
 - [Bastian Krol](https://github.com/basti1302), [Dash0](https://www.dash0.com/)
 - [Jack Berg](https://github.com/jack-berg), [Grafana Labs](https://grafana.com/)
-- [Jacob Aronoff](https://github.com/jaronoff97), [Tero](https://www.usetero.com/)
+- [Jacob Aronoff](https://github.com/jaronoff97), [Cribl](https://www.cribl.io/)
 - [Michele Mancioppi](https://github.com/mmanciop), [Dash0](https://www.dash0.com/)
 - [Nikola Grcevski](https://github.com/grcevski), [Grafana Labs](https://grafana.com/)
 

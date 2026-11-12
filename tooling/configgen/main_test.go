@@ -164,7 +164,7 @@ func TestDocsIntegerTrimming(t *testing.T) {
 	trim := false
 	options[0].Env.Trim = &trim
 	docs := string(generateDocs(options))
-	for _, want := range []string{"Environment pre-trim: false", "Type-specific whitespace trimming: spaces and tabs around the integer"} {
+	for _, want := range []string{"Environment pre-trim: false", "Type-specific whitespace trimming: spaces, tabs, CR, and LF around the integer"} {
 		if !strings.Contains(docs, want) {
 			t.Errorf("documentation missing %q", want)
 		}

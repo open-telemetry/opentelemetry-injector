@@ -4,6 +4,7 @@
 const std = @import("std");
 
 const config = @import("config.zig");
+const options = @import("config_generated.zig");
 const jvm_launcher = @import("jvm_launcher.zig");
 const environ = @import("proc_self_environ_parser.zig");
 const print = @import("print.zig");
@@ -13,7 +14,7 @@ const test_util = @import("test_util.zig");
 const testing = std.testing;
 
 pub const java_tool_options_env_var_name = "JAVA_TOOL_OPTIONS";
-pub const java_extension_paths_env_var_name = "OTEL_INJECTOR_JAVAAGENT_EXTENSIONS";
+pub const java_extension_paths_env_var_name = options.javaagent_extensions.env_name.?;
 pub const javaagent_extensions_env_var_name = "OTEL_JAVAAGENT_EXTENSIONS";
 
 /// Returns the modified value for OTEL_JAVAAGENT_EXTENSIONS, based on the original value of OTEL_JAVAAGENT_EXTENSIONS
@@ -36,7 +37,7 @@ pub fn checkJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue(
         original_value_optional,
         injected_value_optional,
         configuration.jvm_auto_instrumentation_agent_path,
-        configuration.jvm_instrumentation_disabled,
+        configuration.auto_instrumentation_disabled.jvm,
     );
 }
 
@@ -58,6 +59,29 @@ fn doCheckJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue(
     }
 
     return getModifiedJavaAgentExtensionsValue(gpa, original_value_optional, injected_value);
+}
+
+test "Java agent extension catalog: preserves whitespace and uses the configured JVM gate" {
+    var configuration = config.InjectorConfiguration.initEmpty(testing.allocator);
+    defer configuration.deinit(testing.allocator);
+    configuration.jvm_auto_instrumentation_agent_path = try testing.allocator.dupe(u8, "/missing/agent.jar");
+    configuration.jvm_auto_instrumentation_minimum_java_major_version = std.math.maxInt(u32);
+
+    const paths = " /extensions/custom.jar ,/extensions/another.jar";
+    try testing.expectEqualStrings(paths, options.javaagent_extensions.environmentString(paths));
+    try testing.expectEqualStrings("", options.javaagent_extensions.environmentString(""));
+
+    const value = checkJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue(
+        testing.allocator,
+        "user-a",
+        paths,
+        configuration,
+    ) orelse return error.ExpectedModifiedValue;
+    defer testing.allocator.free(value);
+    try testing.expectEqualStrings("user-a, /extensions/custom.jar ,/extensions/another.jar", value);
+
+    configuration.auto_instrumentation_disabled.jvm = true;
+    try testing.expect(checkJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue(testing.allocator, "user-a", paths, configuration) == null);
 }
 
 test "doCheckJvmInstrumentationAndGetModifiedJavaAgentExtensionsValue: should return null if jvm_instrumentation_disabled is true" {
@@ -225,7 +249,7 @@ pub fn checkOTelJavaAgentJarAndGetModifiedJavaToolOptionsValue(
         gpa,
         original_value_optional,
         configuration.jvm_auto_instrumentation_agent_path,
-        configuration.jvm_instrumentation_disabled,
+        configuration.auto_instrumentation_disabled.jvm,
         configuration.jvm_auto_instrumentation_minimum_java_major_version,
         get_env,
         getJavaMajorVersion, // Passed in for testing reasons.

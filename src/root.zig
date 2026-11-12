@@ -227,8 +227,8 @@ fn evaluateAllowDeny(io: std.Io, allocator: std.mem.Allocator, configuration: co
         allocator.free(args);
     }
 
-    const allow = pattern_matcher.evaluateAllow(exe_path, args, configuration.include_paths, configuration.include_args);
-    const deny = pattern_matcher.evaluateDeny(exe_path, args, configuration.exclude_paths, configuration.exclude_args);
+    const allow = pattern_matcher.evaluateAllow(exe_path, args, configuration.include_paths, configuration.include_with_arguments);
+    const deny = pattern_matcher.evaluateDeny(exe_path, args, configuration.exclude_paths, configuration.exclude_with_arguments);
 
     if (!allow or deny) {
         print.printDebug("executable with path {s} ignored. allow={any}, deny={any}", .{ exe_path, allow, deny });
@@ -239,9 +239,9 @@ fn evaluateAllowDeny(io: std.Io, allocator: std.mem.Allocator, configuration: co
                     print.printDebug("    - {s}", .{pattern});
                 }
             }
-            if (configuration.include_args.len > 0) {
-                print.printDebug("  include_arguments:", .{});
-                for (configuration.include_args) |pattern| {
+            if (configuration.include_with_arguments.len > 0) {
+                print.printDebug("  include_with_arguments:", .{});
+                for (configuration.include_with_arguments) |pattern| {
                     print.printDebug("    - {s}", .{pattern});
                 }
             }
@@ -251,9 +251,9 @@ fn evaluateAllowDeny(io: std.Io, allocator: std.mem.Allocator, configuration: co
                     print.printDebug("    - {s}", .{pattern});
                 }
             }
-            if (configuration.exclude_args.len > 0) {
-                print.printDebug("  exclude_arguments:", .{});
-                for (configuration.exclude_args) |pattern| {
+            if (configuration.exclude_with_arguments.len > 0) {
+                print.printDebug("  exclude_with_arguments:", .{});
+                for (configuration.exclude_with_arguments) |pattern| {
                     print.printDebug("    - {s}", .{pattern});
                 }
             }

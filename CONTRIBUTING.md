@@ -35,6 +35,33 @@ See the page [Zig Learn](https://ziglang.org/learn/) for more information about 
 The DEB and RPM system packages that bundle the injector with the auto-instrumentation agents for supported runtimes live in [open-telemetry/opentelemetry-packaging](https://github.com/open-telemetry/opentelemetry-packaging).
 Please open packaging bugs, feature requests, and pull requests against that repository.
 
+### Configuration catalog
+
+Declare injector configuration options in [`options.yaml`](options.yaml), a top-level array. Each entry has a unique, stable `id` in lowercase snake_case, used for generated Zig declarations and documentation anchors. File keys and environment-variable names must also be unique. Runtime configuration still uses `injector.conf` and environment variables, not YAML.
+
+Each entry requires `id`, `type`, `default`, `description`, and at least one `examples` value, plus `file.key`, `env.name`, or both. Document `empty_value`, `invalid_value`, or both: use `empty_value` when an explicitly empty value has meaning, and `invalid_value` for validation failures, including empty values when those are invalid. An unset environment variable uses the default or previously resolved file value, not the empty-value behavior. These fields describe behavior but do not change parsing. Optional `details` provides longer Markdown documentation, including interactions and links to other options using their `id` anchors.
+
+Supported types are `string`, `uint32`, `boolean`, `log_level`, `glob_list`, and `runtime_list`. Defaults must match the type. List defaults currently must be empty arrays. Adding a type requires updating the generator and `src/config_option.zig`.
+
+File-specific settings belong under `file`:
+
+- `key`: the configuration-file key.
+- `repeated`: `replace` (default) or `append`. Append is supported for `glob_list`.
+
+Environment-specific settings belong under `env`:
+
+- `name`: the environment-variable name.
+- `trim`: whether to apply environment pre-trimming (default `true`).
+- `empty`: `value` (default), which parses an empty value, or `default`, which uses the library default when the value is empty.
+
+Environment values replace file values when successfully parsed. Unset variables leave file values unchanged. Optional `resource_attribute` declares a mapping from an untrimmed environment-only string to an OpenTelemetry resource attribute.
+
+Environment-only options without `resource_attribute` require a handwritten loader and an entry in `manualEnvOptions` in [`tooling/configgen/main.go`](tooling/configgen/main.go). Add the loader before extending this allowlist. The generator rejects other environment-only options.
+
+Run `make generate-config` from the repository root with Go 1.23 or later to update the generated section of `configuration.md` and `src/config_generated.zig`. Markdown outside the `BEGIN GENERATED CONFIGURATION` and `END GENERATED CONFIGURATION` comment markers is handwritten and preserved by generation. Commit both files with the catalog changes. CI runs generation and fails if either output changes. Run generator tests with `cd tooling/configgen && go test ./...` and runtime tests with `make zig-unit-tests`.
+
+The generated module provides typed option accessors, defaults, configuration fields, and resource mappings. `Configuration.initEmpty` creates allocation-free empty storage with scalar defaults. All non-empty string/list storage and environment-map entries must belong to the allocator passed to `deinit`. File loading and environment overrides iterate over generated declarations. Keep complex injection behavior in handwritten Zig code, and document shared behavior outside the generated section. During review, check that new injector-owned settings use the catalog rather than ad hoc environment reads.
+
 ### Github PR Workflow
 
 It is recommended to follow the ["GitHub Workflow"](https://guides.github.com/introduction/flow/). When using [GitHub's CLI](https://github.com/cli/cli), here's how it typically looks like:

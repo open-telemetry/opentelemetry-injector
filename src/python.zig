@@ -34,7 +34,7 @@ pub fn checkPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
         gpa,
         original_value_optional,
         configuration.python_auto_instrumentation_agent_path_prefix,
-        configuration.python_instrumentation_disabled,
+        configuration.auto_instrumentation_disabled.python,
     );
 }
 

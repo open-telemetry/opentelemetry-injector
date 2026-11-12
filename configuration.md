@@ -1,12 +1,12 @@
 # Configuration
 
-See [options](#options) for the complete configuration reference and the [README](README.md#activation-and-configuration) for activation and agent directory layouts. For catalog maintenance and generation, see [configuration catalog](#configuration-catalog).
+See [options](#options) for the complete configuration reference and the [README](README.md#activation-and-configuration) for activation and agent directory layouts.
 
 ## Loading order and precedence
 
 The injector reads configuration once per process. Restart applications or services after changing configuration.
 
-Logging and complete disablement are read from the environment before configuration-file loading. Other settings are resolved in this order:
+The log level and complete disablement are read from the environment before configuration-file loading. Other settings are resolved in this order:
 
 1. Library defaults.
 2. The main configuration file, selected by [OTEL_INJECTOR_CONFIG_FILE](#config_file).
@@ -17,7 +17,7 @@ Missing or unreadable configuration files and directories are skipped. Empty fil
 
 Later scalar values replace earlier values. The include/exclude pattern lists accumulate across repeated lines and across files. An environment override replaces the entire file-derived value, rather than appending to it. An unset environment variable leaves the file-derived value unchanged. Empty and invalid values follow the rules in each option's reference entry.
 
-Environment pre-trimming removes surrounding spaces, tabs, carriage returns (CR), and line feeds (LF) before type-specific parsing. Type-specific trimming, such as spaces and tabs around integers, applies independently.
+Environment pre-trimming removes surrounding spaces, tabs, carriage returns (CR), and line feeds (LF) before type-specific parsing. Type-specific trimming, such as spaces, tabs, CR, and LF around integers, applies independently.
 
 The agent paths are empty in the library defaults. Language packages can enable their agents by installing drop-in files, such as `java.conf`, in the configuration directory. Package-provided paths are not library defaults. To override a package drop-in, use a later drop-in filename or an environment variable.
 
@@ -81,7 +81,7 @@ An empty environment override such as `OTEL_INJECTOR_INCLUDE_PATHS=` clears the 
 
 ## Options
 
-Generated from `config/options.yaml` using `make generate-config`. Defaults below are library defaults, not package-provided settings.
+Generated from `options.yaml` using `make generate-config`. Defaults below are library defaults, not package-provided settings.
 
 - [`OTEL_INJECTOR_DISABLED`](#disabled)
 - [`OTEL_INJECTOR_LOG_LEVEL`](#log_level)
@@ -91,6 +91,7 @@ Generated from `config/options.yaml` using `make generate-config`. Defaults belo
 - [`dotnet_auto_instrumentation_minimum_dotnet_major_version` / `DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION`](#dotnet_minimum_major_version)
 - [`jvm_auto_instrumentation_agent_path` / `JVM_AUTO_INSTRUMENTATION_AGENT_PATH`](#jvm_agent_path)
 - [`jvm_auto_instrumentation_minimum_java_major_version` / `JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION`](#jvm_minimum_major_version)
+- [`OTEL_INJECTOR_JAVAAGENT_EXTENSIONS`](#javaagent_extensions)
 - [`nodejs_auto_instrumentation_agent_path` / `NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH`](#nodejs_agent_path)
 - [`python_auto_instrumentation_agent_path_prefix` / `PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`](#python_agent_path)
 - [`ruby_auto_instrumentation_agent_path_prefix` / `RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX`](#ruby_agent_path)
@@ -123,7 +124,7 @@ Disable the injector completely, including resource-attribute injection.
 
 **Empty value:** The injector remains enabled.
 
-Values `true` and `t` (case-insensitive), and `1` disable the injector. Every other value is false. Read before configuration files and process filtering. Unlike [auto_instrumentation_disabled](#auto_instrumentation_disabled), this prevents all injector environment modifications for the workload.
+Values `true` and `t` (case-insensitive), and `1` disable the injector. Every other value is false. Read before configuration files and process filtering. Unlike [auto_instrumentation_disabled](#auto_instrumentation_disabled), this prevents all injector environment modifications for the process.
 
 **Examples:**
 
@@ -143,11 +144,11 @@ Minimum severity of injector messages written to the application's stderr.
 - Environment pre-trim: false
 - Empty environment policy: `value`
 
-**Empty value:** Log an error and retain the default level.
+**Invalid value:** Log an error and retain the default level. Empty values are invalid.
 
 **Allowed values:** `debug`, `info`, `warn`, `error`, `none`.
 
-Values are case-insensitive. Invalid values log an error and retain the default level. Read before configuration files and process filtering.
+Values are case-insensitive. Read before configuration files and process filtering.
 
 **Examples:**
 
@@ -241,9 +242,9 @@ Minimum .NET major version eligible for auto-instrumentation.
 - Type-specific whitespace trimming: spaces, tabs, CR, and LF around the integer
 - Environment override: replaces file values when successfully parsed
 
-**Empty value:** Warn and retain the previously resolved value.
+**Invalid value:** Warn and retain the previously resolved value. Empty values are invalid.
 
-Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Invalid values warn and retain the previously resolved value. Applies when the application's `runtimeconfig.json` identifies a runtime version. Distributions supporting older .NET versions can lower this threshold.
+Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Applies when the application's `runtimeconfig.json` identifies a runtime version. Distributions supporting older .NET versions can lower this threshold.
 
 **Examples:**
 
@@ -294,15 +295,39 @@ Minimum Java major version eligible for auto-instrumentation.
 - Type-specific whitespace trimming: spaces, tabs, CR, and LF around the integer
 - Environment override: replaces file values when successfully parsed
 
-**Empty value:** Warn and retain the previously resolved value.
+**Invalid value:** Warn and retain the previously resolved value. Empty values are invalid.
 
-Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Invalid values warn and retain the previously resolved value. Set to `0` to skip Java version detection. If the Java version cannot be determined, injection is skipped. Distributions supporting older Java versions can lower this threshold.
+Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Set to `0` to skip Java version detection. If the Java version cannot be determined, injection is skipped. Distributions supporting older Java versions can lower this threshold.
 
 **Examples:**
 
 - `jvm_auto_instrumentation_minimum_java_major_version=8`
 - `jvm_auto_instrumentation_minimum_java_major_version=6`
 - `jvm_auto_instrumentation_minimum_java_major_version=0`
+
+[Back to options](#options)
+
+<a id="javaagent_extensions"></a>
+
+### `OTEL_INJECTOR_JAVAAGENT_EXTENSIONS`
+
+Java agent extension paths to append to OTEL_JAVAAGENT_EXTENSIONS.
+
+- Type: `string`
+- Default: `""`
+- Environment variable: `OTEL_INJECTOR_JAVAAGENT_EXTENSIONS`
+- Environment pre-trim: false
+- Empty environment policy: `value`
+
+**Empty value:** Leave OTEL_JAVAAGENT_EXTENSIONS unchanged.
+
+Comma-separated paths. Whitespace is preserved, empty entries are ignored, and paths are compared exactly to avoid duplicates. Existing entries remain first. If no new path is appended, the existing value is left unchanged.
+
+Applied after the [agent environment file](#agents_env_path), so its `OTEL_JAVAAGENT_EXTENSIONS` value is included in the merge. Requires a non-empty [JVM agent path](#jvm_agent_path) and JVM instrumentation not disabled by [auto_instrumentation_disabled](#auto_instrumentation_disabled). Unlike Java agent injection, this does not check agent JAR accessibility or the minimum Java version.
+
+**Examples:**
+
+- `OTEL_INJECTOR_JAVAAGENT_EXTENSIONS=/extensions/custom.jar,/extensions/another.jar`
 
 [Back to options](#options)
 
@@ -419,9 +444,9 @@ Runtimes for which auto-instrumentation is disabled.
 
 **Empty value:** Do not disable any runtime through this setting.
 
-**Runtime names:** `dotnet`, `jvm`, `nodejs`, `python`, `ruby`.
+**Invalid value:** Warn and ignore unknown runtime names.
 
-Use `*` alone to disable all runtimes, or a comma-separated list of runtime names. Names are case-sensitive. Unknown names warn and are ignored.
+Use `*` alone to disable all runtimes, or a comma-separated list of `dotnet`, `jvm`, `nodejs`, `python`, or `ruby`. Names are case-sensitive.
 
 For example, `auto_instrumentation_disabled=dotnet,python` leaves JVM, Node.js, and Ruby instrumentation eligible. An empty [agent path](#jvm_agent_path) also disables that runtime.
 
@@ -723,30 +748,3 @@ Service namespace to add to OTEL_RESOURCE_ATTRIBUTES.
 [Back to options](#options)
 
 <!-- END GENERATED CONFIGURATION -->
-
-## Configuration catalog
-
-Declare injector configuration options in [`config/options.yaml`](config/options.yaml), a top-level array. Each entry has a unique, stable `id` in lowercase snake_case, used for generated Zig declarations and documentation anchors. File keys and environment-variable names must also be unique. Runtime configuration still uses `injector.conf` and environment variables, not YAML.
-
-Each entry requires `id`, `type`, `default`, `description`, `empty_value`, and at least one `examples` value, plus `file.key`, `env.name`, or both. Optional `details` provides longer Markdown documentation, including interactions and links to other options using their `id` anchors.
-
-Supported types are `string`, `uint32`, `boolean`, `log_level`, `glob_list`, and `runtime_list`. Defaults must match the type. List defaults currently must be empty arrays. Adding a type requires updating the generator and `src/config_option.zig`.
-
-File-specific settings belong under `file`:
-
-- `key`: the configuration-file key.
-- `repeated`: `replace` (default) or `append`. Append is supported for `glob_list`.
-
-Environment-specific settings belong under `env`:
-
-- `name`: the environment-variable name.
-- `trim`: whether to apply environment pre-trimming (default `true`).
-- `empty`: `value` (default), which parses an empty value, or `default`, which uses the library default when the value is empty.
-
-Environment values replace file values when successfully parsed. Unset variables leave file values unchanged. Optional `resource_attribute` declares a mapping from an untrimmed environment-only string to an OpenTelemetry resource attribute.
-
-Environment-only options without `resource_attribute` require a handwritten loader and an entry in `manualEnvOptions` in [`tooling/configgen/main.go`](tooling/configgen/main.go). Add the loader before extending this allowlist. The generator rejects other environment-only options.
-
-Run `make generate-config` from the repository root with Go 1.23 or later to update the generated section of `configuration.md` and `src/config_generated.zig`. Markdown outside the `BEGIN GENERATED CONFIGURATION` and `END GENERATED CONFIGURATION` comment markers is handwritten and preserved by generation. Commit both files with the catalog changes. CI runs generation and fails if either output changes. Run generator tests with `cd tooling/configgen && go test ./...` and runtime tests with `make zig-unit-tests`.
-
-The generated module provides typed option accessors, defaults, configuration fields, and resource mappings. `Configuration.initEmpty` creates allocation-free empty storage with scalar defaults. All non-empty string/list storage and environment-map entries must belong to the allocator passed to `deinit`. File loading and environment overrides iterate over generated declarations. Keep complex injection behavior in handwritten Zig code, and document shared behavior outside the generated section. During review, check that new injector-owned settings use the catalog rather than ad hoc environment reads.

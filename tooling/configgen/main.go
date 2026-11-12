@@ -48,6 +48,7 @@ type option struct {
 	File              *fileOption `yaml:"file"`
 	Env               *envOption  `yaml:"env"`
 	EmptyValue        string      `yaml:"empty_value"`
+	InvalidValue      string      `yaml:"invalid_value"`
 	Details           string      `yaml:"details"`
 	Examples          []string    `yaml:"examples"`
 	ResourceAttribute string      `yaml:"resource_attribute"`
@@ -132,7 +133,7 @@ var fileKey = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 var envName = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 var reservedIDs = map[string]bool{"file_options": true, "resource_mappings": true, "support": true, "std": true, "deinit": true, "allocator": true, "self": true, "option": true, "it": true, "entry": true}
 var reservedFields = map[string]bool{"deinit": true, "all_auto_instrumentation_agents_env_vars": true}
-var manualEnvOptions = map[string]bool{"disabled": true, "log_level": true, "config_file": true, "config_dir": true, "resource_attributes": true}
+var manualEnvOptions = map[string]bool{"disabled": true, "log_level": true, "config_file": true, "config_dir": true, "resource_attributes": true, "javaagent_extensions": true}
 var zigIntegerType = regexp.MustCompile(`^[iu][0-9]+$`)
 var zigReservedNames = func() map[string]bool {
 	result := map[string]bool{}
@@ -209,8 +210,11 @@ func decode(data []byte) ([]option, error) {
 			return fail("documentation anchor collision")
 		}
 		names[o.ID] = true
-		if strings.TrimSpace(o.Description) == "" || strings.TrimSpace(o.EmptyValue) == "" || len(o.Examples) == 0 {
-			return fail("description, empty_value, and examples are required")
+		if strings.TrimSpace(o.Description) == "" || len(o.Examples) == 0 {
+			return fail("description and examples are required")
+		}
+		if strings.TrimSpace(o.EmptyValue) == "" && strings.TrimSpace(o.InvalidValue) == "" {
+			return fail("empty_value or invalid_value is required")
 		}
 		if o.ResourceAttribute != "" && (o.Type != stringType || o.File != nil || o.Env == nil || o.Trim() || o.Empty() != "value") {
 			return fail("resource_attribute requires an untrimmed environment-only string")
@@ -306,7 +310,7 @@ func inline(s string) string {
 
 func generateDocs(options []option) []byte {
 	var b strings.Builder
-	b.WriteString("## Options\n\nGenerated from `config/options.yaml` using `make generate-config`. Defaults below are library defaults, not package-provided settings.\n\n")
+	b.WriteString("## Options\n\nGenerated from `options.yaml` using `make generate-config`. Defaults below are library defaults, not package-provided settings.\n\n")
 	for _, o := range options {
 		fmt.Fprintf(&b, "- [%s](#%s)\n", o.Heading(), o.ID)
 	}
@@ -324,12 +328,14 @@ func generateDocs(options []option) []byte {
 				b.WriteString("- Environment override: replaces file values when successfully parsed\n")
 			}
 		}
-		fmt.Fprintf(&b, "\n**Empty value:** %s\n", o.EmptyValue)
+		if empty := strings.TrimSpace(o.EmptyValue); empty != "" {
+			fmt.Fprintf(&b, "\n**Empty value:** %s\n", empty)
+		}
+		if invalid := strings.TrimSpace(o.InvalidValue); invalid != "" {
+			fmt.Fprintf(&b, "\n**Invalid value:** %s\n", invalid)
+		}
 		if o.Type == logLevelType {
 			b.WriteString("\n**Allowed values:** `debug`, `info`, `warn`, `error`, `none`.\n")
-		}
-		if o.Type == runtimeListType {
-			b.WriteString("\n**Runtime names:** `dotnet`, `jvm`, `nodejs`, `python`, `ruby`.\n")
 		}
 		if o.Type == globListType {
 			b.WriteString("\nComma-separated glob patterns. Items are trimmed and empty items are ignored. `*` matches any sequence and `?` matches one character.\n")
@@ -371,7 +377,7 @@ func updateDocs(existing, generated []byte) ([]byte, error) {
 }
 
 func run(root string) error {
-	data, err := os.ReadFile(filepath.Join(root, "config/options.yaml"))
+	data, err := os.ReadFile(filepath.Join(root, "options.yaml"))
 	if err != nil {
 		return err
 	}

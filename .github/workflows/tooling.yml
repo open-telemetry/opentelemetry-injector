@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - "tooling/**"
-      - "config/**"
+      - "options.yaml"
       - "configuration.md"
       - "src/config_generated.zig"
       - "src/config_option.zig"
@@ -15,7 +15,7 @@ on:
   pull_request:
     paths:
       - "tooling/**"
-      - "config/**"
+      - "options.yaml"
       - "configuration.md"
       - "src/config_generated.zig"
       - "src/config_option.zig"

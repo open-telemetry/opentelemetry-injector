@@ -6,7 +6,7 @@
     name: OTEL_INJECTOR_DISABLED
     trim: false
   empty_value: The injector remains enabled.
-  details: Values `true` and `t` (case-insensitive), and `1` disable the injector. Every other value is false. Read before configuration files and process filtering. Unlike [auto_instrumentation_disabled](#auto_instrumentation_disabled), this prevents all injector environment modifications for the workload.
+  details: Values `true` and `t` (case-insensitive), and `1` disable the injector. Every other value is false. Read before configuration files and process filtering. Unlike [auto_instrumentation_disabled](#auto_instrumentation_disabled), this prevents all injector environment modifications for the process.
   examples: ["true"]
 
 - id: log_level
@@ -16,8 +16,8 @@
   env:
     name: OTEL_INJECTOR_LOG_LEVEL
     trim: false
-  empty_value: Log an error and retain the default level.
-  details: Values are case-insensitive. Invalid values log an error and retain the default level. Read before configuration files and process filtering.
+  invalid_value: Log an error and retain the default level. Empty values are invalid.
+  details: Values are case-insensitive. Read before configuration files and process filtering.
   examples: [debug, none]
 
 - id: config_file
@@ -63,8 +63,8 @@
   env:
     name: DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION
     trim: false
-  empty_value: Warn and retain the previously resolved value.
-  details: Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Invalid values warn and retain the previously resolved value. Applies when the application's `runtimeconfig.json` identifies a runtime version. Distributions supporting older .NET versions can lower this threshold.
+  invalid_value: Warn and retain the previously resolved value. Empty values are invalid.
+  details: Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Applies when the application's `runtimeconfig.json` identifies a runtime version. Distributions supporting older .NET versions can lower this threshold.
   examples: ["8", "6"]
 
 - id: jvm_agent_path
@@ -88,9 +88,23 @@
   env:
     name: JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION
     trim: false
-  empty_value: Warn and retain the previously resolved value.
-  details: Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Invalid values warn and retain the previously resolved value. Set to `0` to skip Java version detection. If the Java version cannot be determined, injection is skipped. Distributions supporting older Java versions can lower this threshold.
+  invalid_value: Warn and retain the previously resolved value. Empty values are invalid.
+  details: Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Set to `0` to skip Java version detection. If the Java version cannot be determined, injection is skipped. Distributions supporting older Java versions can lower this threshold.
   examples: ["8", "6", "0"]
+
+- id: javaagent_extensions
+  type: string
+  default: ""
+  description: Java agent extension paths to append to OTEL_JAVAAGENT_EXTENSIONS.
+  env:
+    name: OTEL_INJECTOR_JAVAAGENT_EXTENSIONS
+    trim: false
+  empty_value: Leave OTEL_JAVAAGENT_EXTENSIONS unchanged.
+  details: |
+    Comma-separated paths. Whitespace is preserved, empty entries are ignored, and paths are compared exactly to avoid duplicates. Existing entries remain first. If no new path is appended, the existing value is left unchanged.
+
+    Applied after the [agent environment file](#agents_env_path), so its `OTEL_JAVAAGENT_EXTENSIONS` value is included in the merge. Requires a non-empty [JVM agent path](#jvm_agent_path) and JVM instrumentation not disabled by [auto_instrumentation_disabled](#auto_instrumentation_disabled). Unlike Java agent injection, this does not check agent JAR accessibility or the minimum Java version.
+  examples: ["/extensions/custom.jar,/extensions/another.jar"]
 
 - id: nodejs_agent_path
   type: string
@@ -147,8 +161,9 @@
   env:
     name: OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED
   empty_value: Do not disable any runtime through this setting.
+  invalid_value: Warn and ignore unknown runtime names.
   details: |
-    Use `*` alone to disable all runtimes, or a comma-separated list of runtime names. Names are case-sensitive. Unknown names warn and are ignored.
+    Use `*` alone to disable all runtimes, or a comma-separated list of `dotnet`, `jvm`, `nodejs`, `python`, or `ruby`. Names are case-sensitive.
 
     For example, `auto_instrumentation_disabled=dotnet,python` leaves JVM, Node.js, and Ruby instrumentation eligible. An empty [agent path](#jvm_agent_path) also disables that runtime.
 

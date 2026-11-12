@@ -36,9 +36,10 @@ func TestDecodeValidation(t *testing.T) {
 		{"invalid id", strings.Replace(exampleCatalog, "id: agent_path", "id: AgentPath", 1), "invalid or duplicate id"},
 		{"duplicate id", exampleCatalog + strings.ReplaceAll(strings.Replace(exampleCatalog, "key: agent_path", "key: other_path", 1), "name: AGENT_PATH", "name: OTHER_PATH"), "invalid or duplicate id"},
 		{"unknown type", strings.Replace(exampleCatalog, "type: string", "type: path", 1), "unknown type"},
-		{"missing documentation", strings.Replace(exampleCatalog, "description: Path to an agent.", "description: ''", 1), "description, empty_value, and examples"},
-		{"missing empty behavior", strings.Replace(exampleCatalog, "empty_value: Disable the agent.", "empty_value: ''", 1), "description, empty_value, and examples"},
-		{"missing examples", strings.Replace(exampleCatalog, "examples: [/app/agent.jar]", "examples: []", 1), "description, empty_value, and examples"},
+		{"missing documentation", strings.Replace(exampleCatalog, "description: Path to an agent.", "description: ''", 1), "description and examples"},
+		{"missing empty behavior", strings.Replace(exampleCatalog, "empty_value: Disable the agent.", "empty_value: ''", 1), "empty_value or invalid_value"},
+		{"missing invalid behavior", strings.Replace(exampleCatalog, "empty_value: Disable the agent.", "invalid_value: ' '", 1), "empty_value or invalid_value"},
+		{"missing examples", strings.Replace(exampleCatalog, "examples: [/app/agent.jar]", "examples: []", 1), "description and examples"},
 		{"missing default", strings.Replace(exampleCatalog, "  default: \"\"\n", "", 1), "string default"},
 		{"wrong default type", strings.Replace(exampleCatalog, "default: \"\"", "default: 1", 1), "string default"},
 		{"uint32 overflow", strings.Replace(strings.Replace(exampleCatalog, "type: string", "type: uint32", 1), "default: \"\"", "default: 4294967296", 1), "integer in range"},
@@ -84,9 +85,6 @@ func TestZigNames(t *testing.T) {
 
 func TestGenerate(t *testing.T) {
 	root := t.TempDir()
-	if err := os.Mkdir(filepath.Join(root, "config"), 0755); err != nil {
-		t.Fatal(err)
-	}
 	catalog := exampleCatalog + `  details: |
     First paragraph.
 
@@ -100,8 +98,17 @@ func TestGenerate(t *testing.T) {
     trim: false
   empty_value: Remain enabled.
   examples: ["true"]
+- id: javaagent_extensions
+  type: string
+  default: ""
+  description: Java extension paths.
+  env:
+    name: OTEL_INJECTOR_JAVAAGENT_EXTENSIONS
+    trim: false
+  empty_value: Leave extensions unchanged.
+  examples: [/extensions/custom.jar]
 `
-	if err := os.WriteFile(filepath.Join(root, "config/options.yaml"), []byte(catalog), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "options.yaml"), []byte(catalog), 0644); err != nil {
 		t.Fatal(err)
 	}
 	document := "# Configuration\n\nHandwritten introduction.\n\n" + beginMarker + "\nstale content\n" + endMarker + "\n\nHandwritten conclusion.\n"
@@ -115,8 +122,8 @@ func TestGenerate(t *testing.T) {
 		path string
 		want []string
 	}{
-		{"src/config_generated.zig", []string{"pub const agent_path = support.Option(.string)", `.file_key = "agent_path"`, `.env_name = "AGENT_PATH"`, "agent_path: []u8,", "pub fn initEmpty(allocator: std.mem.Allocator) Configuration", `.agent_path = ""`, "pub const disabled = support.Option(.boolean)", ".trim = false"}},
-		{"configuration.md", []string{"# Configuration", "Handwritten introduction.", "Handwritten conclusion.", "## Options", "AGENT_PATH", "Path to an agent.", "Disable the agent.", "First paragraph.\n\nSecond paragraph.", "agent_path=/app/agent.jar"}},
+		{"src/config_generated.zig", []string{"pub const agent_path = support.Option(.string)", `.file_key = "agent_path"`, `.env_name = "AGENT_PATH"`, "agent_path: []u8,", "pub fn initEmpty(allocator: std.mem.Allocator) Configuration", `.agent_path = ""`, "pub const disabled = support.Option(.boolean)", ".trim = false", "from options.yaml", "pub const javaagent_extensions = support.Option(.string)", `.env_name = "OTEL_INJECTOR_JAVAAGENT_EXTENSIONS"`}},
+		{"configuration.md", []string{"# Configuration", "Handwritten introduction.", "Handwritten conclusion.", "## Options", "AGENT_PATH", "Path to an agent.", "Disable the agent.", "First paragraph.\n\nSecond paragraph.", "agent_path=/app/agent.jar", "Generated from `options.yaml`", "OTEL_INJECTOR_JAVAAGENT_EXTENSIONS=/extensions/custom.jar"}},
 	} {
 		path := filepath.Join(root, output.path)
 		first, err := os.ReadFile(path)
@@ -152,6 +159,35 @@ func TestDocsNavigation(t *testing.T) {
 		if !strings.Contains(docs, want) {
 			t.Errorf("documentation missing %q", want)
 		}
+	}
+}
+
+func TestDocsValueBehavior(t *testing.T) {
+	for _, tt := range []struct {
+		name, fields   string
+		empty, invalid bool
+	}{
+		{"empty only", "empty_value: Clear the setting.", true, false},
+		{"invalid only", "invalid_value: Keep the previous value.", false, true},
+		{"both", "empty_value: Clear the setting.\n  invalid_value: Keep the previous value.", true, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			catalog := strings.Replace(exampleCatalog, "empty_value: Disable the agent.", tt.fields, 1)
+			options, err := decode([]byte(catalog))
+			if err != nil {
+				t.Fatal(err)
+			}
+			docs := string(generateDocs(options))
+			if got := strings.Contains(docs, "**Empty value:** Clear the setting."); got != tt.empty {
+				t.Errorf("empty-value documentation present = %t, want %t", got, tt.empty)
+			}
+			if got := strings.Contains(docs, "**Invalid value:** Keep the previous value."); got != tt.invalid {
+				t.Errorf("invalid-value documentation present = %t, want %t", got, tt.invalid)
+			}
+			if strings.Contains(docs, "**Empty value:** \n") || strings.Contains(docs, "**Invalid value:** \n") {
+				t.Error("documentation contains an empty behavior section")
+			}
+		})
 	}
 }
 

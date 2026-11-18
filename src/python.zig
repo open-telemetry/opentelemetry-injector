@@ -50,45 +50,41 @@ fn doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue(
         return null;
     }
 
-    if (libc_info == null) {
+    const info = libc_info orelse {
         print.printError("invariant violated: libc info has not been set prior to calling doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue().", .{});
         return null;
-    }
-    if (libc_info.?.flavor == .UNKNOWN) {
-        print.printError("Cannot determine libc flavor", .{});
+    };
+    // Fail-safe on any libc flavor we don't have a directory suffix for (.UNKNOWN, or a variant added in the future).
+    const libc_flavor_suffix =
+        switch (info.flavor) {
+            .GNU => "glibc",
+            .MUSL => "musl",
+            else => {
+                print.printError("Cannot determine libc flavor", .{});
+                return null;
+            },
+        };
+    const python_auto_instrumentation_agent_path_optional =
+        determinePythonpathWithLibcSuffix(
+            gpa,
+            python_auto_instrumentation_agent_path_prefix,
+            libc_flavor_suffix,
+        );
+    if (python_auto_instrumentation_agent_path_optional) |python_auto_instrumentation_agent_path| {
+        // Check the existence of the Python directory, stand down if it does not exist.
+        std.Io.Dir.cwd().access(io, python_auto_instrumentation_agent_path, .{}) catch |err| {
+            defer gpa.free(python_auto_instrumentation_agent_path);
+            print.printError("Skipping the injection of the Python OpenTelemetry auto-instrumentation in \"{s}\" because of an issue accessing the directory at \"{s}\": {}", .{ pythonpath_env_var_name, python_auto_instrumentation_agent_path, err });
+            return null;
+        };
+        return getModifiedPythonpathValue(
+            gpa,
+            original_value_optional,
+            python_auto_instrumentation_agent_path,
+        );
+    } else {
         return null;
     }
-    if (libc_info) |info| {
-        const libc_flavor_suffix =
-            switch (info.flavor) {
-                .GNU => "glibc",
-                .MUSL => "musl",
-                else => unreachable,
-            };
-        const python_auto_instrumentation_agent_path_optional =
-            determinePythonpathWithLibcSuffix(
-                gpa,
-                python_auto_instrumentation_agent_path_prefix,
-                libc_flavor_suffix,
-            );
-        if (python_auto_instrumentation_agent_path_optional) |python_auto_instrumentation_agent_path| {
-            // Check the existence of the Python directory, stand down if it does not exist.
-            std.Io.Dir.cwd().access(io, python_auto_instrumentation_agent_path, .{}) catch |err| {
-                defer gpa.free(python_auto_instrumentation_agent_path);
-                print.printError("Skipping the injection of the Python OpenTelemetry auto-instrumentation in \"{s}\" because of an issue accessing the directory at \"{s}\": {}", .{ pythonpath_env_var_name, python_auto_instrumentation_agent_path, err });
-                return null;
-            };
-            return getModifiedPythonpathValue(
-                gpa,
-                original_value_optional,
-                python_auto_instrumentation_agent_path,
-            );
-        } else {
-            return null;
-        }
-    }
-
-    unreachable;
 }
 
 test "doCheckPythonAutoInstrumentationAgentAndGetModifiedPythonpathValue: should return null value if the libc flavor has not been set" {

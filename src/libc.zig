@@ -46,19 +46,23 @@ pub const DlsymLookupFn = *const fn (LibCNameAndFlavor, usize, usize) @typeInfo(
 ///    have to support the infinite number of corner cases of the various libc flavors and versions.
 /// 3. Use the loaded libc's `dlsym` function to look up the symbols we need (getenv, setenv).
 pub fn getLibCInfo(io: std.Io, gpa: std.mem.Allocator) !types.LibCInfo {
-    const libc_name_and_flavor = try getLibCNameAndFlavor(io, gpa, proc_self_exe_path);
+    return doGetLibCInfo(io, gpa, proc_self_exe_path, proc_self_maps_path);
+}
+
+fn doGetLibCInfo(io: std.Io, gpa: std.mem.Allocator, self_exe_path: []const u8, self_maps_path: []const u8) !types.LibCInfo {
+    const libc_name_and_flavor = try getLibCNameAndFlavor(io, gpa, self_exe_path);
     defer if (libc_name_and_flavor.flavor != .UNKNOWN) gpa.free(libc_name_and_flavor.name);
     const libc_info = getLibCMemoryLocations(
         io,
-        proc_self_maps_path,
+        self_maps_path,
         libc_name_and_flavor,
         tryToFindSymbolsInMemoryRange,
     ) catch |err| {
         if (err == error.CannotFindLibcMemoryRange and print.isDebug()) {
             // The error will be properly logged in the code calling getLibCInfo, but for this specific error, let's
             // include a dump of /proc/self/maps in the log output if the log level is debug.
-            print.printDebug("printing content of {s} below as debugging information", .{proc_self_maps_path});
-            logProcSelfMaps(io, proc_self_maps_path) catch {
+            print.printDebug("printing content of {s} below as debugging information", .{self_maps_path});
+            logProcSelfMaps(io, self_maps_path) catch {
                 // ignore errors from logProcSelfMaps deliberately
             };
         }
@@ -87,7 +91,13 @@ fn getLibCNameAndFlavor(io: std.Io, gpa: std.mem.Allocator, self_exe_path: []con
             print.printError("Cannot open \"{s}\": {}", .{ self_exe_path, err });
             return UnknownLibC;
         };
-    defer self_exe_file.close(io);
+    // Do not use self_exe_file.close(io): std treats a failing close(2) as a bug and panics on it (always in Zig
+    // 0.15, in debug builds in Zig 0.17). Under QEMU user-mode emulation, the file descriptor for /proc/self/exe can
+    // fail both read and close with EBADF, and since the injector runs in every process via /etc/ld.so.preload, that
+    // panic aborted every process on the host, see
+    // https://github.com/open-telemetry/opentelemetry-injector/issues/465. There is nothing useful to do if closing
+    // fails, so we ignore the result.
+    defer _ = std.posix.system.close(self_exe_file.handle);
 
     var reader_buf: [reader_buffer_len]u8 = undefined;
     var reader = self_exe_file.reader(io, &reader_buf);
@@ -252,6 +262,33 @@ test "getLibCNameAndFlavor: should return libc flavor unknown when file is not a
     const lib_c = try getLibCNameAndFlavor(testing.io, allocator, absolute_path_to_binary);
     defer allocator.free(lib_c.name);
     try testing.expectEqual(.UNKNOWN, lib_c.flavor);
+}
+
+test "getLibCNameAndFlavor: should return libc flavor unknown when the file can be opened but not read" {
+    // Opening a directory read-only succeeds, but reading from it fails (EISDIR). This mimics /proc/self/exe under
+    // QEMU user-mode emulation, see https://github.com/open-telemetry/opentelemetry-injector/issues/465.
+    const allocator = std.testing.allocator;
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
+    defer allocator.free(cwd_path);
+    const absolute_path_to_dir = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/libc" });
+    defer allocator.free(absolute_path_to_dir);
+    const lib_c = try getLibCNameAndFlavor(testing.io, allocator, absolute_path_to_dir);
+    defer allocator.free(lib_c.name);
+    try testing.expectEqual(.UNKNOWN, lib_c.flavor);
+}
+
+test "doGetLibCInfo: should return UnknownLibCFlavor when the executable can be opened but not read" {
+    // initEnviron logs error.UnknownLibCFlavor and skips the injection, see
+    // https://github.com/open-telemetry/opentelemetry-injector/issues/465.
+    const allocator = std.testing.allocator;
+    const cwd_path = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
+    defer allocator.free(cwd_path);
+    const absolute_path_to_dir = try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/libc" });
+    defer allocator.free(absolute_path_to_dir);
+    try testing.expectError(
+        error.UnknownLibCFlavor,
+        doGetLibCInfo(testing.io, allocator, absolute_path_to_dir, "/does/not/exist"),
+    );
 }
 
 test "getLibCNameAndFlavor: should identify glibc libc flavor (x86_64)" {

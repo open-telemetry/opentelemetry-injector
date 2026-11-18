@@ -29,6 +29,14 @@ const init_section_name = switch (builtin.target.os.tag) {
     },
 };
 
+pub const panic = std.debug.FullPanic(injectorPanic);
+
+fn injectorPanic(msg: []const u8, first_trace_addr: ?usize) noreturn {
+    @branchHint(.cold);
+    print.printPanic(msg);
+    std.debug.defaultPanic(msg, first_trace_addr orelse @returnAddress());
+}
+
 export const init_array: [1]*const fn () callconv(.c) void linksection(init_section_name) = .{&initEnviron};
 
 fn initEnviron() callconv(.c) void {

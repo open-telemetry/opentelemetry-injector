@@ -121,11 +121,11 @@ fn doGetDotnetValues(
         return null;
     }
 
-    if (libc_info == null) {
+    const info = libc_info orelse {
         print.printError("invariant violated: libc info has not been set prior to calling getDotnetValues().", .{});
         return null;
-    }
-    if (libc_info.?.flavor == .UNKNOWN) {
+    };
+    if (info.flavor == .UNKNOWN) {
         print.printError("Cannot determine libc flavor", .{});
         return null;
     }
@@ -142,68 +142,64 @@ fn doGetDotnetValues(
         return null;
     }
 
-    if (libc_info) |info| {
-        var dotnet_values = determineDotnetValues(
-            gpa,
-            dotnet_path_prefix,
-            info.flavor,
-            builtin.cpu.arch,
-        ) catch |err| {
-            print.printError("Cannot determine .NET environment variables: {}", .{err});
+    var dotnet_values = determineDotnetValues(
+        gpa,
+        dotnet_path_prefix,
+        info.flavor,
+        builtin.cpu.arch,
+    ) catch |err| {
+        print.printError("Cannot determine .NET environment variables: {}", .{err});
+        cached_dotnet_values = .{
+            .values = null,
+            // do not try to determine the .NET values again
+            .done = true,
+        };
+        return null;
+    };
+
+    const paths_to_check = [_][:0]const u8{
+        dotnet_values.coreclr_profiler_path,
+        dotnet_values.otel_auto_home,
+        dotnet_values.startup_hooks,
+    };
+    for (paths_to_check) |p| {
+        std.Io.Dir.cwd().access(io, p, .{}) catch |err| {
+            print.printError("Skipping injection of the .NET OpenTelemetry instrumentation because of an issue accessing {s}: {}", .{ p, err });
             cached_dotnet_values = .{
                 .values = null,
                 // do not try to determine the .NET values again
                 .done = true,
             };
+            // free strings allocated in determineDotnetValues
+            dotnet_values.freeAll(gpa);
             return null;
         };
-
-        const paths_to_check = [_][:0]const u8{
-            dotnet_values.coreclr_profiler_path,
-            dotnet_values.otel_auto_home,
-            dotnet_values.startup_hooks,
-        };
-        for (paths_to_check) |p| {
-            std.Io.Dir.cwd().access(io, p, .{}) catch |err| {
-                print.printError("Skipping injection of the .NET OpenTelemetry instrumentation because of an issue accessing {s}: {}", .{ p, err });
-                cached_dotnet_values = .{
-                    .values = null,
-                    // do not try to determine the .NET values again
-                    .done = true,
-                };
-                // free strings allocated in determineDotnetValues
-                dotnet_values.freeAll(gpa);
-                return null;
-            };
-        }
-
-        // DOTNET_ADDITIONAL_DEPS is optional: only add the env var if the additional deps directory exists, do not skip .NET
-        // injection if it does not exist.
-        if (dotnet_values.additional_deps) |additional_deps_path| {
-            std.Io.Dir.cwd().access(io, additional_deps_path, .{}) catch |err| {
-                print.printDebug("Not setting DOTNET_ADDITIONAL_DEPS because of an issue accessing {s}: {}", .{ additional_deps_path, err });
-                gpa.free(additional_deps_path);
-                dotnet_values.additional_deps = null;
-            };
-        }
-        // DOTNET_SHARED_STORE is optional: only add the env var if the additional deps directory exists, do not skip .NET
-        // injection if it does not exist.
-        if (dotnet_values.shared_store) |shared_store_path| {
-            std.Io.Dir.cwd().access(io, shared_store_path, .{}) catch |err| {
-                print.printDebug("Not setting DOTNET_SHARED_STORE because of an issue accessing {s}: {}", .{ shared_store_path, err });
-                gpa.free(shared_store_path);
-                dotnet_values.shared_store = null;
-            };
-        }
-
-        cached_dotnet_values = .{
-            .values = dotnet_values,
-            .done = true,
-        };
-        return dotnet_values;
     }
 
-    unreachable;
+    // DOTNET_ADDITIONAL_DEPS is optional: only add the env var if the additional deps directory exists, do not skip .NET
+    // injection if it does not exist.
+    if (dotnet_values.additional_deps) |additional_deps_path| {
+        std.Io.Dir.cwd().access(io, additional_deps_path, .{}) catch |err| {
+            print.printDebug("Not setting DOTNET_ADDITIONAL_DEPS because of an issue accessing {s}: {}", .{ additional_deps_path, err });
+            gpa.free(additional_deps_path);
+            dotnet_values.additional_deps = null;
+        };
+    }
+    // DOTNET_SHARED_STORE is optional: only add the env var if the additional deps directory exists, do not skip .NET
+    // injection if it does not exist.
+    if (dotnet_values.shared_store) |shared_store_path| {
+        std.Io.Dir.cwd().access(io, shared_store_path, .{}) catch |err| {
+            print.printDebug("Not setting DOTNET_SHARED_STORE because of an issue accessing {s}: {}", .{ shared_store_path, err });
+            gpa.free(shared_store_path);
+            dotnet_values.shared_store = null;
+        };
+    }
+
+    cached_dotnet_values = .{
+        .values = dotnet_values,
+        .done = true,
+    };
+    return dotnet_values;
 }
 
 fn shouldInjectDotnet(io: std.Io, allocator: std.mem.Allocator, minimum_dotnet_major_version: u32) bool {

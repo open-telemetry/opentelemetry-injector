@@ -40,6 +40,11 @@ pub fn printError(comptime fmt: []const u8, args: anytype) void {
     }
 }
 
+/// Prints the message regardless of the log level, for panics that are about to abort the process.
+pub fn printPanic(msg: []const u8) void {
+    _printMessage("panic: {s}", .{msg});
+}
+
 fn _printMessage(comptime fmt: []const u8, args: anytype) void {
     std.debug.print(log_prefix ++ "[{d:>7}] " ++ fmt ++ "\n", .{proc_self_environ_values.getPid()} ++ args);
 }

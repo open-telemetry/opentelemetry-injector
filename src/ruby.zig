@@ -92,7 +92,7 @@ pub fn getRubyAdditionalGemPath(
 /// Resolves <prefix>/<libc flavor> and returns it, or null if disabled, unconfigured, the prefix
 /// contains whitespace, or the libc flavor is unknown.
 fn determineLibcDir(gpa: std.mem.Allocator, configuration: config.InjectorConfiguration) ?[:0]u8 {
-    if (configuration.ruby_instrumentation_disabled) {
+    if (configuration.auto_instrumentation_disabled.ruby) {
         print.printInfo("Skipping the injection of the Ruby OpenTelemetry auto-instrumentation because it has been explicitly disabled.", .{});
         return null;
     }
@@ -193,7 +193,8 @@ test "checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue: returns null 
     defer _resetState();
 
     libc_info = test_util.testLibcInfo(.GNU);
-    const configuration = testConfiguration("/some/valid/path", true);
+    var configuration = try testConfiguration("/some/valid/path", true);
+    defer configuration.deinit(allocator);
     const result = checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(testing.io, allocator, null, configuration);
     try test_util.expectWithMessage(result == null, "result == null");
 }
@@ -204,7 +205,8 @@ test "checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue: returns null 
     defer _resetState();
 
     libc_info = test_util.testLibcInfo(.GNU);
-    const configuration = testConfiguration("", false);
+    var configuration = try testConfiguration("", false);
+    defer configuration.deinit(allocator);
     const result = checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(testing.io, allocator, null, configuration);
     try test_util.expectWithMessage(result == null, "result == null");
 }
@@ -215,7 +217,8 @@ test "checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue: returns null 
     defer _resetState();
 
     libc_info = test_util.testLibcInfo(.UNKNOWN);
-    const configuration = testConfiguration("/some/valid/path", false);
+    var configuration = try testConfiguration("/some/valid/path", false);
+    defer configuration.deinit(allocator);
     const result = checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(testing.io, allocator, null, configuration);
     try test_util.expectWithMessage(result == null, "result == null");
 }
@@ -226,7 +229,8 @@ test "checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue: returns null 
     defer _resetState();
 
     libc_info = test_util.testLibcInfo(.GNU);
-    const configuration = testConfiguration("/invalid/path", false);
+    var configuration = try testConfiguration("/invalid/path", false);
+    defer configuration.deinit(allocator);
     const result = checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(testing.io, allocator, null, configuration);
     try test_util.expectWithMessage(result == null, "result == null");
 }
@@ -238,34 +242,40 @@ test "checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue: returns null 
 
     libc_info = test_util.testLibcInfo(.GNU);
     // Rejected because a space in the prefix would let Ruby's RUBYOPT tokenizer parse additional switches.
-    const configuration_space = testConfiguration("/opt/OpenTelemetry Injector/ruby", false);
+    var configuration_space = try testConfiguration("/opt/OpenTelemetry Injector/ruby", false);
+    defer configuration_space.deinit(allocator);
     try test_util.expectWithMessage(
         checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(testing.io, allocator, null, configuration_space) == null,
         "space in prefix -> null",
     );
     // Tab, newline, and carriage return also break RUBYOPT tokenization.
-    const configuration_tab = testConfiguration("/opt/otel\tinjector/ruby", false);
+    var configuration_tab = try testConfiguration("/opt/otel\tinjector/ruby", false);
+    defer configuration_tab.deinit(allocator);
     try test_util.expectWithMessage(
         checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(testing.io, allocator, null, configuration_tab) == null,
         "tab in prefix -> null",
     );
-    const configuration_newline = testConfiguration("/opt/otel\ninjector/ruby", false);
+    var configuration_newline = try testConfiguration("/opt/otel\ninjector/ruby", false);
+    defer configuration_newline.deinit(allocator);
     try test_util.expectWithMessage(
         checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(testing.io, allocator, null, configuration_newline) == null,
         "newline in prefix -> null",
     );
-    const configuration_cr = testConfiguration("/opt/otel\rinjector/ruby", false);
+    var configuration_cr = try testConfiguration("/opt/otel\rinjector/ruby", false);
+    defer configuration_cr.deinit(allocator);
     try test_util.expectWithMessage(
         checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(testing.io, allocator, null, configuration_cr) == null,
         "cr in prefix -> null",
     );
     // Vertical tab and form feed round out ASCII whitespace.
-    const configuration_vt = testConfiguration("/opt/otel\x0binjector/ruby", false);
+    var configuration_vt = try testConfiguration("/opt/otel\x0binjector/ruby", false);
+    defer configuration_vt.deinit(allocator);
     try test_util.expectWithMessage(
         checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(testing.io, allocator, null, configuration_vt) == null,
         "vertical tab in prefix -> null",
     );
-    const configuration_ff = testConfiguration("/opt/otel\x0cinjector/ruby", false);
+    var configuration_ff = try testConfiguration("/opt/otel\x0cinjector/ruby", false);
+    defer configuration_ff.deinit(allocator);
     try test_util.expectWithMessage(
         checkRubyAutoInstrumentationAgentAndGetModifiedRubyoptValue(testing.io, allocator, null, configuration_ff) == null,
         "form feed in prefix -> null",
@@ -285,7 +295,8 @@ test "getRubyAdditionalGemPath: returns <prefix>/glibc for GNU libc" {
     defer allocator.free(prefix);
 
     libc_info = test_util.testLibcInfo(.GNU);
-    const configuration = testConfiguration(prefix, false);
+    var configuration = try testConfiguration(prefix, false);
+    defer configuration.deinit(allocator);
     const result = getRubyAdditionalGemPath(testing.io, allocator, configuration);
     defer if (result) |v| allocator.free(v);
     const expected = try std.fmt.allocPrint(allocator, "{s}/glibc", .{prefix});
@@ -306,7 +317,8 @@ test "getRubyAdditionalGemPath: returns <prefix>/musl for musl libc" {
     defer allocator.free(prefix);
 
     libc_info = test_util.testLibcInfo(.MUSL);
-    const configuration = testConfiguration(prefix, false);
+    var configuration = try testConfiguration(prefix, false);
+    defer configuration.deinit(allocator);
     const result = getRubyAdditionalGemPath(testing.io, allocator, configuration);
     defer if (result) |v| allocator.free(v);
     const expected = try std.fmt.allocPrint(allocator, "{s}/musl", .{prefix});
@@ -320,7 +332,8 @@ test "getRubyAdditionalGemPath: returns null if entry file cannot be accessed" {
     defer _resetState();
 
     libc_info = test_util.testLibcInfo(.GNU);
-    const configuration = testConfiguration("/invalid/path", false);
+    var configuration = try testConfiguration("/invalid/path", false);
+    defer configuration.deinit(allocator);
     const result = getRubyAdditionalGemPath(testing.io, allocator, configuration);
     try test_util.expectWithMessage(result == null, "result == null");
 }
@@ -384,27 +397,11 @@ test "getModifiedRubyoptValue: prepends when RUBYOPT contains our path as a subs
 }
 
 /// Builds a minimal InjectorConfiguration for unit tests. Only the Ruby-relevant fields are meaningful.
-fn testConfiguration(path_prefix: []const u8, disabled: bool) config.InjectorConfiguration {
-    return config.InjectorConfiguration{
-        .dotnet_auto_instrumentation_agent_path_prefix = @constCast(""),
-        .jvm_auto_instrumentation_agent_path = @constCast(""),
-        .nodejs_auto_instrumentation_agent_path = @constCast(""),
-        .python_auto_instrumentation_agent_path_prefix = @constCast(""),
-        .ruby_auto_instrumentation_agent_path_prefix = @constCast(path_prefix),
-        .all_auto_instrumentation_agents_env_path = @constCast(""),
-        .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(testing.allocator),
-        .include_paths = &.{},
-        .exclude_paths = &.{},
-        .include_args = &.{},
-        .exclude_args = &.{},
-        .dotnet_auto_instrumentation_minimum_dotnet_major_version = config.default_dotnet_auto_instrumentation_minimum_dotnet_major_version,
-        .jvm_auto_instrumentation_minimum_java_major_version = config.default_jvm_auto_instrumentation_minimum_java_major_version,
-        .dotnet_instrumentation_disabled = false,
-        .jvm_instrumentation_disabled = false,
-        .nodejs_instrumentation_disabled = false,
-        .python_instrumentation_disabled = false,
-        .ruby_instrumentation_disabled = disabled,
-    };
+fn testConfiguration(path_prefix: []const u8, disabled: bool) std.mem.Allocator.Error!config.InjectorConfiguration {
+    var configuration = config.InjectorConfiguration.initEmpty(testing.allocator);
+    configuration.ruby_auto_instrumentation_agent_path_prefix = try testing.allocator.dupe(u8, path_prefix);
+    configuration.auto_instrumentation_disabled.ruby = disabled;
+    return configuration;
 }
 
 /// Only used for unit tests.

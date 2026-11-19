@@ -87,6 +87,10 @@ check-zig-installed:
 	  exit 1; \
 	fi
 
+.PHONY: generate-config
+generate-config:
+	cd tooling/configgen && go run . ../..
+
 .PHONY: zig-build
 zig-build: check-zig-installed
 	@mkdir -p so

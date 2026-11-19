@@ -104,7 +104,7 @@ pub fn getDotnetValues(
         io,
         gpa,
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
-        configuration.dotnet_instrumentation_disabled,
+        configuration.auto_instrumentation_disabled.dotnet,
         configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version,
     );
 }

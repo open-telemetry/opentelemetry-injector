@@ -6,144 +6,32 @@ const build_options = @import("build_options");
 
 const print = @import("print.zig");
 const test_util = @import("test_util.zig");
-const patterns_util = @import("patterns_util.zig");
+const options = @import("config_generated.zig");
 const proc_self_environ_parser = @import("proc_self_environ_parser.zig");
 
 const testing = std.testing;
 
-const default_config_file_path = "/etc/opentelemetry/injector/injector.conf";
-const config_file_path_env_var = "OTEL_INJECTOR_CONFIG_FILE";
 const max_line_length = 8192;
 const empty_string = @constCast("");
 const allowed_env_var_prefixes = build_options.allowed_env_var_prefixes;
 
-// Agent paths are empty by default; they are enabled by installing conf.d drop-in files from the
-// respective language packages (e.g., opentelemetry-java-autoinstrumentation installs java.conf).
-const default_all_auto_instrumentation_agents_env_path = "/etc/opentelemetry/injector/default_env.conf";
-const default_config_dir_path = "/etc/opentelemetry/injector/conf.d";
-const config_dir_path_env_var = "OTEL_INJECTOR_CONFIG_DIR";
-
-const dotnet_path_prefix_key = "dotnet_auto_instrumentation_agent_path_prefix";
-const dotnet_minimum_dotnet_major_version_key = "dotnet_auto_instrumentation_minimum_dotnet_major_version";
-const jvm_path_key = "jvm_auto_instrumentation_agent_path";
-const jvm_minimum_java_major_version_key = "jvm_auto_instrumentation_minimum_java_major_version";
-const nodejs_path_key = "nodejs_auto_instrumentation_agent_path";
-const python_path_prefix_key = "python_auto_instrumentation_agent_path_prefix";
-const ruby_path_prefix_key = "ruby_auto_instrumentation_agent_path_prefix";
-
-const all_agents_env_path_key = "all_auto_instrumentation_agents_env_path";
-const auto_instrumentation_disabled_key = "auto_instrumentation_disabled";
-
-const dotnet_agent_path_prefix_env_var = "DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
-const dotnet_minimum_dotnet_major_version_env_var = "DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION";
-const jvm_agent_path_env_var = "JVM_AUTO_INSTRUMENTATION_AGENT_PATH";
-const jvm_minimum_java_major_version_env_var = "JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION";
-const nodejs_agent_path_env_var = "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH";
-const python_agent_path_prefix_env_var = "PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
-const ruby_agent_path_prefix_env_var = "RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX";
-
-/// Configuration options for choosing what to instrument or exclude from instrumentation
-const include_paths_key = "include_paths";
-const exclude_paths_key = "exclude_paths";
-
-const include_paths_env_var = "OTEL_INJECTOR_INCLUDE_PATHS";
-const exclude_paths_env_var = "OTEL_INJECTOR_EXCLUDE_PATHS";
-
-const include_args_key = "include_with_arguments";
-const exclude_args_key = "exclude_with_arguments";
-
-const include_args_env_var = "OTEL_INJECTOR_INCLUDE_WITH_ARGUMENTS";
-const exclude_args_env_var = "OTEL_INJECTOR_EXCLUDE_WITH_ARGUMENTS";
-
-/// Configuration option to disable parts of the injector
-const auto_instrumentation_disabled_env_var = "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED";
-
-pub const InjectorConfiguration = struct {
-    dotnet_auto_instrumentation_agent_path_prefix: []u8,
-    jvm_auto_instrumentation_agent_path: []u8,
-    nodejs_auto_instrumentation_agent_path: []u8,
-    python_auto_instrumentation_agent_path_prefix: []u8,
-    ruby_auto_instrumentation_agent_path_prefix: []u8,
-    all_auto_instrumentation_agents_env_path: []u8,
-    all_auto_instrumentation_agents_env_vars: std.StringHashMap([]u8),
-    include_paths: [][]const u8,
-    exclude_paths: [][]const u8,
-    include_args: [][]const u8,
-    exclude_args: [][]const u8,
-    dotnet_auto_instrumentation_minimum_dotnet_major_version: u32,
-    jvm_auto_instrumentation_minimum_java_major_version: u32,
-    dotnet_instrumentation_disabled: bool,
-    jvm_instrumentation_disabled: bool,
-    nodejs_instrumentation_disabled: bool,
-    python_instrumentation_disabled: bool,
-    ruby_instrumentation_disabled: bool,
-
-    pub fn deinit(self: *InjectorConfiguration, allocator: std.mem.Allocator) void {
-        allocator.free(self.dotnet_auto_instrumentation_agent_path_prefix);
-        allocator.free(self.jvm_auto_instrumentation_agent_path);
-        allocator.free(self.nodejs_auto_instrumentation_agent_path);
-        allocator.free(self.python_auto_instrumentation_agent_path_prefix);
-        allocator.free(self.ruby_auto_instrumentation_agent_path_prefix);
-        allocator.free(self.all_auto_instrumentation_agents_env_path);
-        var it = self.all_auto_instrumentation_agents_env_vars.iterator();
-        while (it.next()) |entry| {
-            allocator.free(entry.key_ptr.*);
-            allocator.free(entry.value_ptr.*);
-        }
-        self.all_auto_instrumentation_agents_env_vars.deinit();
-        deinitStringArray(allocator, self.include_paths);
-        deinitStringArray(allocator, self.exclude_paths);
-        deinitStringArray(allocator, self.include_args);
-        deinitStringArray(allocator, self.exclude_args);
-    }
-};
+pub const InjectorConfiguration = options.Configuration;
+pub const default_jvm_auto_instrumentation_minimum_java_major_version = options.jvm_minimum_major_version.default_value;
 
 const ConfigApplier = fn (gpa: std.mem.Allocator, key: []const u8, value: []u8, file_path: []const u8, configuration: *InjectorConfiguration) void;
 
-const default_dotnet_auto_instrumentation_agent_path_prefix = "";
-
-// The upstream OpenTelemetry .NET auto-instrumentation supports .NET 8 or later. Distributions of the .NET
-// auto-instrumentation that support older .NET versions can lower this threshold via the configuration file key
-// dotnet_auto_instrumentation_minimum_dotnet_major_version or the corresponding environment variable.
-pub const default_dotnet_auto_instrumentation_minimum_dotnet_major_version: u32 = 8;
-pub const default_jvm_auto_instrumentation_minimum_java_major_version: u32 = 8;
-const default_jvm_auto_instrumentation_agent_path = "";
-const default_nodejs_auto_instrumentation_agent_path = "";
-
-// Python auto-instrumentation is opt-in for now, hence the default value for the Python path is the empty string --
-// an empty path effectively disables auto-instrumentation for the runtime in question.
-const default_python_auto_instrumentation_agent_path = "";
-
-// Ruby auto-instrumentation defaults to the empty string (disabled). It is enabled by installing the
-// conf.d drop-in file from the Ruby auto-instrumentation package (ruby.conf), which sets the path prefix.
-const default_ruby_auto_instrumentation_agent_path = "";
-
 var cached_configuration_optional: ?InjectorConfiguration = null;
 
-/// Checks whether the configuration has already been read and reads it if necessary. The configuration will only be
-/// read once per process and the result will be cached for subsequent calls.
-///
-/// The configuration will be read from the path denoted by the environment variable OTEL_INJECTOR_CONFIG_FILE, or from
-/// the default location /etc/opentelemetry/injector/injector.conf if this environment variable is unset or empty.
-/// If the file does not exist or cannot be opened, readConfiguration continues with default values.
-///
-/// After reading the configuration file, the configuration will be merged with values read from environment variables
-/// (DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX, JVM_AUTO_INSTRUMENTATION_AGENT_PATH, etc.). Environment variables
-/// have higher precedence and can override settings from the configuration file.
+/// Resolves defaults, the main file, alphabetical drop-ins, and environment overrides, then caches the result per process.
+/// Missing or unreadable files and directories are skipped.
 pub fn readConfiguration(io: std.Io, allocator: std.mem.Allocator, getenv_fn: proc_self_environ_parser.GetenvFn) InjectorConfiguration {
     if (cached_configuration_optional) |cached_configuration| {
         return cached_configuration;
     }
 
-    var config_file_path: []const u8 = default_config_file_path;
-    const env_config_path = getenv_fn(io, allocator, config_file_path_env_var);
+    const env_config_path = getenv_fn(io, allocator, options.config_file.env_name.?);
     defer if (env_config_path) |p| allocator.free(p);
-    if (env_config_path) |value| {
-        const trimmed = std.mem.trim(u8, value, " \t\r\n");
-        if (trimmed.len > 0) {
-            config_file_path = trimmed;
-        }
-    }
+    const config_file_path = if (env_config_path) |value| options.config_file.environmentString(value) else options.config_file.default_value;
 
     return readConfigurationFromPath(io, allocator, config_file_path, getenv_fn) catch |err| {
         print.printError("Cannot allocate memory while parsing configuration: {t}", .{err});
@@ -152,26 +40,16 @@ pub fn readConfiguration(io: std.Io, allocator: std.mem.Allocator, getenv_fn: pr
 }
 
 fn createEmptyConfiguration(allocator: std.mem.Allocator) InjectorConfiguration {
-    return InjectorConfiguration{
-        .dotnet_auto_instrumentation_agent_path_prefix = "",
-        .jvm_auto_instrumentation_agent_path = "",
-        .nodejs_auto_instrumentation_agent_path = "",
-        .python_auto_instrumentation_agent_path_prefix = "",
-        .ruby_auto_instrumentation_agent_path_prefix = "",
-        .all_auto_instrumentation_agents_env_path = "",
-        .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(allocator),
-        .include_paths = &.{},
-        .exclude_paths = &.{},
-        .include_args = &.{},
-        .exclude_args = &.{},
-        .dotnet_auto_instrumentation_minimum_dotnet_major_version = default_dotnet_auto_instrumentation_minimum_dotnet_major_version,
-        .jvm_auto_instrumentation_minimum_java_major_version = default_jvm_auto_instrumentation_minimum_java_major_version,
-        .dotnet_instrumentation_disabled = false,
-        .jvm_instrumentation_disabled = false,
-        .nodejs_instrumentation_disabled = false,
-        .python_instrumentation_disabled = false,
-        .ruby_instrumentation_disabled = false,
-    };
+    return InjectorConfiguration.initEmpty(allocator);
+}
+
+test "createEmptyConfiguration: safe to deinit without allocations" {
+    var configuration = createEmptyConfiguration(testing.failing_allocator);
+    defer configuration.deinit(testing.failing_allocator);
+
+    try testing.expectEqualStrings("", configuration.all_auto_instrumentation_agents_env_path);
+    try testing.expectEqual(@as(u32, 8), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
+    try testing.expectEqual(@as(u32, 8), configuration.jvm_auto_instrumentation_minimum_java_major_version);
 }
 
 fn readConfigurationFromPath(io: std.Io, allocator: std.mem.Allocator, cfg_file_path: []const u8, getenv_fn: proc_self_environ_parser.GetenvFn) std.mem.Allocator.Error!InjectorConfiguration {
@@ -237,7 +115,7 @@ test "readConfiguration: respects OTEL_INJECTOR_CONFIG_FILE environment variable
         try std.fs.path.resolve(allocator, &.{ cwd_path, "unit-test-assets/config/all_values.conf" });
     defer allocator.free(absolute_path_to_config_file);
 
-    const env_string = try std.fmt.allocPrint(allocator, "{s}={s}", .{ config_file_path_env_var, absolute_path_to_config_file });
+    const env_string = try std.fmt.allocPrint(allocator, "{s}={s}", .{ options.config_file.env_name.?, absolute_path_to_config_file });
     defer allocator.free(env_string);
 
     const original_environ = try test_util.setStdCEnviron(&[1][]const u8{env_string});
@@ -292,38 +170,38 @@ test "readConfigurationFromPath: file does not exist, no environment variables" 
     defer configuration.deinit(allocator);
 
     try testing.expectEqualStrings(
-        default_dotnet_auto_instrumentation_agent_path_prefix,
+        "",
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        default_jvm_auto_instrumentation_agent_path,
+        "",
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        default_nodejs_auto_instrumentation_agent_path,
+        "",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        default_python_auto_instrumentation_agent_path,
+        "",
         configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        default_all_auto_instrumentation_agents_env_path,
+        "/etc/opentelemetry/injector/default_env.conf",
         configuration.all_auto_instrumentation_agents_env_path,
     );
     try testing.expectEqual(0, configuration.all_auto_instrumentation_agents_env_vars.count());
     try testing.expectEqual(0, configuration.include_paths.len);
     try testing.expectEqual(0, configuration.exclude_paths.len);
-    try testing.expectEqual(0, configuration.include_args.len);
-    try testing.expectEqual(0, configuration.exclude_args.len);
+    try testing.expectEqual(0, configuration.include_with_arguments.len);
+    try testing.expectEqual(0, configuration.exclude_with_arguments.len);
     try testing.expectEqual(
-        default_dotnet_auto_instrumentation_minimum_dotnet_major_version,
+        @as(u32, 8),
         configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version,
     );
-    try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.nodejs_instrumentation_disabled, "!configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.python_instrumentation_disabled, "!configuration.python_instrumentation_disabled");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.dotnet, "!configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.jvm, "!configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.nodejs, "!configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.python, "!configuration.auto_instrumentation_disabled.python");
 }
 
 test "readConfigurationFromPath: file does not exist, environment variables are set" {
@@ -363,7 +241,7 @@ test "readConfigurationFromPath: file does not exist, environment variables are 
         configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        default_all_auto_instrumentation_agents_env_path,
+        "/etc/opentelemetry/injector/default_env.conf",
         configuration.all_auto_instrumentation_agents_env_path,
     );
     try testing.expectEqual(0, configuration.all_auto_instrumentation_agents_env_vars.count());
@@ -373,16 +251,16 @@ test "readConfigurationFromPath: file does not exist, environment variables are 
     try testing.expectEqual(2, configuration.exclude_paths.len);
     try testing.expectEqualStrings("/path/from/env/var/exclude1", configuration.exclude_paths[0]);
     try testing.expectEqualStrings("/path/from/env/var/exclude2", configuration.exclude_paths[1]);
-    try testing.expectEqual(2, configuration.include_args.len);
-    try testing.expectEqualStrings("--from-env-var-include1", configuration.include_args[0]);
-    try testing.expectEqualStrings("--from-env-var-include2", configuration.include_args[1]);
-    try testing.expectEqual(2, configuration.exclude_args.len);
-    try testing.expectEqualStrings("--from-env-var-exclude1", configuration.exclude_args[0]);
-    try testing.expectEqualStrings("--from-env-var-exclude2", configuration.exclude_args[1]);
-    try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.nodejs_instrumentation_disabled, "!configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.python_instrumentation_disabled, "!configuration.python_instrumentation_disabled");
+    try testing.expectEqual(2, configuration.include_with_arguments.len);
+    try testing.expectEqualStrings("--from-env-var-include1", configuration.include_with_arguments[0]);
+    try testing.expectEqualStrings("--from-env-var-include2", configuration.include_with_arguments[1]);
+    try testing.expectEqual(2, configuration.exclude_with_arguments.len);
+    try testing.expectEqualStrings("--from-env-var-exclude1", configuration.exclude_with_arguments[0]);
+    try testing.expectEqualStrings("--from-env-var-exclude2", configuration.exclude_with_arguments[1]);
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.dotnet, "!configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.jvm, "!configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.nodejs, "!configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.python, "!configuration.auto_instrumentation_disabled.python");
 }
 
 test "readConfigurationFromPath: all configuration values from file, no environment variables" {
@@ -429,19 +307,19 @@ test "readConfigurationFromPath: all configuration values from file, no environm
     try testing.expectEqualStrings("/usr/*", configuration.exclude_paths[0]);
     try testing.expectEqualStrings("/opt/*", configuration.exclude_paths[1]);
     try testing.expectEqualStrings("/another_excluded_dir/*", configuration.exclude_paths[2]);
-    try testing.expectEqual(4, configuration.include_args.len);
-    try testing.expectEqualStrings("-jar", configuration.include_args[0]);
-    try testing.expectEqualStrings("*my-app*", configuration.include_args[1]);
-    try testing.expectEqualStrings("*.js", configuration.include_args[2]);
-    try testing.expectEqualStrings("*.dll", configuration.include_args[3]);
-    try testing.expectEqual(3, configuration.exclude_args.len);
-    try testing.expectEqualStrings("-javaagent*", configuration.exclude_args[0]);
-    try testing.expectEqualStrings("*@opentelemetry-js*", configuration.exclude_args[1]);
-    try testing.expectEqualStrings("-debug", configuration.exclude_args[2]);
-    try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.nodejs_instrumentation_disabled, "configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.python_instrumentation_disabled, "!configuration.python_instrumentation_disabled");
+    try testing.expectEqual(4, configuration.include_with_arguments.len);
+    try testing.expectEqualStrings("-jar", configuration.include_with_arguments[0]);
+    try testing.expectEqualStrings("*my-app*", configuration.include_with_arguments[1]);
+    try testing.expectEqualStrings("*.js", configuration.include_with_arguments[2]);
+    try testing.expectEqualStrings("*.dll", configuration.include_with_arguments[3]);
+    try testing.expectEqual(3, configuration.exclude_with_arguments.len);
+    try testing.expectEqualStrings("-javaagent*", configuration.exclude_with_arguments[0]);
+    try testing.expectEqualStrings("*@opentelemetry-js*", configuration.exclude_with_arguments[1]);
+    try testing.expectEqualStrings("-debug", configuration.exclude_with_arguments[2]);
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.dotnet, "!configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.jvm, "!configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.nodejs, "configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.python, "!configuration.auto_instrumentation_disabled.python");
 }
 
 test "readConfigurationFromPath: override some configuration values from file with environment variables" {
@@ -494,118 +372,52 @@ test "readConfigurationFromPath: override some configuration values from file wi
     try testing.expectEqualStrings("/usr/*", configuration.exclude_paths[0]);
     try testing.expectEqualStrings("/opt/*", configuration.exclude_paths[1]);
     try testing.expectEqualStrings("/another_excluded_dir/*", configuration.exclude_paths[2]);
-    try testing.expectEqual(4, configuration.include_args.len);
-    try testing.expectEqualStrings("-jar", configuration.include_args[0]);
-    try testing.expectEqualStrings("*my-app*", configuration.include_args[1]);
-    try testing.expectEqualStrings("*.js", configuration.include_args[2]);
-    try testing.expectEqualStrings("*.dll", configuration.include_args[3]);
-    try testing.expectEqual(2, configuration.exclude_args.len);
-    try testing.expectEqualStrings("--from-env-var-exclude1", configuration.exclude_args[0]);
-    try testing.expectEqualStrings("--from-env-var-exclude2", configuration.exclude_args[1]);
-    try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.nodejs_instrumentation_disabled, "!configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.python_instrumentation_disabled, "configuration.python_instrumentation_disabled");
+    try testing.expectEqual(4, configuration.include_with_arguments.len);
+    try testing.expectEqualStrings("-jar", configuration.include_with_arguments[0]);
+    try testing.expectEqualStrings("*my-app*", configuration.include_with_arguments[1]);
+    try testing.expectEqualStrings("*.js", configuration.include_with_arguments[2]);
+    try testing.expectEqualStrings("*.dll", configuration.include_with_arguments[3]);
+    try testing.expectEqual(2, configuration.exclude_with_arguments.len);
+    try testing.expectEqualStrings("--from-env-var-exclude1", configuration.exclude_with_arguments[0]);
+    try testing.expectEqualStrings("--from-env-var-exclude2", configuration.exclude_with_arguments[1]);
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.dotnet, "!configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.jvm, "!configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.nodejs, "!configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.python, "configuration.auto_instrumentation_disabled.python");
 }
 
 fn createDefaultConfiguration(arena_allocator: std.mem.Allocator) std.mem.Allocator.Error!InjectorConfiguration {
-    return InjectorConfiguration{
-        .dotnet_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_dotnet_auto_instrumentation_agent_path_prefix}),
-        .jvm_auto_instrumentation_agent_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_jvm_auto_instrumentation_agent_path}),
-        .nodejs_auto_instrumentation_agent_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_nodejs_auto_instrumentation_agent_path}),
-        .python_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_python_auto_instrumentation_agent_path}),
-        .ruby_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_ruby_auto_instrumentation_agent_path}),
-        .all_auto_instrumentation_agents_env_path = try std.fmt.allocPrint(arena_allocator, "{s}", .{default_all_auto_instrumentation_agents_env_path}),
-        .all_auto_instrumentation_agents_env_vars = std.StringHashMap([]u8).init(arena_allocator),
-        .include_paths = &.{},
-        .exclude_paths = &.{},
-        .include_args = &.{},
-        .exclude_args = &.{},
-        .dotnet_auto_instrumentation_minimum_dotnet_major_version = default_dotnet_auto_instrumentation_minimum_dotnet_major_version,
-        .jvm_auto_instrumentation_minimum_java_major_version = default_jvm_auto_instrumentation_minimum_java_major_version,
-        .dotnet_instrumentation_disabled = false,
-        .jvm_instrumentation_disabled = false,
-        .nodejs_instrumentation_disabled = false,
-        .python_instrumentation_disabled = false,
-        .ruby_instrumentation_disabled = false,
-    };
-}
-
-fn applyAutoInstrumentationDisabledValue(trimmed_value: []const u8, source: []const u8, configuration: *InjectorConfiguration) void {
-    if (std.mem.eql(u8, trimmed_value, "*")) {
-        configuration.dotnet_instrumentation_disabled = true;
-        configuration.jvm_instrumentation_disabled = true;
-        configuration.nodejs_instrumentation_disabled = true;
-        configuration.python_instrumentation_disabled = true;
-        configuration.ruby_instrumentation_disabled = true;
-    } else {
-        // In case the configuration file specifies auto_instrumentation_disabled and this is the second call of
-        // applyAutoInstrumentationDisabledValue for parsing OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED (if present),
-        // we need to reset all disabled flags to make sure the environment variable completely overrides what the
-        // config file said.
-        configuration.dotnet_instrumentation_disabled = false;
-        configuration.jvm_instrumentation_disabled = false;
-        configuration.nodejs_instrumentation_disabled = false;
-        configuration.python_instrumentation_disabled = false;
-        configuration.ruby_instrumentation_disabled = false;
-        var it = std.mem.splitScalar(u8, trimmed_value, ',');
-        while (it.next()) |part| {
-            const trimmed_part = std.mem.trim(u8, part, " \t");
-            if (std.mem.eql(u8, trimmed_part, "dotnet")) {
-                configuration.dotnet_instrumentation_disabled = true;
-            } else if (std.mem.eql(u8, trimmed_part, "jvm")) {
-                configuration.jvm_instrumentation_disabled = true;
-            } else if (std.mem.eql(u8, trimmed_part, "nodejs")) {
-                configuration.nodejs_instrumentation_disabled = true;
-            } else if (std.mem.eql(u8, trimmed_part, "python")) {
-                configuration.python_instrumentation_disabled = true;
-            } else if (std.mem.eql(u8, trimmed_part, "ruby")) {
-                configuration.ruby_instrumentation_disabled = true;
-            } else if (trimmed_part.len > 0) {
-                print.printWarn(
-                    "Unknown runtime in the list of disabled runtimes from {s}: \"{s}\" - this list item will be ignored.",
-                    .{ source, trimmed_part },
-                );
-            }
-        }
+    var configuration = createEmptyConfiguration(arena_allocator);
+    inline for (options.file_options) |option| {
+        @field(configuration, option.file_key.?) = try option.copy(arena_allocator, option.initialValue());
     }
+    return configuration;
 }
 
-/// Sets a minimum runtime major version, such as dotnet_auto_instrumentation_minimum_dotnet_major_version, from
-/// `value`. An invalid value is reported and leaves the setting as it was.
-fn applyMinimumMajorVersionValue(setting: *u32, value: []const u8, key: []const u8, source: []const u8) void {
-    const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-    setting.* = std.fmt.parseUnsigned(u32, trimmed_value, 10) catch {
-        print.printWarn(
-            "Ignoring invalid value for {s} from {s}: \"{s}\" - a non-negative integer is required.",
-            .{ key, source, trimmed_value },
-        );
-        return;
-    };
-}
-
-test "applyMinimumMajorVersionValue: accepts a non-negative integer and otherwise keeps the previous value" {
+test "applyKeyValueToGeneralOptions: parses runtime minimum versions and retains previous values for invalid input" {
     const Case = struct { value: []const u8, expected: u32 };
-    for ([_]Case{
-        .{ .value = "0", .expected = 0 },
-        .{ .value = "1", .expected = 1 },
-        .{ .value = "6", .expected = 6 },
-        .{ .value = " 21\t", .expected = 21 },
-        // A value read from a file keeps its line ending, as one from a ConfigMap created with --from-file does.
-        .{ .value = "0\n", .expected = 0 },
-        .{ .value = "21\r\n", .expected = 21 },
-        .{ .value = "4294967295", .expected = std.math.maxInt(u32) },
-        .{ .value = "", .expected = 8 },
-        .{ .value = "true", .expected = 8 },
-        .{ .value = "-1", .expected = 8 },
-        .{ .value = "1.6", .expected = 8 },
-        .{ .value = "4294967296", .expected = 8 },
-    }) |case| {
-        var setting: u32 = 8;
+    inline for (.{ options.dotnet_minimum_major_version, options.jvm_minimum_major_version }) |option| {
+        for ([_]Case{
+            .{ .value = "0", .expected = 0 },
+            .{ .value = "1", .expected = 1 },
+            .{ .value = "6", .expected = 6 },
+            .{ .value = " 21\t", .expected = 21 },
+            .{ .value = "0\n", .expected = 0 },
+            .{ .value = "21\r\n", .expected = 21 },
+            .{ .value = "4294967295", .expected = std.math.maxInt(u32) },
+            .{ .value = "", .expected = 8 },
+            .{ .value = "true", .expected = 8 },
+            .{ .value = "-1", .expected = 8 },
+            .{ .value = "1.6", .expected = 8 },
+            .{ .value = "4294967296", .expected = 8 },
+        }) |case| {
+            var configuration = createEmptyConfiguration(testing.allocator);
+            defer configuration.deinit(testing.allocator);
 
-        applyMinimumMajorVersionValue(&setting, case.value, "test_key", "test");
+            applyKeyValueToGeneralOptions(testing.allocator, option.file_key.?, @constCast(case.value), "test", &configuration);
 
-        try testing.expectEqual(case.expected, setting);
+            try testing.expectEqual(case.expected, @field(configuration, option.file_key.?));
+        }
     }
 }
 
@@ -642,7 +454,7 @@ test "JVM minimum Java major version: reads config files and applies environment
         var env_vars: [2][]const u8 = .{ config_dir_env, "" };
 
         if (case.value) |value| {
-            env_vars[1] = try std.fmt.allocPrint(allocator, "{s}={s}", .{ jvm_minimum_java_major_version_env_var, value });
+            env_vars[1] = try std.fmt.allocPrint(allocator, "{s}={s}", .{ options.jvm_minimum_major_version.env_name.?, value });
         }
         defer if (case.value != null) allocator.free(env_vars[1]);
 
@@ -656,47 +468,30 @@ test "JVM minimum Java major version: reads config files and applies environment
     }
 }
 
-fn applyCommaSeparatedPatternsOption(arena_allocator: std.mem.Allocator, setting: *[][]const u8, value: []u8, pattern_name: []const u8, cfg_file_path: []const u8) void {
-    const new_patterns = patterns_util.splitByComma(arena_allocator, value) catch |err| {
-        print.printError("error parsing {s} value from configuration file {s}: {}", .{ pattern_name, cfg_file_path, err });
-        return;
-    };
-    setting.* = std.mem.concat(arena_allocator, []const u8, &.{ setting.*, new_patterns }) catch |err| {
-        print.printError("error concatenating {s} from configuration file {s}: {}", .{ pattern_name, cfg_file_path, err });
-        return;
-    };
-}
-
-fn applyKeyValueToGeneralOptions(arena_allocator: std.mem.Allocator, key: []const u8, value: []u8, _cfg_file_path: []const u8, _configuration: *InjectorConfiguration) void {
-    if (std.mem.eql(u8, key, dotnet_path_prefix_key)) {
-        _configuration.dotnet_auto_instrumentation_agent_path_prefix = value;
-    } else if (std.mem.eql(u8, key, dotnet_minimum_dotnet_major_version_key)) {
-        applyMinimumMajorVersionValue(&_configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version, value, key, _cfg_file_path);
-    } else if (std.mem.eql(u8, key, jvm_path_key)) {
-        _configuration.jvm_auto_instrumentation_agent_path = value;
-    } else if (std.mem.eql(u8, key, jvm_minimum_java_major_version_key)) {
-        applyMinimumMajorVersionValue(&_configuration.jvm_auto_instrumentation_minimum_java_major_version, value, key, _cfg_file_path);
-    } else if (std.mem.eql(u8, key, nodejs_path_key)) {
-        _configuration.nodejs_auto_instrumentation_agent_path = value;
-    } else if (std.mem.eql(u8, key, python_path_prefix_key)) {
-        _configuration.python_auto_instrumentation_agent_path_prefix = value;
-    } else if (std.mem.eql(u8, key, ruby_path_prefix_key)) {
-        _configuration.ruby_auto_instrumentation_agent_path_prefix = value;
-    } else if (std.mem.eql(u8, key, all_agents_env_path_key)) {
-        _configuration.all_auto_instrumentation_agents_env_path = value;
-    } else if (std.mem.eql(u8, key, include_paths_key)) {
-        applyCommaSeparatedPatternsOption(arena_allocator, &_configuration.include_paths, value, "include_paths", _cfg_file_path);
-    } else if (std.mem.eql(u8, key, exclude_paths_key)) {
-        applyCommaSeparatedPatternsOption(arena_allocator, &_configuration.exclude_paths, value, "exclude_paths", _cfg_file_path);
-    } else if (std.mem.eql(u8, key, include_args_key)) {
-        applyCommaSeparatedPatternsOption(arena_allocator, &_configuration.include_args, value, "include_arguments", _cfg_file_path);
-    } else if (std.mem.eql(u8, key, exclude_args_key)) {
-        applyCommaSeparatedPatternsOption(arena_allocator, &_configuration.exclude_args, value, "exclude_arguments", _cfg_file_path);
-    } else if (std.mem.eql(u8, key, auto_instrumentation_disabled_key)) {
-        applyAutoInstrumentationDisabledValue(value, _cfg_file_path, _configuration);
-    } else {
-        print.printError("ignoring unknown configuration key in {s}: {s}={s}", .{ _cfg_file_path, key, value });
+fn applyKeyValueToGeneralOptions(arena_allocator: std.mem.Allocator, key: []const u8, value: []u8, cfg_file_path: []const u8, configuration: *InjectorConfiguration) void {
+    inline for (options.file_options) |option| {
+        if (std.mem.eql(u8, key, option.file_key.?)) {
+            const parsed = option.parseFile(arena_allocator, value, cfg_file_path) catch |err| {
+                if (err == error.InvalidValue) {
+                    option.warnInvalidValue(value, cfg_file_path);
+                } else {
+                    print.printError("error parsing {s} value from configuration file {s}: {}", .{ key, cfg_file_path, err });
+                }
+                return;
+            };
+            const setting = &@field(configuration, option.file_key.?);
+            if (comptime option.repeated == .append) {
+                setting.* = std.mem.concat(arena_allocator, []const u8, &.{ setting.*, parsed }) catch |err| {
+                    print.printError("error concatenating {s} from configuration file {s}: {}", .{ key, cfg_file_path, err });
+                    return;
+                };
+            } else {
+                setting.* = parsed;
+            }
+            return;
+        }
     }
+    print.printError("ignoring unknown configuration key in {s}: {s}={s}", .{ cfg_file_path, key, value });
 }
 
 fn readConfigurationFile(io: std.Io, arena_allocator: std.mem.Allocator, cfg_file_path: []const u8, configuration: *InjectorConfiguration) void {
@@ -725,13 +520,8 @@ fn readConfigurationFile(io: std.Io, arena_allocator: std.mem.Allocator, cfg_fil
 /// (e.g., opentelemetry-java-autoinstrumentation) places its configuration in this directory.
 /// Files are read in alphabetical order; later files can override earlier ones.
 fn readConfigurationDirectory(io: std.Io, arena_allocator: std.mem.Allocator, configuration: *InjectorConfiguration, getenv_fn: proc_self_environ_parser.GetenvFn) void {
-    var config_dir_path: []const u8 = default_config_dir_path;
-    if (getenv_fn(io, arena_allocator, config_dir_path_env_var)) |value| {
-        config_dir_path = std.mem.trim(u8, value, " \t\r\n");
-        if (config_dir_path.len == 0) {
-            config_dir_path = default_config_dir_path;
-        }
-    }
+    const env_config_dir = getenv_fn(io, arena_allocator, options.config_dir.env_name.?);
+    const config_dir_path = if (env_config_dir) |value| options.config_dir.environmentString(value) else options.config_dir.default_value;
 
     print.printDebug("reading configuration drop-in files from {s}.", .{config_dir_path});
 
@@ -858,53 +648,42 @@ fn copyToPermanentlyAllocatedHeap(
     allocator: std.mem.Allocator,
     preliminary_configuration: InjectorConfiguration,
 ) std.mem.Allocator.Error!InjectorConfiguration {
-    return InjectorConfiguration{
-        .dotnet_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(
-            allocator,
-            "{s}",
-            .{preliminary_configuration.dotnet_auto_instrumentation_agent_path_prefix},
-        ),
-        .jvm_auto_instrumentation_agent_path = try std.fmt.allocPrint(
-            allocator,
-            "{s}",
-            .{preliminary_configuration.jvm_auto_instrumentation_agent_path},
-        ),
-        .nodejs_auto_instrumentation_agent_path = try std.fmt.allocPrint(
-            allocator,
-            "{s}",
-            .{preliminary_configuration.nodejs_auto_instrumentation_agent_path},
-        ),
-        .python_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(
-            allocator,
-            "{s}",
-            .{preliminary_configuration.python_auto_instrumentation_agent_path_prefix},
-        ),
-        .ruby_auto_instrumentation_agent_path_prefix = try std.fmt.allocPrint(
-            allocator,
-            "{s}",
-            .{preliminary_configuration.ruby_auto_instrumentation_agent_path_prefix},
-        ),
-        .all_auto_instrumentation_agents_env_path = try std.fmt.allocPrint(
-            allocator,
-            "{s}",
-            .{preliminary_configuration.all_auto_instrumentation_agents_env_path},
-        ),
-        .all_auto_instrumentation_agents_env_vars = try copyMap(
-            allocator,
-            preliminary_configuration.all_auto_instrumentation_agents_env_vars,
-        ),
-        .include_paths = try copyStringArray(allocator, preliminary_configuration.include_paths),
-        .exclude_paths = try copyStringArray(allocator, preliminary_configuration.exclude_paths),
-        .include_args = try copyStringArray(allocator, preliminary_configuration.include_args),
-        .exclude_args = try copyStringArray(allocator, preliminary_configuration.exclude_args),
-        .dotnet_auto_instrumentation_minimum_dotnet_major_version = preliminary_configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version,
-        .jvm_auto_instrumentation_minimum_java_major_version = preliminary_configuration.jvm_auto_instrumentation_minimum_java_major_version,
-        .dotnet_instrumentation_disabled = preliminary_configuration.dotnet_instrumentation_disabled,
-        .jvm_instrumentation_disabled = preliminary_configuration.jvm_instrumentation_disabled,
-        .nodejs_instrumentation_disabled = preliminary_configuration.nodejs_instrumentation_disabled,
-        .python_instrumentation_disabled = preliminary_configuration.python_instrumentation_disabled,
-        .ruby_instrumentation_disabled = preliminary_configuration.ruby_instrumentation_disabled,
+    var configuration = createEmptyConfiguration(allocator);
+    errdefer configuration.deinit(allocator);
+    inline for (options.file_options) |option| {
+        @field(configuration, option.file_key.?) = try option.copy(allocator, @field(preliminary_configuration, option.file_key.?));
+    }
+    configuration.all_auto_instrumentation_agents_env_vars = try copyMap(allocator, preliminary_configuration.all_auto_instrumentation_agents_env_vars);
+    return configuration;
+}
+
+test "copyToPermanentlyAllocatedHeap: frees partial copies on allocation failure" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var preliminary_configuration = try createDefaultConfiguration(allocator);
+    preliminary_configuration.dotnet_auto_instrumentation_agent_path_prefix = try allocator.dupe(u8, "/opt/agent");
+    preliminary_configuration.include_paths = try options.include_paths.parse(allocator, "/app/*,/utilities/*", "test");
+    preliminary_configuration.exclude_paths = try options.exclude_paths.parse(allocator, "/app/excluded/*", "test");
+    inline for (.{ "OTEL_SERVICE_NAME", "OTEL_SERVICE_NAMESPACE" }) |key| {
+        try preliminary_configuration.all_auto_instrumentation_agents_env_vars.put(try allocator.dupe(u8, key), try allocator.dupe(u8, "value"));
+    }
+
+    const Test = struct {
+        fn run(copy_allocator: std.mem.Allocator, source: InjectorConfiguration) !void {
+            var copied = try copyToPermanentlyAllocatedHeap(copy_allocator, source);
+            defer copied.deinit(copy_allocator);
+            inline for (options.file_options) |option| {
+                try testing.expectEqualDeep(@field(source, option.file_key.?), @field(copied, option.file_key.?));
+            }
+            try testing.expectEqual(source.all_auto_instrumentation_agents_env_vars.count(), copied.all_auto_instrumentation_agents_env_vars.count());
+            var it = source.all_auto_instrumentation_agents_env_vars.iterator();
+            while (it.next()) |entry| {
+                try testing.expectEqualStrings(entry.value_ptr.*, copied.all_auto_instrumentation_agents_env_vars.get(entry.key_ptr.*) orelse "");
+            }
+        }
     };
+    try testing.checkAllAllocationFailures(testing.allocator, Test.run, .{preliminary_configuration});
 }
 
 fn takeSentinelOrDiscardOverlyLongLine(reader: *std.Io.File.Reader, cfg_file_path: []const u8) ![]u8 {
@@ -936,34 +715,34 @@ test "readConfigurationFile: file does not exist" {
     readConfigurationFile(testing.io, arena_allocator, "/does/not/exist", &configuration);
 
     try testing.expectEqualStrings(
-        default_dotnet_auto_instrumentation_agent_path_prefix,
+        "",
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        default_jvm_auto_instrumentation_agent_path,
+        "",
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        default_nodejs_auto_instrumentation_agent_path,
+        "",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        default_python_auto_instrumentation_agent_path,
+        "",
         configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        default_all_auto_instrumentation_agents_env_path,
+        "/etc/opentelemetry/injector/default_env.conf",
         configuration.all_auto_instrumentation_agents_env_path,
     );
     try testing.expectEqual(0, configuration.all_auto_instrumentation_agents_env_vars.count());
     try testing.expectEqual(0, configuration.include_paths.len);
     try testing.expectEqual(0, configuration.exclude_paths.len);
-    try testing.expectEqual(0, configuration.include_args.len);
-    try testing.expectEqual(0, configuration.exclude_args.len);
-    try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.nodejs_instrumentation_disabled, "!configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.python_instrumentation_disabled, "!configuration.python_instrumentation_disabled");
+    try testing.expectEqual(0, configuration.include_with_arguments.len);
+    try testing.expectEqual(0, configuration.exclude_with_arguments.len);
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.dotnet, "!configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.jvm, "!configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.nodejs, "!configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.python, "!configuration.auto_instrumentation_disabled.python");
 }
 
 test "readConfigurationFile: empty file" {
@@ -981,34 +760,34 @@ test "readConfigurationFile: empty file" {
     readConfigurationFile(testing.io, arena_allocator, absolute_path_to_config_file, &configuration);
 
     try testing.expectEqualStrings(
-        default_dotnet_auto_instrumentation_agent_path_prefix,
+        "",
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        default_jvm_auto_instrumentation_agent_path,
+        "",
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        default_nodejs_auto_instrumentation_agent_path,
+        "",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        default_python_auto_instrumentation_agent_path,
+        "",
         configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        default_all_auto_instrumentation_agents_env_path,
+        "/etc/opentelemetry/injector/default_env.conf",
         configuration.all_auto_instrumentation_agents_env_path,
     );
     try testing.expectEqual(0, configuration.all_auto_instrumentation_agents_env_vars.count());
     try testing.expectEqual(0, configuration.include_paths.len);
     try testing.expectEqual(0, configuration.exclude_paths.len);
-    try testing.expectEqual(0, configuration.include_args.len);
-    try testing.expectEqual(0, configuration.exclude_args.len);
-    try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.nodejs_instrumentation_disabled, "!configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.python_instrumentation_disabled, "!configuration.python_instrumentation_disabled");
+    try testing.expectEqual(0, configuration.include_with_arguments.len);
+    try testing.expectEqual(0, configuration.exclude_with_arguments.len);
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.dotnet, "!configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.jvm, "!configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.nodejs, "!configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.python, "!configuration.auto_instrumentation_disabled.python");
 }
 
 test "readConfigurationFile: all configuration values" {
@@ -1058,19 +837,19 @@ test "readConfigurationFile: all configuration values" {
     try testing.expectEqualStrings("/usr/*", configuration.exclude_paths[0]);
     try testing.expectEqualStrings("/opt/*", configuration.exclude_paths[1]);
     try testing.expectEqualStrings("/another_excluded_dir/*", configuration.exclude_paths[2]);
-    try testing.expectEqual(4, configuration.include_args.len);
-    try testing.expectEqualStrings("-jar", configuration.include_args[0]);
-    try testing.expectEqualStrings("*my-app*", configuration.include_args[1]);
-    try testing.expectEqualStrings("*.js", configuration.include_args[2]);
-    try testing.expectEqualStrings("*.dll", configuration.include_args[3]);
-    try testing.expectEqual(3, configuration.exclude_args.len);
-    try testing.expectEqualStrings("-javaagent*", configuration.exclude_args[0]);
-    try testing.expectEqualStrings("*@opentelemetry-js*", configuration.exclude_args[1]);
-    try testing.expectEqualStrings("-debug", configuration.exclude_args[2]);
-    try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.nodejs_instrumentation_disabled, "configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.python_instrumentation_disabled, "!configuration.python_instrumentation_disabled");
+    try testing.expectEqual(4, configuration.include_with_arguments.len);
+    try testing.expectEqualStrings("-jar", configuration.include_with_arguments[0]);
+    try testing.expectEqualStrings("*my-app*", configuration.include_with_arguments[1]);
+    try testing.expectEqualStrings("*.js", configuration.include_with_arguments[2]);
+    try testing.expectEqualStrings("*.dll", configuration.include_with_arguments[3]);
+    try testing.expectEqual(3, configuration.exclude_with_arguments.len);
+    try testing.expectEqualStrings("-javaagent*", configuration.exclude_with_arguments[0]);
+    try testing.expectEqualStrings("*@opentelemetry-js*", configuration.exclude_with_arguments[1]);
+    try testing.expectEqualStrings("-debug", configuration.exclude_with_arguments[2]);
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.dotnet, "!configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.jvm, "!configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.nodejs, "configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.python, "!configuration.auto_instrumentation_disabled.python");
 }
 
 test "readConfigurationFile: all configuration values plus whitespace and comments" {
@@ -1100,17 +879,17 @@ test "readConfigurationFile: all configuration values plus whitespace and commen
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        default_python_auto_instrumentation_agent_path,
+        "",
         configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
         "/custom/path/to/auto_instrumentation_env.conf",
         configuration.all_auto_instrumentation_agents_env_path,
     );
-    try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.jvm_instrumentation_disabled, "configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.nodejs_instrumentation_disabled, "!configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.python_instrumentation_disabled, "!configuration.python_instrumentation_disabled");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.dotnet, "!configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.jvm, "configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.nodejs, "!configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.python, "!configuration.auto_instrumentation_disabled.python");
 }
 
 test "readConfigurationFile: does not parse overly long lines" {
@@ -1128,7 +907,7 @@ test "readConfigurationFile: does not parse overly long lines" {
     readConfigurationFile(testing.io, arena_allocator, absolute_path_to_config_file, &configuration);
 
     try testing.expectEqualStrings(
-        default_dotnet_auto_instrumentation_agent_path_prefix,
+        "",
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
@@ -1136,13 +915,13 @@ test "readConfigurationFile: does not parse overly long lines" {
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        default_nodejs_auto_instrumentation_agent_path,
+        "",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
-    try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.nodejs_instrumentation_disabled, "!configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.python_instrumentation_disabled, "!configuration.python_instrumentation_disabled");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.dotnet, "!configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.jvm, "!configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.nodejs, "!configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.python, "!configuration.auto_instrumentation_disabled.python");
 }
 
 test "readConfigurationFile: auto_instrumentation_disabled=* disables all runtimes" {
@@ -1159,10 +938,10 @@ test "readConfigurationFile: auto_instrumentation_disabled=* disables all runtim
     var configuration = try createDefaultConfiguration(arena_allocator);
     readConfigurationFile(testing.io, arena_allocator, absolute_path_to_config_file, &configuration);
 
-    try test_util.expectWithMessage(configuration.dotnet_instrumentation_disabled, "configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.jvm_instrumentation_disabled, "configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.nodejs_instrumentation_disabled, "configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.python_instrumentation_disabled, "configuration.python_instrumentation_disabled");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.dotnet, "configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.jvm, "configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.nodejs, "configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.python, "configuration.auto_instrumentation_disabled.python");
 }
 
 test "readConfigurationFile: auto_instrumentation_disabled with comma-separated list" {
@@ -1179,10 +958,10 @@ test "readConfigurationFile: auto_instrumentation_disabled with comma-separated 
     var configuration = try createDefaultConfiguration(arena_allocator);
     readConfigurationFile(testing.io, arena_allocator, absolute_path_to_config_file, &configuration);
 
-    try test_util.expectWithMessage(configuration.dotnet_instrumentation_disabled, "configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.jvm_instrumentation_disabled, "configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.nodejs_instrumentation_disabled, "configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.python_instrumentation_disabled, "configuration.python_instrumentation_disabled");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.dotnet, "configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.jvm, "configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.nodejs, "configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.python, "configuration.auto_instrumentation_disabled.python");
 }
 
 test "readConfigurationFile: multiple auto_instrumentation_disabled line: last one wins" {
@@ -1199,10 +978,10 @@ test "readConfigurationFile: multiple auto_instrumentation_disabled line: last o
     var configuration = try createDefaultConfiguration(arena_allocator);
     readConfigurationFile(testing.io, arena_allocator, absolute_path_to_config_file, &configuration);
 
-    try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.jvm_instrumentation_disabled, "configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.nodejs_instrumentation_disabled, "!configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.python_instrumentation_disabled, "!configuration.python_instrumentation_disabled");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.dotnet, "!configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.jvm, "configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.nodejs, "!configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.python, "!configuration.auto_instrumentation_disabled.python");
 }
 
 test "hasAllowedPrefix: default OTEL_ prefix only" {
@@ -2141,110 +1920,71 @@ test "parseLine: trailing backslash inside double quotes is literal" {
 }
 
 fn readConfigurationFromEnvironment(io: std.Io, arena_allocator: std.mem.Allocator, configuration: *InjectorConfiguration, getenv_fn: proc_self_environ_parser.GetenvFn) void {
-    if (getenv_fn(io, arena_allocator, dotnet_agent_path_prefix_env_var)) |value| {
-        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const dotnet_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
-            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
-            return;
-        };
-        configuration.dotnet_auto_instrumentation_agent_path_prefix = dotnet_value;
+    inline for (options.file_options) |option| {
+        if (comptime option.env_name != null) {
+            if (getenv_fn(io, arena_allocator, option.env_name.?)) |raw| {
+                const parsed: ?@TypeOf(option).ValueType = option.parseEnvironment(arena_allocator, raw) catch |err| blk: {
+                    if (err == error.InvalidValue) {
+                        option.warnInvalidValue(raw, option.env_name.?);
+                        break :blk null;
+                    }
+                    print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
+                    return;
+                };
+                if (parsed) |resolved| @field(configuration, option.file_key.?) = resolved;
+            }
+        }
     }
-    if (getenv_fn(io, arena_allocator, dotnet_minimum_dotnet_major_version_env_var)) |value| {
-        applyMinimumMajorVersionValue(
-            &configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version,
-            value,
-            dotnet_minimum_dotnet_major_version_key,
-            dotnet_minimum_dotnet_major_version_env_var,
-        );
+}
+
+test "readConfigurationFromEnvironment: allocation failure stops remaining overrides" {
+    inline for (.{ options.dotnet_agent_path, options.include_paths }) |option| {
+        const Env = struct {
+            var value_read = false;
+            var read_after_failure = false;
+
+            fn read(_: std.Io, _: std.mem.Allocator, name: []const u8) ?[]u8 {
+                if (value_read) read_after_failure = true;
+                if (std.mem.eql(u8, name, option.env_name.?)) {
+                    value_read = true;
+                    return @constCast("/configured/agent");
+                }
+                return null;
+            }
+        };
+        var configuration = createEmptyConfiguration(testing.failing_allocator);
+        defer configuration.deinit(testing.failing_allocator);
+        readConfigurationFromEnvironment(testing.io, testing.failing_allocator, &configuration, Env.read);
+
+        try testing.expect(Env.value_read);
+        try testing.expect(!Env.read_after_failure);
+        try testing.expectEqual(@as(usize, 0), @field(configuration, option.file_key.?).len);
     }
-    if (getenv_fn(io, arena_allocator, jvm_agent_path_env_var)) |value| {
-        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const jvm_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
-            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
-            return;
-        };
-        configuration.jvm_auto_instrumentation_agent_path = jvm_value;
-    }
-    if (getenv_fn(io, arena_allocator, jvm_minimum_java_major_version_env_var)) |value| {
-        applyMinimumMajorVersionValue(
-            &configuration.jvm_auto_instrumentation_minimum_java_major_version,
-            value,
-            jvm_minimum_java_major_version_key,
-            jvm_minimum_java_major_version_env_var,
-        );
-    }
-    if (getenv_fn(io, arena_allocator, nodejs_agent_path_env_var)) |value| {
-        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const nodejs_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
-            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
-            return;
-        };
-        configuration.nodejs_auto_instrumentation_agent_path = nodejs_value;
-    }
-    if (getenv_fn(io, arena_allocator, python_agent_path_prefix_env_var)) |value| {
-        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const python_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
-            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
-            return;
-        };
-        configuration.python_auto_instrumentation_agent_path_prefix = python_value;
-    }
-    if (getenv_fn(io, arena_allocator, ruby_agent_path_prefix_env_var)) |value| {
-        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const ruby_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
-            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
-            return;
-        };
-        configuration.ruby_auto_instrumentation_agent_path_prefix = ruby_value;
-    }
-    if (getenv_fn(io, arena_allocator, auto_instrumentation_disabled_env_var)) |value| {
-        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        applyAutoInstrumentationDisabledValue(trimmed_value, auto_instrumentation_disabled_env_var, configuration);
-    }
-    if (getenv_fn(io, arena_allocator, include_paths_env_var)) |value| {
-        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const include_paths_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
-            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
-            return;
-        };
-        configuration.include_paths = patterns_util.splitByComma(arena_allocator, include_paths_value) catch |err| {
-            print.printError("error parsing include_paths value from the environment {s}: {}", .{ include_paths_value, err });
-            return;
-        };
-    }
-    if (getenv_fn(io, arena_allocator, exclude_paths_env_var)) |value| {
-        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const exclude_paths_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
-            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
-            return;
-        };
-        configuration.exclude_paths = patterns_util.splitByComma(arena_allocator, exclude_paths_value) catch |err| {
-            print.printError("error parsing exclude_paths value from the environment {s}: {}", .{ exclude_paths_value, err });
-            return;
-        };
-    }
-    if (getenv_fn(io, arena_allocator, include_args_env_var)) |value| {
-        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const include_args_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
-            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
-            return;
-        };
-        configuration.include_args = patterns_util.splitByComma(arena_allocator, include_args_value) catch |err| {
-            print.printError("error parsing include_arguments value from the environment {s}: {}", .{ include_args_value, err });
-            return;
-        };
-    }
-    if (getenv_fn(io, arena_allocator, exclude_args_env_var)) |value| {
-        const trimmed_value = std.mem.trim(u8, value, " \t\r\n");
-        const exclude_args_value = std.fmt.allocPrint(arena_allocator, "{s}", .{trimmed_value}) catch |err| {
-            print.printError("Cannot allocate memory to read the injector configuration from the environment: {}", .{err});
-            return;
-        };
-        configuration.exclude_args = patterns_util.splitByComma(arena_allocator, exclude_args_value) catch |err| {
-            print.printError("error parsing exclude_arguments value from the environment {s}: {}", .{ exclude_args_value, err });
-            return;
-        };
-    }
+}
+
+test "readConfigurationFromEnvironment: empty overrides clear settings and invalid integers retain file values" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const original_environ = try test_util.setStdCEnviron(&.{
+        "JVM_AUTO_INSTRUMENTATION_AGENT_PATH=",
+        "OTEL_INJECTOR_INCLUDE_PATHS=",
+        "OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=",
+        "DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION=invalid",
+    });
+    defer test_util.resetStdCEnviron(original_environ);
+
+    var configuration = try createDefaultConfiguration(allocator);
+    configuration.jvm_auto_instrumentation_agent_path = @constCast("/configured/agent.jar");
+    configuration.include_paths = try options.include_paths.parse(allocator, "/app/*", "test");
+    configuration.auto_instrumentation_disabled = .{ .jvm = true, .ruby = true };
+    configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version = 6;
+    readConfigurationFromEnvironment(testing.io, allocator, &configuration, test_util.posixGetenv);
+
+    try testing.expectEqualStrings("", configuration.jvm_auto_instrumentation_agent_path);
+    try testing.expectEqual(@as(usize, 0), configuration.include_paths.len);
+    try testing.expectEqualDeep(options.auto_instrumentation_disabled.initialValue(), configuration.auto_instrumentation_disabled);
+    try testing.expectEqual(@as(u32, 6), configuration.dotnet_auto_instrumentation_minimum_dotnet_major_version);
 }
 
 test "readConfigurationFromEnvironment: empty environment values" {
@@ -2261,29 +2001,29 @@ test "readConfigurationFromEnvironment: empty environment values" {
     readConfigurationFromEnvironment(testing.io, arena_allocator, &configuration, test_util.posixGetenv);
 
     try testing.expectEqualStrings(
-        default_dotnet_auto_instrumentation_agent_path_prefix,
+        "",
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        default_jvm_auto_instrumentation_agent_path,
+        "",
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        default_nodejs_auto_instrumentation_agent_path,
+        "",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        default_python_auto_instrumentation_agent_path,
+        "",
         configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        default_all_auto_instrumentation_agents_env_path,
+        "/etc/opentelemetry/injector/default_env.conf",
         configuration.all_auto_instrumentation_agents_env_path,
     );
     try testing.expectEqual(0, configuration.include_paths.len);
     try testing.expectEqual(0, configuration.exclude_paths.len);
-    try testing.expectEqual(0, configuration.include_args.len);
-    try testing.expectEqual(0, configuration.exclude_args.len);
+    try testing.expectEqual(0, configuration.include_with_arguments.len);
+    try testing.expectEqual(0, configuration.exclude_with_arguments.len);
 }
 
 test "readConfigurationFromEnvironment: all values" {
@@ -2327,7 +2067,7 @@ test "readConfigurationFromEnvironment: all values" {
         configuration.python_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        default_all_auto_instrumentation_agents_env_path,
+        "/etc/opentelemetry/injector/default_env.conf",
         configuration.all_auto_instrumentation_agents_env_path,
     );
     try testing.expectEqual(2, configuration.include_paths.len);
@@ -2336,12 +2076,12 @@ test "readConfigurationFromEnvironment: all values" {
     try testing.expectEqual(2, configuration.exclude_paths.len);
     try testing.expectEqualStrings("/path/from/env/var/exclude1", configuration.exclude_paths[0]);
     try testing.expectEqualStrings("/path/from/env/var/exclude2", configuration.exclude_paths[1]);
-    try testing.expectEqual(2, configuration.include_args.len);
-    try testing.expectEqualStrings("--from-env-var-include1", configuration.include_args[0]);
-    try testing.expectEqualStrings("--from-env-var-include2", configuration.include_args[1]);
-    try testing.expectEqual(2, configuration.exclude_args.len);
-    try testing.expectEqualStrings("--from-env-var-exclude1", configuration.exclude_args[0]);
-    try testing.expectEqualStrings("--from-env-var-exclude2", configuration.exclude_args[1]);
+    try testing.expectEqual(2, configuration.include_with_arguments.len);
+    try testing.expectEqualStrings("--from-env-var-include1", configuration.include_with_arguments[0]);
+    try testing.expectEqualStrings("--from-env-var-include2", configuration.include_with_arguments[1]);
+    try testing.expectEqual(2, configuration.exclude_with_arguments.len);
+    try testing.expectEqualStrings("--from-env-var-exclude1", configuration.exclude_with_arguments[0]);
+    try testing.expectEqualStrings("--from-env-var-exclude2", configuration.exclude_with_arguments[1]);
 }
 
 test "readConfigurationFromEnvironment: OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=* disables all runtimes" {
@@ -2359,10 +2099,10 @@ test "readConfigurationFromEnvironment: OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISAB
     var configuration = try createDefaultConfiguration(arena_allocator);
     readConfigurationFromEnvironment(testing.io, arena_allocator, &configuration, test_util.posixGetenv);
 
-    try test_util.expectWithMessage(configuration.dotnet_instrumentation_disabled, "configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.jvm_instrumentation_disabled, "configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.nodejs_instrumentation_disabled, "configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.python_instrumentation_disabled, "configuration.python_instrumentation_disabled");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.dotnet, "configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.jvm, "configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.nodejs, "configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.python, "configuration.auto_instrumentation_disabled.python");
 }
 
 test "readConfigurationFromEnvironment: OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED with specific runtimes" {
@@ -2380,10 +2120,10 @@ test "readConfigurationFromEnvironment: OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISAB
     var configuration = try createDefaultConfiguration(arena_allocator);
     readConfigurationFromEnvironment(testing.io, arena_allocator, &configuration, test_util.posixGetenv);
 
-    try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.nodejs_instrumentation_disabled, "configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.python_instrumentation_disabled, "configuration.python_instrumentation_disabled");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.dotnet, "!configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.jvm, "!configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.nodejs, "configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.python, "configuration.auto_instrumentation_disabled.python");
 }
 
 test "readConfigurationFromEnvironment: OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED with all runtimes individually" {
@@ -2401,10 +2141,10 @@ test "readConfigurationFromEnvironment: OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISAB
     var configuration = try createDefaultConfiguration(arena_allocator);
     readConfigurationFromEnvironment(testing.io, arena_allocator, &configuration, test_util.posixGetenv);
 
-    try test_util.expectWithMessage(configuration.dotnet_instrumentation_disabled, "configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.jvm_instrumentation_disabled, "configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.nodejs_instrumentation_disabled, "configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.python_instrumentation_disabled, "configuration.python_instrumentation_disabled");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.dotnet, "configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.jvm, "configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.nodejs, "configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.python, "configuration.auto_instrumentation_disabled.python");
 }
 
 test "readConfigurationFromEnvironment: OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED with unknown runtime is ignored" {
@@ -2422,10 +2162,10 @@ test "readConfigurationFromEnvironment: OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISAB
     var configuration = try createDefaultConfiguration(arena_allocator);
     readConfigurationFromEnvironment(testing.io, arena_allocator, &configuration, test_util.posixGetenv);
 
-    try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(configuration.nodejs_instrumentation_disabled, "configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.python_instrumentation_disabled, "!configuration.python_instrumentation_disabled");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.dotnet, "!configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.jvm, "!configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(configuration.auto_instrumentation_disabled.nodejs, "configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.python, "!configuration.auto_instrumentation_disabled.python");
 }
 
 test "readConfigurationFromEnvironment: if OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED is not set, all runtimes are enabled" {
@@ -2441,10 +2181,10 @@ test "readConfigurationFromEnvironment: if OTEL_INJECTOR_AUTO_INSTRUMENTATION_DI
     var configuration = try createDefaultConfiguration(arena_allocator);
     readConfigurationFromEnvironment(testing.io, arena_allocator, &configuration, test_util.posixGetenv);
 
-    try test_util.expectWithMessage(!configuration.dotnet_instrumentation_disabled, "!configuration.dotnet_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.jvm_instrumentation_disabled, "!configuration.jvm_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.nodejs_instrumentation_disabled, "!configuration.nodejs_instrumentation_disabled");
-    try test_util.expectWithMessage(!configuration.python_instrumentation_disabled, "!configuration.python_instrumentation_disabled");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.dotnet, "!configuration.auto_instrumentation_disabled.dotnet");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.jvm, "!configuration.auto_instrumentation_disabled.jvm");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.nodejs, "!configuration.auto_instrumentation_disabled.nodejs");
+    try test_util.expectWithMessage(!configuration.auto_instrumentation_disabled.python, "!configuration.auto_instrumentation_disabled.python");
 }
 
 test "readConfigurationDirectory: directory does not exist" {
@@ -2464,15 +2204,15 @@ test "readConfigurationDirectory: directory does not exist" {
 
     // Configuration should remain at defaults when the directory does not exist.
     try testing.expectEqualStrings(
-        default_dotnet_auto_instrumentation_agent_path_prefix,
+        "",
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
     try testing.expectEqualStrings(
-        default_jvm_auto_instrumentation_agent_path,
+        "",
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        default_nodejs_auto_instrumentation_agent_path,
+        "",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
 }
@@ -2504,7 +2244,7 @@ test "readConfigurationDirectory: reads .conf files in alphabetical order and ig
     );
     // not-a-conf-file.txt should be ignored, so the dotnet path should remain at the default.
     try testing.expectEqualStrings(
-        default_dotnet_auto_instrumentation_agent_path_prefix,
+        "",
         configuration.dotnet_auto_instrumentation_agent_path_prefix,
     );
 }
@@ -2534,27 +2274,22 @@ test "readConfigurationDirectory: conf.d files override values from the main con
 
 fn copyMap(allocator: std.mem.Allocator, source: std.StringHashMap([]u8)) !std.StringHashMap([]u8) {
     var target = std.StringHashMap([]u8).init(allocator);
+    errdefer {
+        var it = target.iterator();
+        while (it.next()) |entry| {
+            allocator.free(entry.key_ptr.*);
+            allocator.free(entry.value_ptr.*);
+        }
+        target.deinit();
+    }
     try target.ensureTotalCapacity(source.count());
     var it = source.iterator();
     while (it.next()) |entry| {
         const key = try std.fmt.allocPrint(allocator, "{s}", .{entry.key_ptr.*});
+        errdefer allocator.free(key);
         const value = try std.fmt.allocPrint(allocator, "{s}", .{entry.value_ptr.*});
+        errdefer allocator.free(value);
         try target.put(key, value);
     }
     return target;
-}
-
-fn copyStringArray(allocator: std.mem.Allocator, source: [][]const u8) std.mem.Allocator.Error![][]const u8 {
-    const target = try allocator.alloc([]const u8, source.len);
-    for (source, 0..) |p, i| {
-        target[i] = try std.fmt.allocPrint(allocator, "{s}", .{p});
-    }
-    return target;
-}
-
-fn deinitStringArray(allocator: std.mem.Allocator, array: [][]const u8) void {
-    for (array) |item| {
-        allocator.free(item);
-    }
-    allocator.free(array);
 }

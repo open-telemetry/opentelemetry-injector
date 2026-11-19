@@ -83,6 +83,8 @@ agents:
 
 ## Activation and Configuration
 
+See the [configuration reference](configuration.md) for all injector options, loading order, and file syntax.
+
 This method requires `root` privileges.
 
 1. Add the path of the provided `/usr/lib/opentelemetry/libotelinject.so` shared object library to the

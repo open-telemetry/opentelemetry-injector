@@ -5,6 +5,7 @@ const std = @import("std");
 
 const print = @import("print.zig");
 const types = @import("types.zig");
+const options = @import("config_generated.zig");
 
 pub const modification_happened_msg = "adding additional OpenTelemetry resources attributes via {s}";
 
@@ -14,56 +15,7 @@ pub fn setLibcInfo(info: types.LibCInfo) void {
     libc_info = info;
 }
 
-/// A type for a rule to map an environment variable to a resource attribute. The result of applying these rules (via
-/// getModifiedOtelResourceAttributesValue) is a string of key-value pairs, where each pair is of the form key=value,
-/// and pairs are separated by commas. If resource_attributes_key is not null, we append a key-value pair
-/// (that is, ${resource_attributes_key}=${value of environment variable}). If resource_attributes_key is null, the
-/// value of the enivronment variable is expected to already be a key-value pair (or a comma separated list of key-value
-/// pairs), and the value of the enivronment variable is appended as is.
-const EnvToResourceAttributeMapping = struct {
-    environement_variable_name: [:0]const u8,
-    resource_attributes_key: []const u8,
-};
-
 pub const otel_resource_attributes_env_var_name = "OTEL_RESOURCE_ATTRIBUTES";
-
-const otel_injector_resource_attributes_env_name = "OTEL_INJECTOR_RESOURCE_ATTRIBUTES";
-
-/// A list of mappings from environment variables to resource attributes.
-const mappings: [7]EnvToResourceAttributeMapping =
-    .{
-        // Kubernetes-related resource attributes:
-        EnvToResourceAttributeMapping{
-            .environement_variable_name = "OTEL_INJECTOR_K8S_NAMESPACE_NAME",
-            .resource_attributes_key = "k8s.namespace.name",
-        },
-        EnvToResourceAttributeMapping{
-            .environement_variable_name = "OTEL_INJECTOR_K8S_POD_NAME",
-            .resource_attributes_key = "k8s.pod.name",
-        },
-        EnvToResourceAttributeMapping{
-            .environement_variable_name = "OTEL_INJECTOR_K8S_POD_UID",
-            .resource_attributes_key = "k8s.pod.uid",
-        },
-        EnvToResourceAttributeMapping{
-            .environement_variable_name = "OTEL_INJECTOR_K8S_CONTAINER_NAME",
-            .resource_attributes_key = "k8s.container.name",
-        },
-
-        // Service-related resource attributes:
-        EnvToResourceAttributeMapping{
-            .environement_variable_name = "OTEL_INJECTOR_SERVICE_NAME",
-            .resource_attributes_key = "service.name",
-        },
-        EnvToResourceAttributeMapping{
-            .environement_variable_name = "OTEL_INJECTOR_SERVICE_VERSION",
-            .resource_attributes_key = "service.version",
-        },
-        EnvToResourceAttributeMapping{
-            .environement_variable_name = "OTEL_INJECTOR_SERVICE_NAMESPACE",
-            .resource_attributes_key = "service.namespace",
-        },
-    };
 
 /// Derive the modified value for OTEL_RESOURCE_ATTRIBUTES based on the original value, and on other resource attributes
 /// provided via the OTEL_INJECTOR_* environment variables.
@@ -93,8 +45,7 @@ pub fn getModifiedOtelResourceAttributesValue(gpa: std.mem.Allocator) !?[:0]u8 {
     // OTEL_INJECTOR_RESOURCE_ATTRIBUTES should have priority over the built-in mappings, so we process
     // OTEL_INJECTOR_RESOURCE_ATTRIBUTES first. Then later, when iterating over `mappings`, we will check whether a key
     // has already been written (and if so, skip it in the mappings-loop).
-    if (getenv_fn(otel_injector_resource_attributes_env_name)) |otel_injector_resource_attributes_value_ptr| {
-        const otel_injector_resource_attributes_value = std.mem.span(otel_injector_resource_attributes_value_ptr);
+    if (options.resource_attributes.readLibcEnvironment(getenv_fn)) |otel_injector_resource_attributes_value| {
         // Split the value of OTEL_INJECTOR_RESOURCE_ATTRIBUTES into individual key-value pairs.
         var all_key_value_pairs = std.mem.splitAny(u8, otel_injector_resource_attributes_value, ",");
         while (true) {
@@ -152,12 +103,12 @@ pub fn getModifiedOtelResourceAttributesValue(gpa: std.mem.Allocator) !?[:0]u8 {
     }
 
     // Now iterate over the mappings from OTEL_INJECTOR_* environment variables to resource attributes:
-    for (mappings) |mapping| {
-        const key = mapping.resource_attributes_key;
+    for (options.resource_mappings) |mapping| {
+        const key = mapping.attribute;
 
         // If no value is set in the process environment, i.e. there we are processing the mapping from
         // OTEL_INJECTOR_K8S_POD_NAME to k8s.pod.name but OTEL_INJECTOR_K8S_POD_NAME is not set, we skip this mapping.
-        const value = std.mem.span(getenv_fn(mapping.environement_variable_name) orelse continue);
+        const value = mapping.option.readLibcEnvironment(getenv_fn) orelse continue;
 
         // Check if the original value contains the key already:
         var value_already_written: ?[]const u8 = null;
@@ -177,7 +128,7 @@ pub fn getModifiedOtelResourceAttributesValue(gpa: std.mem.Allocator) !?[:0]u8 {
             }
         }
         if (value_already_written) |val| {
-            print.printDebug("OTEL_RESOURCE_ATTRIBUTES already sets '{s}={s}'; skipping appending '{s}={s}' from {s}", .{ key, val, key, value, mapping.environement_variable_name });
+            print.printDebug("OTEL_RESOURCE_ATTRIBUTES already sets '{s}={s}'; skipping appending '{s}={s}' from {s}", .{ key, val, key, value, mapping.option.env_name.? });
             continue;
         }
 

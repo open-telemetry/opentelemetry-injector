@@ -62,6 +62,12 @@ Run `make generate-config` from the repository root with Go 1.23 or later to upd
 
 The generated module provides typed option accessors, defaults, configuration fields, and resource mappings. `Configuration.initEmpty` creates allocation-free empty storage with scalar defaults. All non-empty string/list storage and environment-map entries must belong to the allocator passed to `deinit`. File loading and environment overrides iterate over generated declarations. Keep complex injection behavior in handwritten Zig code, and document shared behavior outside the generated section. During review, check that new injector-owned settings use the catalog rather than ad hoc environment reads.
 
+### Naming injector-specific environment variables
+
+Use the `OTEL_INJECTOR_` prefix for environment variables that configure the injector or supply inputs it translates before starting an application. For a direct mapping to an OpenTelemetry agent variable, keep the agent variable's name after the injector prefix. For example, `OTEL_INJECTOR_JAVAAGENT_EXTENSIONS` supplies paths for `OTEL_JAVAAGENT_EXTENSIONS`.
+
+This convention does not imply automatic passthrough or that every injector input has an agent-variable counterpart. Some inputs are controls, such as `OTEL_INJECTOR_LOG_LEVEL` and `OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED`. Others are translated or combined: `OTEL_INJECTOR_RESOURCE_ATTRIBUTES` contributes to `OTEL_RESOURCE_ATTRIBUTES`, while `OTEL_INJECTOR_SERVICE_NAME` maps to the `service.name` resource attribute. Document each variable's behavior explicitly.
+
 ### Github PR Workflow
 
 It is recommended to follow the ["GitHub Workflow"](https://guides.github.com/introduction/flow/). When using [GitHub's CLI](https://github.com/cli/cli), here's how it typically looks like:

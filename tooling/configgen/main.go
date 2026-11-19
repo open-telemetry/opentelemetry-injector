@@ -310,7 +310,7 @@ func inline(s string) string {
 
 func generateDocs(options []option) []byte {
 	var b strings.Builder
-	b.WriteString("## Options\n\nGenerated from `options.yaml` using `make generate-config`. Defaults below are library defaults, not package-provided settings.\n\n")
+	b.WriteString("## Options\n\nGenerated from `options.yaml` using `make generate-config`.\nDefaults below are library defaults, not package-provided settings.\n\n")
 	for _, o := range options {
 		fmt.Fprintf(&b, "- [%s](#%s)\n", o.Heading(), o.ID)
 	}
@@ -338,10 +338,10 @@ func generateDocs(options []option) []byte {
 			b.WriteString("\n**Allowed values:** `debug`, `info`, `warn`, `error`, `none`.\n")
 		}
 		if o.Type == globListType {
-			b.WriteString("\nComma-separated glob patterns. Items are trimmed and empty items are ignored. `*` matches any sequence and `?` matches one character.\n")
+			b.WriteString("\nComma-separated glob patterns.\nItems are trimmed and empty items are ignored.\n`*` matches any sequence and `?` matches one character.\n")
 		}
 		if o.ResourceAttribute != "" {
-			fmt.Fprintf(&b, "\n**Resource attribute:** %s. See [resource-attribute precedence](#resource_attributes) for interactions with other inputs.\n", inline(o.ResourceAttribute))
+			fmt.Fprintf(&b, "\n**Resource attribute:** %s.\nSee [resource-attribute precedence](#resource_attributes) for interactions with other inputs.\n", inline(o.ResourceAttribute))
 		}
 		if details := strings.TrimSpace(o.Details); details != "" {
 			fmt.Fprintf(&b, "\n%s\n", details)

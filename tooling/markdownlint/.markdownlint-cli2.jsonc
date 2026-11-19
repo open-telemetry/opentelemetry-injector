@@ -1,0 +1,17 @@
+// Configuration for markdownlint-cli2, see https://github.com/DavidAnson/markdownlint-cli2.
+// Run it via "make markdown-lint" from the repository root.
+{
+  "config": {
+    // Only enforce the prose rules from CONTRIBUTING.md, not the full set of markdownlint style rules.
+    "default": false,
+    // One full sentence per line, so that diffs of documentation changes show exactly which sentences changed:
+    // a line must not contain more than one sentence, and a sentence must not be wrapped across multiple lines.
+    "markdownlint-sentences-per-line": {
+      "single_line_sentences": true
+    }
+  },
+  "customRules": ["markdownlint-sentences-per-line"],
+  "globs": ["**/*.md"],
+  "ignores": ["**/node_modules/**", "CHANGELOG.md", ".chloggen/**"],
+  "gitignore": true
+}

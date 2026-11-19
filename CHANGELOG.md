@@ -4,6 +4,18 @@
 
 <!-- next version -->
 
+## v0.12.1
+
+### 🧰 Bug fixes 🧰
+
+- `injector`: Do not abort the host process when `/proc/self/exe` can be opened but neither read nor closed, as happens under QEMU user-mode emulation; the injector now logs the error and skips injection. (#465)
+  The v0.11.0 injector panicked with "reached unreachable code" followed by "aborting due to recursive panic", which
+  aborted every process on the host when the injector was configured in `/etc/ld.so.preload`. A panic in the injector now also prints a log line with the `[otel-injector]` prefix before the
+  stack trace.
+  
+
+<!-- previous-version -->
+
 ## v0.12.0
 
 ### 💡 Enhancements 💡

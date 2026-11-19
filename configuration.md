@@ -198,6 +198,16 @@ As of version 0.82.0 of that package, this file is located at `node_modules/@ope
 Older versions use `node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js`.
 The injector sets or appends to `NODE_OPTIONS` to activate it.
 
+Runtimes other than Node.js read `NODE_OPTIONS` as well, for compatibility with Node.js.
+Deno, for example, loads the module passed via `--require`, and fails to start when it lacks the permission to read the module's files.
+The injector therefore only adds the Node.js auto-instrumentation to `NODE_OPTIONS` when it has verified that the process is a Node.js process.
+
+A process is recognized as Node.js when its executable exports the function `node::Start` (which other runtimes that implement parts of the Node.js API for native addons, like Deno and Bun, do not export), or when the executable depends on `libnode.so`, as the Node.js packages of Linux distributions like Debian, Ubuntu and Fedora do.
+All other processes, including shells, do not get `NODE_OPTIONS`.
+A shell that starts a Node.js process passes the injector on to it via `LD_PRELOAD`, and the injector then sets `NODE_OPTIONS` in the Node.js process itself.
+
+As a consequence, a program that embeds Node.js and loads `libnode.so` via `dlopen`, instead of depending on it directly, is not instrumented: it looks like any other process when the injector runs.
+
 See the [Node.js auto-instrumentation configuration documentation](https://opentelemetry.io/docs/zero-code/js/configuration/) for agent settings.
 
 ### Python

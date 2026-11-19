@@ -53,6 +53,9 @@ esac
 # Note: Runtime-independent test sets like default.tests, sdk-does-not-exist.tests, and sdk-cannot-be-accessed.tests
 # also use Node.js as the runtime for the container under test.
 test_app="nodejs"
+if [[ "$TEST_SET" = "deno.tests" ]]; then
+  test_app="deno"
+fi
 if [[ "$TEST_SET" = "dotnet.tests" ]]; then
   test_app="dotnet"
 fi
@@ -114,6 +117,13 @@ fi
 base_image_run=unknown
 base_image_build=unknown
 case "$test_app" in
+  "deno")
+    dockerfile_name="injector-integration-tests/apps/deno/Dockerfile"
+    base_image_run=denoland/deno:debian-2.9.8
+    if [[ "$LIBC" = "musl" ]]; then
+      base_image_run=denoland/deno:alpine-2.9.8
+    fi
+    ;;
   "dotnet")
     dockerfile_name="injector-integration-tests/apps/dotnet/Dockerfile"
     base_image_build=mcr.microsoft.com/dotnet/sdk:9.0-bookworm-slim

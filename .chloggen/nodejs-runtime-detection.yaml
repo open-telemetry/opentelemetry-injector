@@ -1,0 +1,18 @@
+# One of 'breaking', 'deprecation', 'new_component', 'enhancement', 'bug_fix'
+change_type: bug_fix
+
+component: Node.js
+
+note: Only add the Node.js auto-instrumentation to `NODE_OPTIONS` in processes that have been verified to be Node.js.
+
+issues: [458]
+
+subtext: |
+  Other runtimes read `NODE_OPTIONS` as well. Deno, for example, failed to start when it lacked the permission to read
+  the auto-instrumentation's files.
+  A process is recognized as Node.js when its executable exports `node::Start`, or depends on `libnode.so`.
+  Shells and other processes that are not Node.js no longer get `NODE_OPTIONS`; a Node.js process they start gets it
+  from the injector loaded into the Node.js process itself.
+  Programs that load Node.js at runtime via `dlopen` are no longer instrumented.
+
+change_logs: [user]

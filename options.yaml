@@ -51,7 +51,7 @@
   env:
     name: DOTNET_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX
   empty_value: Disable .NET auto-instrumentation.
-  details: Must contain the architecture-specific native library, AdditionalDeps, store, and net startup-hook files beneath glibc and musl directories. See the [agent layout guide](README.md#activation-and-configuration). An empty path disables only .NET instrumentation, not [resource-attribute injection](#resource_attributes).
+  details: See [.NET requirements and behavior](#net) for the required layout and runtime eligibility checks. An empty path disables only .NET instrumentation, not [resource-attribute injection](#resource_attributes).
   examples: [/usr/lib/opentelemetry/dotnet]
 
 - id: dotnet_minimum_major_version
@@ -64,7 +64,7 @@
     name: DOTNET_AUTO_INSTRUMENTATION_MINIMUM_DOTNET_MAJOR_VERSION
     trim: false
   invalid_value: Warn and retain the previously resolved value. Empty values are invalid.
-  details: Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Applies when the application's `runtimeconfig.json` identifies a runtime version. Distributions supporting older .NET versions can lower this threshold.
+  details: Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Applies when the application's `runtimeconfig.json` identifies a runtime version. Distributions supporting older .NET versions can lower this threshold. See [.NET requirements and behavior](#net) for runtime-check limitations.
   examples: ["8", "6"]
 
 - id: jvm_agent_path
@@ -76,7 +76,7 @@
   env:
     name: JVM_AUTO_INSTRUMENTATION_AGENT_PATH
   empty_value: Disable JVM auto-instrumentation.
-  details: An empty path disables only JVM instrumentation, not [resource-attribute injection](#resource_attributes). It can disable Java for one process without changing shared configuration.
+  details: See [Java requirements and behavior](#java) for agent requirements and version detection. An empty path disables only JVM instrumentation, not [resource-attribute injection](#resource_attributes). It can disable Java for one process without changing shared configuration.
   examples: [/usr/lib/opentelemetry/jvm/javaagent.jar, ""]
 
 - id: jvm_minimum_major_version
@@ -89,7 +89,7 @@
     name: JVM_AUTO_INSTRUMENTATION_MINIMUM_JAVA_MAJOR_VERSION
     trim: false
   invalid_value: Warn and retain the previously resolved value. Empty values are invalid.
-  details: Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Set to `0` to skip Java version detection. If the Java version cannot be determined, injection is skipped. Distributions supporting older Java versions can lower this threshold.
+  details: Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Set to `0` to skip Java version detection. If the Java version cannot be determined, injection is skipped. Distributions supporting older Java versions can lower this threshold. See [Java requirements and behavior](#java) for detection limitations and the risks of bypassing the check.
   examples: ["8", "6", "0"]
 
 - id: javaagent_extensions
@@ -115,7 +115,7 @@
   env:
     name: NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH
   empty_value: Disable Node.js auto-instrumentation.
-  details: An empty path disables only Node.js instrumentation, not [resource-attribute injection](#resource_attributes).
+  details: See [Node.js requirements and behavior](#nodejs) for the registration file and environment modifications. An empty path disables only Node.js instrumentation, not [resource-attribute injection](#resource_attributes).
   examples: [/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js]
 
 - id: python_agent_path
@@ -127,7 +127,7 @@
   env:
     name: PYTHON_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX
   empty_value: Disable Python auto-instrumentation.
-  details: Must contain `glibc` and `musl` directories. The matching directory is prepended to `PYTHONPATH`. Python is opt-in because injecting packages can cause dependency conflicts. An empty path disables only Python instrumentation, not [resource-attribute injection](#resource_attributes).
+  details: See [Python requirements and behavior](#python) for the required layout and dependency-conflict warning. An empty path disables only Python instrumentation, not [resource-attribute injection](#resource_attributes).
   examples: [/usr/lib/opentelemetry/python]
 
 - id: ruby_agent_path
@@ -139,7 +139,7 @@
   env:
     name: RUBY_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX
   empty_value: Disable Ruby auto-instrumentation.
-  details: Must contain `glibc` and `musl` gem-home directories with the `opentelemetry-auto-instrumentation.rb` entry point. Prefixes containing whitespace are rejected during injection. An empty path disables only Ruby instrumentation, not [resource-attribute injection](#resource_attributes).
+  details: See [Ruby requirements and behavior](#ruby) for the required layout and environment-variable interactions. An empty path disables only Ruby instrumentation, not [resource-attribute injection](#resource_attributes).
   examples: [/usr/lib/opentelemetry/ruby]
 
 - id: agents_env_path
@@ -235,7 +235,7 @@
 
     Resource keys already in `OTEL_RESOURCE_ATTRIBUTES` win over this setting. These values in turn win over individual mappings such as [OTEL_INJECTOR_SERVICE_NAME](#service_name). Within this additional key-value list, the first occurrence of a key wins.
 
-    Setting [auto_instrumentation_disabled](#auto_instrumentation_disabled) does not disable resource-attribute injection. Use [OTEL_INJECTOR_DISABLED](#disabled) to prevent all injector environment modifications. See the [Kubernetes mapping example](README.md#mapping-kubernetes-resource-attributes) for deriving individual values from pod fields.
+    Setting [auto_instrumentation_disabled](#auto_instrumentation_disabled) does not disable resource-attribute injection. Use [OTEL_INJECTOR_DISABLED](#disabled) to prevent all injector environment modifications. See the [Kubernetes mapping example](#mapping-kubernetes-resource-attributes) for deriving individual values from pod fields.
   examples: ["service.name=my-service,deployment.environment.name=production"]
 
 - id: k8s_namespace_name

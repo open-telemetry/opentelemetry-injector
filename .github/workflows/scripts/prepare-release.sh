@@ -33,7 +33,8 @@ git add --all
 # otherwise (e.g. when someone has pushed additional changelog edits to the release branch). The resulting commit on
 # main is detected by .github/workflows/scripts/create-tag-for-release.sh, which creates the release tag only if the
 # commit message matches the pattern RELEASE_COMMIT_PATTERN defined there. If you change the commit message or the PR
-# title here, update that pattern accordingly, otherwise no release tag will be created.
+# title here, update that pattern accordingly, otherwise no release tag will be created. Also update the PR title
+# exemption in .github/workflows/changelog.yml, otherwise the changelog check fails on the release PR.
 git commit -m "docs: update changelog to prepare release ${VERSION}"
 
 git push --set-upstream origin "${BRANCH}"

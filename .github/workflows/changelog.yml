@@ -2,6 +2,8 @@
 # yaml file to the ./.chloggen/ directory. If a CHANGELOG entry is not required,
 # or if performing maintenance on the Changelog, add either "chore" to the title
 # of the pull request or add the \"Skip Changelog\" label to disable this action.
+# Release PRs created by .github/workflows/scripts/prepare-release.sh (title "docs: update changelog to prepare release
+# vX.Y.Z") are exempt as well, since they compile the .chloggen entries into CHANGELOG.md.
 
 name: Changelog
 
@@ -31,7 +33,8 @@ jobs:
       !contains(github.event.pull_request.labels.*.name, 'Skip Changelog') &&
       !startsWith(github.event.pull_request.title, 'chore') &&
       !startsWith(github.event.pull_request.title, 'ci') &&
-      !startsWith(github.event.pull_request.title, 'test')
+      !startsWith(github.event.pull_request.title, 'test') &&
+      !startsWith(github.event.pull_request.title, 'docs: update changelog to prepare release ')
     env:
       PR_HEAD: ${{ github.event.pull_request.head.sha }}
 

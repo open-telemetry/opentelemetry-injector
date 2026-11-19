@@ -14,6 +14,7 @@ pub const RuntimeSet = struct {
     dotnet: bool = false,
     jvm: bool = false,
     nodejs: bool = false,
+    php: bool = false,
     python: bool = false,
     ruby: bool = false,
 };

@@ -86,6 +86,15 @@ pub const nodejs_agent_path = support.Option(.string){
     .default_value = "",
 };
 
+pub const php_agent_path = support.Option(.string){
+    .file_key = "php_auto_instrumentation_agent_path_prefix",
+    .repeated = .replace,
+    .env_name = "PHP_AUTO_INSTRUMENTATION_AGENT_PATH_PREFIX",
+    .trim = true,
+    .empty = .value,
+    .default_value = "",
+};
+
 pub const python_agent_path = support.Option(.string){
     .file_key = "python_auto_instrumentation_agent_path_prefix",
     .repeated = .replace,
@@ -217,6 +226,7 @@ pub const file_options = .{
     jvm_agent_path,
     jvm_minimum_major_version,
     nodejs_agent_path,
+    php_agent_path,
     python_agent_path,
     ruby_agent_path,
     agents_env_path,
@@ -243,6 +253,7 @@ pub const Configuration = struct {
     jvm_auto_instrumentation_agent_path: []u8,
     jvm_auto_instrumentation_minimum_java_major_version: u32,
     nodejs_auto_instrumentation_agent_path: []u8,
+    php_auto_instrumentation_agent_path_prefix: []u8,
     python_auto_instrumentation_agent_path_prefix: []u8,
     ruby_auto_instrumentation_agent_path_prefix: []u8,
     all_auto_instrumentation_agents_env_path: []u8,
@@ -260,6 +271,7 @@ pub const Configuration = struct {
             .jvm_auto_instrumentation_agent_path = "",
             .jvm_auto_instrumentation_minimum_java_major_version = jvm_minimum_major_version.initialValue(),
             .nodejs_auto_instrumentation_agent_path = "",
+            .php_auto_instrumentation_agent_path_prefix = "",
             .python_auto_instrumentation_agent_path_prefix = "",
             .ruby_auto_instrumentation_agent_path_prefix = "",
             .all_auto_instrumentation_agents_env_path = "",

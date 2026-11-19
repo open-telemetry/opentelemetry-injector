@@ -541,8 +541,11 @@ fn readConfigurationDirectory(io: std.Io, arena_allocator: std.mem.Allocator, co
     };
     var dir_iter = dir.iterate();
     while (dir_iter.next(io) catch null) |entry| {
-        if (entry.kind != .file) continue;
         if (!std.mem.endsWith(u8, entry.name, ".conf")) continue;
+        if (!isRegularFileOrSymlinkToRegularFile(io, dir, entry)) {
+            print.printDebug("skipping configuration drop-in {s}/{s}: not a regular file", .{ config_dir_path, entry.name });
+            continue;
+        }
         const name_copy = std.fmt.allocPrint(arena_allocator, "{s}", .{entry.name}) catch continue;
         file_names.append(arena_allocator, name_copy) catch continue;
     }
@@ -560,6 +563,21 @@ fn readConfigurationDirectory(io: std.Io, arena_allocator: std.mem.Allocator, co
         print.printDebug("reading configuration drop-in file: {s}", .{full_path});
         readConfigurationFile(io, arena_allocator, full_path, configuration);
     }
+}
+
+/// Symlinks are accepted when they resolve to a regular file: a Kubernetes ConfigMap (or Secret, or projected)
+/// volume materialises every key as a symlink into a timestamped ..data directory, so skipping symlinks would
+/// silently ignore all drop-ins delivered that way. Dangling symlinks and symlinks to anything other than a regular
+/// file are rejected.
+fn isRegularFileOrSymlinkToRegularFile(io: std.Io, dir: std.Io.Dir, entry: std.Io.Dir.Entry) bool {
+    return switch (entry.kind) {
+        .file => true,
+        .sym_link => {
+            const stat = dir.statFile(io, entry.name, .{}) catch return false;
+            return stat.kind == .file;
+        },
+        else => false,
+    };
 }
 
 fn applyKeyValueToAllAgentsEnv(_: std.mem.Allocator, key: []const u8, value: []u8, _file_path: []const u8, _configuration: *InjectorConfiguration) void {
@@ -2270,6 +2288,73 @@ test "readConfigurationDirectory: conf.d files override values from the main con
         "/conf.d/path/to/jvm/javaagent.jar",
         configuration.jvm_auto_instrumentation_agent_path,
     );
+}
+
+test "readConfigurationDirectory: reads drop-ins that are symlinks, as mounted Kubernetes ConfigMaps are" {
+    const allocator = testing.allocator;
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    // Reproduce the layout kubelet creates for a ConfigMap volume: the real files live in a
+    // timestamped directory, ..data points at it, and every key is a symlink through ..data.
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDir(testing.io, "..2026_11_03_07_11_51.813479606", .default_dir);
+    try writeTestFile(tmp.dir, "..2026_11_03_07_11_51.813479606/jvm.conf", "jvm_auto_instrumentation_agent_path = /from/configmap/javaagent.jar\n");
+    try tmp.dir.symLink(testing.io, "..2026_11_03_07_11_51.813479606", "..data", .{});
+    try tmp.dir.symLink(testing.io, "..data/jvm.conf", "jvm.conf", .{});
+
+    const configuration = try readConfigurationDirectoryFromTmpDir(arena_allocator, tmp.dir);
+
+    try testing.expectEqualStrings(
+        "/from/configmap/javaagent.jar",
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+}
+
+test "readConfigurationDirectory: skips dangling symlinks and symlinks to directories" {
+    const allocator = testing.allocator;
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDir(testing.io, "a-directory", .default_dir);
+    try tmp.dir.symLink(testing.io, "a-directory", "00-directory.conf", .{});
+    try tmp.dir.symLink(testing.io, "does-not-exist.conf", "01-dangling.conf", .{});
+    try writeTestFile(tmp.dir, "02-jvm.conf", "jvm_auto_instrumentation_agent_path = /from/regular/file/javaagent.jar\n");
+
+    const configuration = try readConfigurationDirectoryFromTmpDir(arena_allocator, tmp.dir);
+
+    try testing.expectEqualStrings(
+        "/from/regular/file/javaagent.jar",
+        configuration.jvm_auto_instrumentation_agent_path,
+    );
+}
+
+fn writeTestFile(dir: std.Io.Dir, sub_path: []const u8, content: []const u8) !void {
+    const file = try dir.createFile(testing.io, sub_path, .{});
+    defer file.close(testing.io);
+    var buffer: [128]u8 = undefined;
+    var writer = file.writer(testing.io, &buffer);
+    try writer.interface.writeAll(content);
+    try writer.interface.flush();
+}
+
+fn readConfigurationDirectoryFromTmpDir(arena_allocator: std.mem.Allocator, dir: std.Io.Dir) !InjectorConfiguration {
+    const dir_path = try dir.realPathFileAlloc(testing.io, ".", arena_allocator);
+    const env_entry = try std.fmt.allocPrint(arena_allocator, "OTEL_INJECTOR_CONFIG_DIR={s}", .{dir_path});
+
+    const original_environ = try test_util.setStdCEnviron(&[1][]const u8{env_entry});
+    defer test_util.resetStdCEnviron(original_environ);
+
+    var configuration = try createDefaultConfiguration(arena_allocator);
+    readConfigurationDirectory(testing.io, arena_allocator, &configuration, test_util.posixGetenv);
+    return configuration;
 }
 
 fn copyMap(allocator: std.mem.Allocator, source: std.StringHashMap([]u8)) !std.StringHashMap([]u8) {

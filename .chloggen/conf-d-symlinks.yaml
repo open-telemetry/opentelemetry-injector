@@ -1,0 +1,9 @@
+change_type: bug_fix
+component: configuration
+note: Read `conf.d` drop-in files that are symlinks to regular files, so drop-ins mounted from a Kubernetes ConfigMap or Secret are no longer silently ignored.
+issues: [454]
+subtext: |
+  Kubernetes materialises every key of a ConfigMap, Secret or projected volume as a symlink into a timestamped `..data`
+  directory. Dangling symlinks and symlinks to anything other than a regular file are still skipped, and every skipped
+  `.conf` entry is now logged at debug level.
+change_logs: [user]

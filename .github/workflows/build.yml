@@ -47,6 +47,36 @@ jobs:
           path: ./dist/*.so
           if-no-files-found: error
 
+  # End to end: injector -> PHP_INI_SCAN_DIR -> the distro's loader -> per-version extension ->
+  # SDK bootstrap -> spans received by a real collector over OTLP, under every supported SAPI
+  # including mod_php.
+  php-e2e:
+    runs-on: ${{ matrix.ARCH == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    needs: verify-and-build-binary
+    strategy:
+      fail-fast: false
+      matrix:
+        ARCH: [ "amd64", "arm64" ]
+    steps:
+      - name: Check out the codebase.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      # Reuse the binary the build job already produced instead of rebuilding it; the Makefile
+      # target depends on the file, so a present, newer binary is left alone.
+      - name: Download the injector binary
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: libotelinject-${{ matrix.ARCH }}
+          path: ./dist
+
+      - name: Run the PHP end-to-end tests (cli, built-in server, php-fpm + nginx, mod_php)
+        run: make php-e2e-tests ARCH=${{ matrix.ARCH }}
+
   test-release-signing:
     runs-on: ubuntu-26.04
     if: ${{ !startsWith(github.ref, 'refs/tags/') }}

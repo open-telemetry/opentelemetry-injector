@@ -4,22 +4,34 @@ See [options](#options) for the complete configuration reference, [runtime-speci
 
 ## Loading order and precedence
 
-The injector reads configuration once per process. Restart applications or services after changing configuration.
+The injector reads configuration once per process.
+Restart applications or services after changing configuration.
 
-The log level and complete disablement are read from the environment before configuration-file loading. Other settings are resolved in this order:
+The log level and complete disablement are read from the environment before configuration-file loading.
+Other settings are resolved in this order:
 
 1. Library defaults.
 2. The main configuration file, selected by [OTEL_INJECTOR_CONFIG_FILE](#config_file).
 3. Regular `.conf` files in the directory selected by [OTEL_INJECTOR_CONFIG_DIR](#config_dir), in alphabetical order.
 4. Environment-variable overrides.
 
-Missing or unreadable configuration files and directories are skipped. Empty file/directory selector variables use their default locations. Choosing a different main file does not disable drop-in loading.
+Missing or unreadable configuration files and directories are skipped.
+Empty file/directory selector variables use their default locations.
+Choosing a different main file does not disable drop-in loading.
 
-Later scalar values replace earlier values. The include/exclude pattern lists accumulate across repeated lines and across files. An environment override replaces the entire file-derived value, rather than appending to it. An unset environment variable leaves the file-derived value unchanged. Empty and invalid values follow the rules in each option's reference entry.
+Later scalar values replace earlier values.
+The include/exclude pattern lists accumulate across repeated lines and across files.
+An environment override replaces the entire file-derived value, rather than appending to it.
+An unset environment variable leaves the file-derived value unchanged.
+Empty and invalid values follow the rules in each option's reference entry.
 
-Environment pre-trimming removes surrounding spaces, tabs, carriage returns (CR), and line feeds (LF) before type-specific parsing. Type-specific trimming, such as spaces, tabs, CR, and LF around integers, applies independently.
+Environment pre-trimming removes surrounding spaces, tabs, carriage returns (CR), and line feeds (LF) before type-specific parsing.
+Type-specific trimming, such as spaces, tabs, CR, and LF around integers, applies independently.
 
-The agent paths are empty in the library defaults. Language packages can enable their agents by installing drop-in files, such as `java.conf`, in the configuration directory. Package-provided paths are not library defaults. To override a package drop-in, use a later drop-in filename or an environment variable.
+The agent paths are empty in the library defaults.
+Language packages can enable their agents by installing drop-in files, such as `java.conf`, in the configuration directory.
+Package-provided paths are not library defaults.
+To override a package drop-in, use a later drop-in filename or an environment variable.
 
 ## File syntax
 
@@ -31,7 +43,15 @@ jvm_auto_instrumentation_agent_path=/usr/lib/opentelemetry/jvm/javaagent.jar
 include_paths=/app/*,/utilities/*
 ```
 
-Blank lines are ignored. `#` begins a comment, including inside quotes. Whitespace around keys and values is trimmed before optional surrounding quotes are removed. Single-quoted values are literal. Double-quoted values unescape a backslash before `"`, `\`, `$`, or a backtick. Other backslashes are preserved. There is no shell-variable expansion. Unbalanced quotes warn and are retained literally. Unknown injector keys and malformed lines are logged and ignored.
+Blank lines are ignored.
+`#` begins a comment, including inside quotes.
+Whitespace around keys and values is trimmed before optional surrounding quotes are removed.
+Single-quoted values are literal.
+Double-quoted values unescape a backslash before `"`, `\`, `$`, or a backtick.
+Other backslashes are preserved.
+There is no shell-variable expansion.
+Unbalanced quotes warn and are retained literally.
+Unknown injector keys and malformed lines are logged and ignored.
 
 The agent environment file contains environment-variable names rather than injector keys:
 
@@ -40,17 +60,22 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4317
 OTEL_PROPAGATORS=tracecontext,baggage
 ```
 
-Only prefixes allowed by the build are accepted, with `OTEL_` as the default. Variables from this file are applied after agent injection and overwrite existing values. Their settings configure the agents, not the injector itself. Consult the agents' configuration documentation for supported options.
+Only prefixes allowed by the build are accepted, with `OTEL_` as the default.
+Variables from this file are applied after agent injection and overwrite existing values.
+Their settings configure the agents, not the injector itself.
+Consult the agents' configuration documentation for supported options.
 
 ## Process selection
 
-Without include or exclude patterns, all processes are eligible. Actual instrumentation also requires a configured agent and the runtime-specific eligibility checks.
+Without include or exclude patterns, all processes are eligible.
+Actual instrumentation also requires a configured agent and the runtime-specific eligibility checks.
 
 - Within one setting, patterns are ORed: any matching pattern satisfies that setting.
 - Across non-empty include settings, conditions are ANDed: every configured include setting must match.
 - Any exclusion takes precedence over inclusions.
 - Argument patterns match individual arguments, excluding the executable name, rather than the combined command line.
-- `*` matches any sequence of characters and `?` matches one character. Matching is case-sensitive and covers the entire path or argument.
+- `*` matches any sequence of characters and `?` matches one character.
+  Matching is case-sensitive and covers the entire path or argument.
 
 For example:
 
@@ -61,9 +86,12 @@ include_with_arguments=*MyProject*.jar,*app.js
 exclude_with_arguments=-javaagent:*,*@opentelemetry-js*,-Xmx?m
 ```
 
-A process must match an executable-path inclusion and an argument inclusion. Even then, a matching excluded path or argument prevents injection. An exclusion prevents all injector environment modifications for that process, including resource attributes.
+A process must match an executable-path inclusion and an argument inclusion.
+Even then, a matching excluded path or argument prevents injection.
+An exclusion prevents all injector environment modifications for that process, including resource attributes.
 
-Repeated list keys accumulate. These configurations are equivalent:
+Repeated list keys accumulate.
+These configurations are equivalent:
 
 ```ini
 include_paths=/app/*,/utilities/*,*.exe
@@ -79,9 +107,13 @@ An empty environment override such as `OTEL_INJECTOR_INCLUDE_PATHS=` clears the 
 
 ## Runtime-specific requirements and behavior
 
-Agent paths are configured separately for each runtime. Packages supply paths for the agents they install. When providing your own agents, use the layouts below and consult the agents' configuration documentation for telemetry settings.
+Agent paths are configured separately for each runtime.
+Packages supply paths for the agents they install.
+When providing your own agents, use the layouts below and consult the agents' configuration documentation for telemetry settings.
 
-Runtime eligibility checks log why injection was skipped at the `info` level, naming the detected version and configured minimum when available. Processes with no runtime are reported only at `debug` level. See [logging configuration](#log_level).
+Runtime eligibility checks log why injection was skipped at the `info` level, naming the detected version and configured minimum when available.
+Processes with no runtime are reported only at `debug` level.
+See [logging configuration](#log_level).
 
 ### .NET
 
@@ -96,9 +128,13 @@ The [agent path prefix](#dotnet_agent_path) must contain the following files and
 
 The matching `glibc` or `musl` directory must also contain `AdditionalDeps`, `store`, and `net/OpenTelemetry.AutoInstrumentation.StartupHook.dll`.
 
-The injector first inspects the application's adjacent `*.runtimeconfig.json` file. If it identifies a runtime version below the [configured minimum .NET major version](#dotnet_minimum_major_version), the injector skips .NET instrumentation. If the file is missing, unreadable, malformed, or missing the expected fields, the injector proceeds with additional .NET checks.
+The injector first inspects the application's adjacent `*.runtimeconfig.json` file.
+If it identifies a runtime version below the [configured minimum .NET major version](#dotnet_minimum_major_version), the injector skips .NET instrumentation.
+If the file is missing, unreadable, malformed, or missing the expected fields, the injector proceeds with additional .NET checks.
 
-To reduce double-instrumentation, the injector then inspects the adjacent `*.deps.json` file. If it references `OpenTelemetry*` packages, the injector skips .NET instrumentation. If the file is missing, unreadable, malformed, or missing the expected fields, the injector proceeds with injection.
+To reduce double-instrumentation, the injector then inspects the adjacent `*.deps.json` file.
+If it references `OpenTelemetry*` packages, the injector skips .NET instrumentation.
+If the file is missing, unreadable, malformed, or missing the expected fields, the injector proceeds with injection.
 
 When activating .NET instrumentation, the injector sets these environment variables:
 - `CORECLR_ENABLE_PROFILING`
@@ -109,17 +145,25 @@ When activating .NET instrumentation, the injector sets these environment variab
 - `DOTNET_STARTUP_HOOKS`
 - `OTEL_DOTNET_AUTO_HOME`
 
-Existing values are overwritten, not appended to. Unlike the other runtimes, .NET does not support adding multiple agents.
+Existing values are overwritten, not appended to.
+Unlike the other runtimes, .NET does not support adding multiple agents.
 
 See the [.NET auto-instrumentation configuration documentation](https://opentelemetry.io/docs/zero-code/dotnet/configuration/) for agent settings.
 
 ### Java
 
-The [agent path](#jvm_agent_path) must point to the Java auto-instrumentation agent JAR. The injector adds a `-javaagent` flag to `JAVA_TOOL_OPTIONS` to activate it. The OpenTelemetry Java agent requires Java 8 or newer. Loading it on an older JVM causes an application startup failure with `java.lang.UnsupportedClassVersionError` before the agent can check compatibility itself.
+The [agent path](#jvm_agent_path) must point to the Java auto-instrumentation agent JAR.
+The injector adds a `-javaagent` flag to `JAVA_TOOL_OPTIONS` to activate it.
+The OpenTelemetry Java agent requires Java 8 or newer.
+Loading it on an older JVM causes an application startup failure with `java.lang.UnsupportedClassVersionError` before the agent can check compatibility itself.
 
-**The agent is injected only into a JVM whose version the injector can determine**, unless version detection is explicitly disabled. When the version cannot be established, the injector leaves `JAVA_TOOL_OPTIONS` alone and the workload runs uninstrumented. Skipping injection costs telemetry, whereas injecting an incompatible agent can prevent the application from starting.
+**The agent is injected only into a JVM whose version the injector can determine**, unless version detection is explicitly disabled.
+When the version cannot be established, the injector leaves `JAVA_TOOL_OPTIONS` alone and the workload runs uninstrumented.
+Skipping injection costs telemetry, whereas injecting an incompatible agent can prevent the application from starting.
 
-The version is read from the `JAVA_VERSION` entry of the Java home's `release` file, which most runtime images ship, including `jlink` and `jpackage` images. A Java home without one can still name its version in the `version` entry of `lib/classlib.properties`, which J9 class libraries ship. When there is neither, the injector falls back to scanning the read-only segments of the VM binaries for the vendor's version banner.
+The version is read from the `JAVA_VERSION` entry of the Java home's `release` file, which most runtime images ship, including `jlink` and `jpackage` images.
+A Java home without one can still name its version in the `version` entry of `lib/classlib.properties`, which J9 class libraries ship.
+When there is neither, the injector falls back to scanning the read-only segments of the VM binaries for the vendor's version banner.
 
 | Runtime | Detection |
 | --- | --- |
@@ -129,44 +173,61 @@ The version is read from the `JAVA_VERSION` entry of the Java home's `release` f
 | IBM SDK, Java Technology Edition 8 (IBM J9 VM) | `classlib.properties` (it ships no `release` file), falling back to the J9 version label |
 | Azul Prime (Zing) | `release` file, falling back to the Zing version string |
 
-Other runtimes are not recognized. Even on a runtime from the table, version detection does not support these cases:
-- **The VM is not loaded through the `java` launcher.** A process is recognized as a JVM by the launcher library already mapped when the injector initializes. Programs embedding a VM through the JNI Invocation API, such as Apache Commons Daemon's `jsvc`, load it later and look like non-Java processes at that point.
-- **An alternate VM is selected** through `-XXaltjvm=` or `JDK_ALTERNATE_VM`. The VM that will be loaded is not the one the injector can inspect.
+Other runtimes are not recognized.
+Even on a runtime from the table, version detection does not support these cases:
+- **The VM is not loaded through the `java` launcher.** A process is recognized as a JVM by the launcher library already mapped when the injector initializes.
+  Programs embedding a VM through the JNI Invocation API, such as Apache Commons Daemon's `jsvc`, load it later and look like non-Java processes at that point.
+- **An alternate VM is selected** through `-XXaltjvm=` or `JDK_ALTERNATE_VM`.
+  The VM that will be loaded is not the one the injector can inspect.
 - **The runtime image has no usable `release` file and no recognizable version information**, for example a heavily stripped or repackaged image.
 
-The [minimum Java major version](#jvm_minimum_major_version) can be adjusted for the agent being injected. Setting it to `0` bypasses version detection and sets `JAVA_TOOL_OPTIONS` for every process the injector is loaded into, including non-JVM processes. This allows instrumentation of otherwise undetectable JVMs, but use it only when you know those JVMs are compatible with the agent. An older JVM can otherwise fail to start with `java.lang.UnsupportedClassVersionError`.
+The [minimum Java major version](#jvm_minimum_major_version) can be adjusted for the agent being injected.
+Setting it to `0` bypasses version detection and sets `JAVA_TOOL_OPTIONS` for every process the injector is loaded into, including non-JVM processes.
+This allows instrumentation of otherwise undetectable JVMs, but use it only when you know those JVMs are compatible with the agent.
+An older JVM can otherwise fail to start with `java.lang.UnsupportedClassVersionError`.
 
-The injector can also append [Java agent extension paths](#javaagent_extensions) to `OTEL_JAVAAGENT_EXTENSIONS`, for example for extension images mounted by a controller. That option's reference describes merging and eligibility, which differ from Java agent injection.
+The injector can also append [Java agent extension paths](#javaagent_extensions) to `OTEL_JAVAAGENT_EXTENSIONS`, for example for extension images mounted by a controller.
+That option's reference describes merging and eligibility, which differ from Java agent injection.
 
 See the [Java agent configuration documentation](https://opentelemetry.io/docs/zero-code/java/agent/configuration/) for agent settings.
 
 ### Node.js
 
-The [agent path](#nodejs_agent_path) must point to the registration file in an installation of the npm module `@opentelemetry/auto-instrumentations-node`. The injector sets or appends to `NODE_OPTIONS` to activate it.
+The [agent path](#nodejs_agent_path) must point to the registration file in an installation of the npm module `@opentelemetry/auto-instrumentations-node`.
+The injector sets or appends to `NODE_OPTIONS` to activate it.
 
 See the [Node.js auto-instrumentation configuration documentation](https://opentelemetry.io/docs/zero-code/js/configuration/) for agent settings.
 
 ### Python
 
-Python requires a separately provided auto-instrumentation agent and an explicitly configured [agent path prefix](#python_agent_path). No default Python agent is included in the system packages.
+Python requires a separately provided auto-instrumentation agent and an explicitly configured [agent path prefix](#python_agent_path).
+No default Python agent is included in the system packages.
 
-The prefix must contain `glibc` and `musl` directories. The injector prepends the directory matching the detected libc to `PYTHONPATH`, so its packages are loaded first by the Python interpreter.
+The prefix must contain `glibc` and `musl` directories.
+The injector prepends the directory matching the detected libc to `PYTHONPATH`, so its packages are loaded first by the Python interpreter.
 
 Injecting additional Python packages is not always safe because they can conflict with application dependencies.
 
 ### Ruby
 
-The [agent path prefix](#ruby_agent_path) must contain `glibc` and `musl` gem-home directories with the `opentelemetry-auto-instrumentation.rb` entry point. The injector selects the directory matching the detected libc. Prefixes containing whitespace are rejected during injection.
+The [agent path prefix](#ruby_agent_path) must contain `glibc` and `musl` gem-home directories with the `opentelemetry-auto-instrumentation.rb` entry point.
+The injector selects the directory matching the detected libc.
+Prefixes containing whitespace are rejected during injection.
 
-The injector sets or prepends to `RUBYOPT` to require the auto-instrumentation gem and sets `OTEL_RUBY_ADDITIONAL_GEM_PATH` to locate its bundled dependencies. If `OTEL_RUBY_ADDITIONAL_GEM_PATH` is already set, the injector preserves it and also skips modifying `RUBYOPT`. Injecting only the require flag could otherwise make the gem look for dependencies in the user-provided path and fail with `LoadError`.
+The injector sets or prepends to `RUBYOPT` to require the auto-instrumentation gem and sets `OTEL_RUBY_ADDITIONAL_GEM_PATH` to locate its bundled dependencies.
+If `OTEL_RUBY_ADDITIONAL_GEM_PATH` is already set, the injector preserves it and also skips modifying `RUBYOPT`.
+Injecting only the require flag could otherwise make the gem look for dependencies in the user-provided path and fail with `LoadError`.
 
 See the [Ruby instrumentation documentation](https://github.com/open-telemetry/opentelemetry-ruby-instrumentation) for agent settings.
 
 ## Mapping Kubernetes Resource Attributes
 
-The injector translates [resource-attribute inputs](#resource_attributes) into `OTEL_RESOURCE_ATTRIBUTES`. Existing resource keys take precedence over injected values. The input variables must be supplied externally, for example by a Kubernetes operator with a mutating webhook.
+The injector translates [resource-attribute inputs](#resource_attributes) into `OTEL_RESOURCE_ATTRIBUTES`.
+Existing resource keys take precedence over injected values.
+The input variables must be supplied externally, for example by a Kubernetes operator with a mutating webhook.
 
-Individual inputs such as `OTEL_INJECTOR_SERVICE_NAME` are useful for deriving attributes from Kubernetes [field selectors](https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/#use-pod-fields-as-values-for-environment-variables). For example, add this to the pod template's container environment:
+Individual inputs such as `OTEL_INJECTOR_SERVICE_NAME` are useful for deriving attributes from Kubernetes [field selectors](https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/#use-pod-fields-as-values-for-environment-variables).
+For example, add this to the pod template's container environment:
 
 ```yaml
 - name: OTEL_INJECTOR_SERVICE_NAME
@@ -198,7 +259,8 @@ See also:
 
 ## Options
 
-Generated from `options.yaml` using `make generate-config`. Defaults below are library defaults, not package-provided settings.
+Generated from `options.yaml` using `make generate-config`.
+Defaults below are library defaults, not package-provided settings.
 
 - [`OTEL_INJECTOR_DISABLED`](#disabled)
 - [`OTEL_INJECTOR_LOG_LEVEL`](#log_level)
@@ -241,7 +303,10 @@ Disable the injector completely, including resource-attribute injection.
 
 **Empty value:** The injector remains enabled.
 
-Values `true` and `t` (case-insensitive), and `1` disable the injector. Every other value is false. Read before configuration files and process filtering. Unlike [auto_instrumentation_disabled](#auto_instrumentation_disabled), this prevents all injector environment modifications for the process.
+Values `true` and `t` (case-insensitive), and `1` disable the injector.
+Every other value is false.
+Read before configuration files and process filtering.
+Unlike [auto_instrumentation_disabled](#auto_instrumentation_disabled), this prevents all injector environment modifications for the process.
 
 **Examples:**
 
@@ -261,11 +326,13 @@ Minimum severity of injector messages written to the application's stderr.
 - Environment pre-trim: false
 - Empty environment policy: `value`
 
-**Invalid value:** Log an error and retain the default level. Empty values are invalid.
+**Invalid value:** Log an error and retain the default level.
+Empty values are invalid.
 
 **Allowed values:** `debug`, `info`, `warn`, `error`, `none`.
 
-Values are case-insensitive. Read before configuration files and process filtering.
+Values are case-insensitive.
+Read before configuration files and process filtering.
 
 **Examples:**
 
@@ -288,7 +355,8 @@ Location of the main injector configuration file.
 
 **Empty value:** Use the default configuration-file location.
 
-A missing or unreadable file is skipped. Files from [config_dir](#config_dir) and environment overrides are still processed.
+A missing or unreadable file is skipped.
+Files from [config_dir](#config_dir) and environment overrides are still processed.
 
 **Examples:**
 
@@ -310,7 +378,8 @@ Directory containing injector configuration drop-in files.
 
 **Empty value:** Use the default configuration-directory location.
 
-Regular files ending in `.conf` are read in alphabetical order after [config_file](#config_file). A missing or unreadable directory is skipped.
+Regular files ending in `.conf` are read in alphabetical order after [config_file](#config_file).
+A missing or unreadable directory is skipped.
 
 **Examples:**
 
@@ -335,7 +404,8 @@ Directory containing the .NET auto-instrumentation agent files.
 
 **Empty value:** Disable .NET auto-instrumentation.
 
-See [.NET requirements and behavior](#net) for the required layout and runtime eligibility checks. An empty path disables only .NET instrumentation, not [resource-attribute injection](#resource_attributes).
+See [.NET requirements and behavior](#net) for the required layout and runtime eligibility checks.
+An empty path disables only .NET instrumentation, not [resource-attribute injection](#resource_attributes).
 
 **Examples:**
 
@@ -359,9 +429,13 @@ Minimum .NET major version eligible for auto-instrumentation.
 - Type-specific whitespace trimming: spaces, tabs, CR, and LF around the integer
 - Environment override: replaces file values when successfully parsed
 
-**Invalid value:** Warn and retain the previously resolved value. Empty values are invalid.
+**Invalid value:** Warn and retain the previously resolved value.
+Empty values are invalid.
 
-Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Applies when the application's `runtimeconfig.json` identifies a runtime version. Distributions supporting older .NET versions can lower this threshold. See [.NET requirements and behavior](#net) for runtime-check limitations.
+Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds.
+Applies when the application's `runtimeconfig.json` identifies a runtime version.
+Distributions supporting older .NET versions can lower this threshold.
+See [.NET requirements and behavior](#net) for runtime-check limitations.
 
 **Examples:**
 
@@ -387,7 +461,9 @@ Path to the Java auto-instrumentation agent JAR.
 
 **Empty value:** Disable JVM auto-instrumentation.
 
-See [Java requirements and behavior](#java) for agent requirements and version detection. An empty path disables only JVM instrumentation, not [resource-attribute injection](#resource_attributes). It can disable Java for one process without changing shared configuration.
+See [Java requirements and behavior](#java) for agent requirements and version detection.
+An empty path disables only JVM instrumentation, not [resource-attribute injection](#resource_attributes).
+It can disable Java for one process without changing shared configuration.
 
 **Examples:**
 
@@ -412,9 +488,14 @@ Minimum Java major version eligible for auto-instrumentation.
 - Type-specific whitespace trimming: spaces, tabs, CR, and LF around the integer
 - Environment override: replaces file values when successfully parsed
 
-**Invalid value:** Warn and retain the previously resolved value. Empty values are invalid.
+**Invalid value:** Warn and retain the previously resolved value.
+Empty values are invalid.
 
-Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds. Set to `0` to skip Java version detection. If the Java version cannot be determined, injection is skipped. Distributions supporting older Java versions can lower this threshold. See [Java requirements and behavior](#java) for detection limitations and the risks of bypassing the check.
+Accepts decimal integers from 0 through 4294967295, trimming surrounding spaces, tabs, carriage returns, and line feeds.
+Set to `0` to skip Java version detection.
+If the Java version cannot be determined, injection is skipped.
+Distributions supporting older Java versions can lower this threshold.
+See [Java requirements and behavior](#java) for detection limitations and the risks of bypassing the check.
 
 **Examples:**
 
@@ -438,9 +519,14 @@ Java agent extension paths to append to OTEL_JAVAAGENT_EXTENSIONS.
 
 **Empty value:** Leave OTEL_JAVAAGENT_EXTENSIONS unchanged.
 
-Comma-separated paths. Whitespace is preserved, empty entries are ignored, and paths are compared exactly to avoid duplicates. Existing entries remain first. If no new path is appended, the existing value is left unchanged.
+Comma-separated paths.
+Whitespace is preserved, empty entries are ignored, and paths are compared exactly to avoid duplicates.
+Existing entries remain first.
+If no new path is appended, the existing value is left unchanged.
 
-Applied after the [agent environment file](#agents_env_path), so its `OTEL_JAVAAGENT_EXTENSIONS` value is included in the merge. Requires a non-empty [JVM agent path](#jvm_agent_path) and JVM instrumentation not disabled by [auto_instrumentation_disabled](#auto_instrumentation_disabled). Unlike Java agent injection, this does not check agent JAR accessibility or the minimum Java version.
+Applied after the [agent environment file](#agents_env_path), so its `OTEL_JAVAAGENT_EXTENSIONS` value is included in the merge.
+Requires a non-empty [JVM agent path](#jvm_agent_path) and JVM instrumentation not disabled by [auto_instrumentation_disabled](#auto_instrumentation_disabled).
+Unlike Java agent injection, this does not check agent JAR accessibility or the minimum Java version.
 
 **Examples:**
 
@@ -465,7 +551,8 @@ Path to the Node.js auto-instrumentation registration file.
 
 **Empty value:** Disable Node.js auto-instrumentation.
 
-See [Node.js requirements and behavior](#nodejs) for the registration file and environment modifications. An empty path disables only Node.js instrumentation, not [resource-attribute injection](#resource_attributes).
+See [Node.js requirements and behavior](#nodejs) for the registration file and environment modifications.
+An empty path disables only Node.js instrumentation, not [resource-attribute injection](#resource_attributes).
 
 **Examples:**
 
@@ -490,7 +577,8 @@ Directory containing the Python auto-instrumentation packages.
 
 **Empty value:** Disable Python auto-instrumentation.
 
-See [Python requirements and behavior](#python) for the required layout and dependency-conflict warning. An empty path disables only Python instrumentation, not [resource-attribute injection](#resource_attributes).
+See [Python requirements and behavior](#python) for the required layout and dependency-conflict warning.
+An empty path disables only Python instrumentation, not [resource-attribute injection](#resource_attributes).
 
 **Examples:**
 
@@ -515,7 +603,8 @@ Directory containing the Ruby auto-instrumentation gem bundle.
 
 **Empty value:** Disable Ruby auto-instrumentation.
 
-See [Ruby requirements and behavior](#ruby) for the required layout and environment-variable interactions. An empty path disables only Ruby instrumentation, not [resource-attribute injection](#resource_attributes).
+See [Ruby requirements and behavior](#ruby) for the required layout and environment-variable interactions.
+An empty path disables only Ruby instrumentation, not [resource-attribute injection](#resource_attributes).
 
 **Examples:**
 
@@ -536,7 +625,11 @@ File containing environment variables to pass to all agents.
 
 **Empty value:** Do not load an agent environment file.
 
-Uses the same `key=value` syntax as `injector.conf`. Missing or unreadable files are skipped. Only `OTEL_` variables are accepted by default. Additional prefixes require a custom build using `-Dallowed-env-var-prefixes`. Variables from this file overwrite existing process values.
+Uses the same `key=value` syntax as `injector.conf`.
+Missing or unreadable files are skipped.
+Only `OTEL_` variables are accepted by default.
+Additional prefixes require a custom build using `-Dallowed-env-var-prefixes`.
+Variables from this file overwrite existing process values.
 
 **Examples:**
 
@@ -563,11 +656,14 @@ Runtimes for which auto-instrumentation is disabled.
 
 **Invalid value:** Warn and ignore unknown runtime names.
 
-Use `*` alone to disable all runtimes, or a comma-separated list of `dotnet`, `jvm`, `nodejs`, `python`, or `ruby`. Names are case-sensitive.
+Use `*` alone to disable all runtimes, or a comma-separated list of `dotnet`, `jvm`, `nodejs`, `python`, or `ruby`.
+Names are case-sensitive.
 
-For example, `auto_instrumentation_disabled=dotnet,python` leaves JVM, Node.js, and Ruby instrumentation eligible. An empty [agent path](#jvm_agent_path) also disables that runtime.
+For example, `auto_instrumentation_disabled=dotnet,python` leaves JVM, Node.js, and Ruby instrumentation eligible.
+An empty [agent path](#jvm_agent_path) also disables that runtime.
 
-Resource attributes may still be injected. Use [OTEL_INJECTOR_DISABLED](#disabled) to disable the injector completely, including resource-attribute injection.
+Resource attributes may still be injected.
+Use [OTEL_INJECTOR_DISABLED](#disabled) to disable the injector completely, including resource-attribute injection.
 
 **Examples:**
 
@@ -593,9 +689,13 @@ Executable path patterns eligible for instrumentation.
 
 **Empty value:** No executable-path inclusion restriction.
 
-Comma-separated glob patterns. Items are trimmed and empty items are ignored. `*` matches any sequence and `?` matches one character.
+Comma-separated glob patterns.
+Items are trimmed and empty items are ignored.
+`*` matches any sequence and `?` matches one character.
 
-Any matching pattern satisfies this setting. When [include_with_arguments](#include_with_arguments) is also non-empty, both settings must match. [Path exclusions](#exclude_paths) and [argument exclusions](#exclude_with_arguments) take precedence.
+Any matching pattern satisfies this setting.
+When [include_with_arguments](#include_with_arguments) is also non-empty, both settings must match.
+[Path exclusions](#exclude_paths) and [argument exclusions](#exclude_with_arguments) take precedence.
 
 **Examples:**
 
@@ -620,7 +720,9 @@ Executable path patterns excluded from instrumentation.
 
 **Empty value:** No executable-path exclusions.
 
-Comma-separated glob patterns. Items are trimmed and empty items are ignored. `*` matches any sequence and `?` matches one character.
+Comma-separated glob patterns.
+Items are trimmed and empty items are ignored.
+`*` matches any sequence and `?` matches one character.
 
 Any matching pattern excludes the process, even when [include_paths](#include_paths) matches.
 
@@ -647,9 +749,14 @@ Process argument patterns eligible for instrumentation.
 
 **Empty value:** No process-argument inclusion restriction.
 
-Comma-separated glob patterns. Items are trimmed and empty items are ignored. `*` matches any sequence and `?` matches one character.
+Comma-separated glob patterns.
+Items are trimmed and empty items are ignored.
+`*` matches any sequence and `?` matches one character.
 
-Patterns match individual arguments. Any matching argument satisfies this setting. When [include_paths](#include_paths) is also non-empty, both settings must match. [Path exclusions](#exclude_paths) and [argument exclusions](#exclude_with_arguments) take precedence.
+Patterns match individual arguments.
+Any matching argument satisfies this setting.
+When [include_paths](#include_paths) is also non-empty, both settings must match.
+[Path exclusions](#exclude_paths) and [argument exclusions](#exclude_with_arguments) take precedence.
 
 **Examples:**
 
@@ -674,9 +781,12 @@ Process argument patterns excluded from instrumentation.
 
 **Empty value:** No process-argument exclusions.
 
-Comma-separated glob patterns. Items are trimmed and empty items are ignored. `*` matches any sequence and `?` matches one character.
+Comma-separated glob patterns.
+Items are trimmed and empty items are ignored.
+`*` matches any sequence and `?` matches one character.
 
-Patterns match individual arguments. Any matching argument excludes the process, even when [include_with_arguments](#include_with_arguments) matches.
+Patterns match individual arguments.
+Any matching argument excludes the process, even when [include_with_arguments](#include_with_arguments) matches.
 
 **Examples:**
 
@@ -698,11 +808,17 @@ Additional resource attributes to append to OTEL_RESOURCE_ATTRIBUTES.
 
 **Empty value:** Do not add any resource attributes.
 
-Comma-separated `key=value` pairs. Keys are trimmed and empty keys are ignored. Values are preserved.
+Comma-separated `key=value` pairs.
+Keys are trimmed and empty keys are ignored.
+Values are preserved.
 
-Resource keys already in `OTEL_RESOURCE_ATTRIBUTES` win over this setting. These values in turn win over individual mappings such as [OTEL_INJECTOR_SERVICE_NAME](#service_name). Within this additional key-value list, the first occurrence of a key wins.
+Resource keys already in `OTEL_RESOURCE_ATTRIBUTES` win over this setting.
+These values in turn win over individual mappings such as [OTEL_INJECTOR_SERVICE_NAME](#service_name).
+Within this additional key-value list, the first occurrence of a key wins.
 
-Setting [auto_instrumentation_disabled](#auto_instrumentation_disabled) does not disable resource-attribute injection. Use [OTEL_INJECTOR_DISABLED](#disabled) to prevent all injector environment modifications. See the [Kubernetes mapping example](#mapping-kubernetes-resource-attributes) for deriving individual values from pod fields.
+Setting [auto_instrumentation_disabled](#auto_instrumentation_disabled) does not disable resource-attribute injection.
+Use [OTEL_INJECTOR_DISABLED](#disabled) to prevent all injector environment modifications.
+See the [Kubernetes mapping example](#mapping-kubernetes-resource-attributes) for deriving individual values from pod fields.
 
 **Examples:**
 
@@ -724,7 +840,8 @@ Kubernetes namespace name to add to OTEL_RESOURCE_ATTRIBUTES.
 
 **Empty value:** Add the resource attribute with an empty value if the variable is set.
 
-**Resource attribute:** `k8s.namespace.name`. See [resource-attribute precedence](#resource_attributes) for interactions with other inputs.
+**Resource attribute:** `k8s.namespace.name`.
+See [resource-attribute precedence](#resource_attributes) for interactions with other inputs.
 
 **Examples:**
 
@@ -746,7 +863,8 @@ Kubernetes pod name to add to OTEL_RESOURCE_ATTRIBUTES.
 
 **Empty value:** Add the resource attribute with an empty value if the variable is set.
 
-**Resource attribute:** `k8s.pod.name`. See [resource-attribute precedence](#resource_attributes) for interactions with other inputs.
+**Resource attribute:** `k8s.pod.name`.
+See [resource-attribute precedence](#resource_attributes) for interactions with other inputs.
 
 **Examples:**
 
@@ -768,7 +886,8 @@ Kubernetes pod UID to add to OTEL_RESOURCE_ATTRIBUTES.
 
 **Empty value:** Add the resource attribute with an empty value if the variable is set.
 
-**Resource attribute:** `k8s.pod.uid`. See [resource-attribute precedence](#resource_attributes) for interactions with other inputs.
+**Resource attribute:** `k8s.pod.uid`.
+See [resource-attribute precedence](#resource_attributes) for interactions with other inputs.
 
 **Examples:**
 
@@ -790,7 +909,8 @@ Kubernetes container name to add to OTEL_RESOURCE_ATTRIBUTES.
 
 **Empty value:** Add the resource attribute with an empty value if the variable is set.
 
-**Resource attribute:** `k8s.container.name`. See [resource-attribute precedence](#resource_attributes) for interactions with other inputs.
+**Resource attribute:** `k8s.container.name`.
+See [resource-attribute precedence](#resource_attributes) for interactions with other inputs.
 
 **Examples:**
 
@@ -812,7 +932,8 @@ Service name to add to OTEL_RESOURCE_ATTRIBUTES.
 
 **Empty value:** Add the resource attribute with an empty value if the variable is set.
 
-**Resource attribute:** `service.name`. See [resource-attribute precedence](#resource_attributes) for interactions with other inputs.
+**Resource attribute:** `service.name`.
+See [resource-attribute precedence](#resource_attributes) for interactions with other inputs.
 
 **Examples:**
 
@@ -834,7 +955,8 @@ Service version to add to OTEL_RESOURCE_ATTRIBUTES.
 
 **Empty value:** Add the resource attribute with an empty value if the variable is set.
 
-**Resource attribute:** `service.version`. See [resource-attribute precedence](#resource_attributes) for interactions with other inputs.
+**Resource attribute:** `service.version`.
+See [resource-attribute precedence](#resource_attributes) for interactions with other inputs.
 
 **Examples:**
 
@@ -856,7 +978,8 @@ Service namespace to add to OTEL_RESOURCE_ATTRIBUTES.
 
 **Empty value:** Add the resource attribute with an empty value if the variable is set.
 
-**Resource attribute:** `service.namespace`. See [resource-attribute precedence](#resource_attributes) for interactions with other inputs.
+**Resource attribute:** `service.namespace`.
+See [resource-attribute precedence](#resource_attributes) for interactions with other inputs.
 
 **Examples:**
 

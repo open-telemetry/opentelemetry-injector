@@ -172,6 +172,22 @@ shellcheck-lint: check-shellcheck-installed
 	@echo "linting shell scripts with shellcheck"
 	find . -name \*.sh | xargs shellcheck -x
 
+.PHONY: check-npm-installed
+check-npm-installed:
+	@set +x
+	@if ! npm --version > /dev/null; then \
+	echo "error: npm is not installed. See https://nodejs.org/en/download for installation instructions."; \
+	exit 1; \
+	fi
+
+# Lints the prose in Markdown files, see the "Documentation" section in CONTRIBUTING.md. The rules and the pinned
+# markdownlint-cli2 version live in tooling/markdownlint.
+.PHONY: markdown-lint
+markdown-lint: check-npm-installed
+	@echo "linting Markdown files with markdownlint-cli2"
+	@npm ci --prefix tooling/markdownlint --no-fund --no-audit --silent
+	tooling/markdownlint/node_modules/.bin/markdownlint-cli2 --config tooling/markdownlint/.markdownlint-cli2.jsonc
+
 SHELL = /bin/bash
 .SHELLFLAGS = -o pipefail -c
 

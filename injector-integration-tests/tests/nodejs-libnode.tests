@@ -1,0 +1,39 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+# Tests for a node executable that does not export the Node.js API itself, but depends on libnode.so, which does (see
+# injector-integration-tests/apps/nodejs-libnode/Dockerfile). The injector recognizes such an executable as Node.js by
+# its dependency on libnode.so.
+
+# These tests are glibc-specific: Alpine builds Node.js as a single executable, like the official Node.js images.
+if [ "${LIBC_FLAVOR:-}" != "glibc" ]; then
+  echo "Skipping nodejs-libnode tests: these tests are glibc-specific (LIBC_FLAVOR=${LIBC_FLAVOR:-unset})"
+  return 0 2>/dev/null || true
+fi
+
+run_test_case \
+  "libnode: injects NODE_OPTIONS if it is not present" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js"
+run_test_case \
+  "libnode: prepends to NODE_OPTIONS if it is present" \
+  "app" \
+  "node index.js node-options" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js --no-deprecation" \
+  "NODE_OPTIONS=--no-deprecation"
+run_test_case \
+  "libnode: injects the Node.js auto-instrumentation agent" \
+  "app" \
+  "node index.js verify-auto-instrumentation-agent-has-been-injected" \
+  "otel_injector_nodejs_no_op_agent_has_been_loaded: true"
+run_test_case \
+  "libnode: injects NODE_OPTIONS into a Node.js process started from a shell" \
+  "app" \
+  "sh -c 'node index.js node-options'" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js"
+run_test_case \
+  "libnode: does not add NODE_OPTIONS to a process that is not Node.js" \
+  "app" \
+  "sh -c 'echo NODE_OPTIONS: \${NODE_OPTIONS:--}'" \
+  "NODE_OPTIONS: -"

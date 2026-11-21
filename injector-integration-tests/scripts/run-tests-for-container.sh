@@ -56,6 +56,9 @@ test_app="nodejs"
 if [[ "$TEST_SET" = "deno.tests" ]]; then
   test_app="deno"
 fi
+if [[ "$TEST_SET" = "nodejs-libnode.tests" ]]; then
+  test_app="nodejs-libnode"
+fi
 if [[ "$TEST_SET" = "dotnet.tests" ]]; then
   test_app="dotnet"
 fi
@@ -178,6 +181,12 @@ case "$test_app" in
     if [[ "$LIBC" = "musl" ]]; then
       base_image_run=node:22.15.0-alpine3.21
     fi
+    ;;
+  "nodejs-libnode")
+    dockerfile_name="injector-integration-tests/apps/nodejs-libnode/Dockerfile"
+    # We do not provide a musl variant: Alpine builds Node.js as a single executable, and the tests themselves skip for
+    # LIBC=musl.
+    base_image_run=debian:bookworm-slim
     ;;
   "python")
     dockerfile_name="injector-integration-tests/apps/python/Dockerfile"

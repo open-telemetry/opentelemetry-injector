@@ -13,6 +13,7 @@ subtext: |
   A process is recognized as Node.js when its executable exports `node::Start`, or depends on `libnode.so`.
   Shells and other processes that are not Node.js no longer get `NODE_OPTIONS`; a Node.js process they start gets it
   from the injector loaded into the Node.js process itself.
-  Programs that load Node.js at runtime via `dlopen` are no longer instrumented.
+  Programs that load Node.js at runtime via `dlopen`, and Node.js single executable applications built from a musl
+  build of Node.js with `postject`, are no longer instrumented.
 
 change_logs: [user]

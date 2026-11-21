@@ -204,6 +204,7 @@ A process is recognized as Node.js when its executable exports the function `nod
 This covers the official Node.js builds, Node.js single executable applications, executables built with `pkg`, and Electron, which embeds Node.js and honors `NODE_OPTIONS` unless the application disables that.
 For all other processes, including shells, the injector will not add `NODE_OPTIONS`.
 A parent process (e.g. shell) that starts a Node.js process passes the injector to its child via `LD_PRELOAD`, and the injector then sets `NODE_OPTIONS` in the Node.js process itself.
+Conversely, when a process that is not Node.js inherits `NODE_OPTIONS` with the injector's auto-instrumentation from a Node.js parent process (for example Deno started from an npm script), the injector removes the `--require` flag of the auto-instrumentation again and keeps the rest of `NODE_OPTIONS`.
 
 As a consequence, the following Node.js processes are not instrumented:
 

@@ -209,6 +209,7 @@ A shell that starts a Node.js process passes the injector on to it via `LD_PRELO
 As a consequence, the following Node.js processes are not instrumented:
 
 * A program that embeds Node.js and loads `libnode.so` via `dlopen`, instead of depending on it directly: it looks like any other process when the injector runs.
+* A Node.js process whose parent removes `LD_PRELOAD` from the environment but keeps `NODE_OPTIONS`, for example `sudo` configured to keep `NODE_OPTIONS`, or a process supervisor that only passes on an allowlist of environment variables: the injector is not loaded into the Node.js process, and the parent's `NODE_OPTIONS` no longer contains the auto-instrumentation.
 * A Node.js single executable application built from a musl (Alpine) build of Node.js with `postject`: `postject` rewrites the executable's symbol hash table in a way that makes all of its symbols impossible to look up.
 
 See the [Node.js auto-instrumentation configuration documentation](https://opentelemetry.io/docs/zero-code/js/configuration/) for agent settings.

@@ -78,15 +78,39 @@ pub const ElfDynLib = struct {
         // ldso/dynlink.c): the difference between where the program headers actually are and where PT_PHDR says they
         // would be without relocation. An executable without PT_PHDR is treated as not relocated, as glibc does.
         var load_bias: usize = 0;
+        var has_phdr_program_header = false;
         for (program_headers) |program_header| {
             if (program_header.type == std.elf.PT.PHDR) {
                 load_bias = program_headers_address -% program_header.vaddr;
+                has_phdr_program_header = true;
                 break;
             }
         }
 
+        // Without PT_PHDR, assuming a load bias of zero is only safe if the program headers actually are where an
+        // unrelocated executable would have them, that is, inside one of its PT_LOAD segments. This rules out the case
+        // where the program was started by running the dynamic linker directly (for example `/lib/ld-linux-x86-64.so.2
+        // ./program`): AT_PHDR then describes the dynamic linker itself, which is position-independent but has no
+        // PT_PHDR. Using a load bias of zero for it would dereference the unrelocated virtual address of its dynamic
+        // section, which is not mapped, and crash the process with a segmentation fault.
+        if (!has_phdr_program_header and !isInsideLoadSegment(program_headers, program_headers_address)) {
+            return error.ProgramHeadersOutsideLoadSegments;
+        }
+
         // The end of the memory range is not known here, and nothing needs it.
         return fromProgramHeaders(load_bias, 0, program_headers);
+    }
+
+    fn isInsideLoadSegment(program_headers: []const std.elf.Elf64.Phdr, address: usize) bool {
+        for (program_headers) |program_header| {
+            if (program_header.type == std.elf.PT.LOAD and
+                address >= program_header.vaddr and
+                address - program_header.vaddr < program_header.memsz)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     fn fromProgramHeaders(
@@ -330,6 +354,19 @@ test "openMainExecutable: rejects missing program headers" {
     var image: test_util.ElfTestImage = undefined;
     image.init(.{});
     try testing.expectError(error.MissingProgramHeaders, ElfDynLib.openMainExecutable(image.programHeadersAddress(), 0));
+}
+
+test "openMainExecutable: rejects relocated program headers without PT_PHDR" {
+    // This is what the auxiliary vector describes when the dynamic linker is run directly (`ld.so ./program`): a
+    // position-independent object without PT_PHDR, whose program headers are not inside a PT_LOAD segment at a load
+    // bias of zero.
+    var image: test_util.ElfTestImage = undefined;
+    image.init(.{ .relocated = true });
+    image.program_headers[0].type = std.elf.PT.NULL;
+    try testing.expectError(
+        error.ProgramHeadersOutsideLoadSegments,
+        ElfDynLib.openMainExecutable(image.programHeadersAddress(), image.program_headers.len),
+    );
 }
 
 test "openMainExecutable: accepts executables without a hash table" {

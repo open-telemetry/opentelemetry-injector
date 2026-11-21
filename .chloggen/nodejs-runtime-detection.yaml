@@ -15,5 +15,6 @@ subtext: |
   from the injector loaded into the Node.js process itself.
   Programs that load Node.js at runtime via `dlopen`, and Node.js single executable applications built from a musl
   build of Node.js with `postject`, are no longer instrumented.
+  Neither are Node.js processes whose parent removes `LD_PRELOAD` from the environment but keeps `NODE_OPTIONS`.
 
 change_logs: [user]

@@ -234,7 +234,10 @@ pub const ElfTestImage = extern struct {
             self.program_headers[0].type = std.elf.PT.PHDR;
             self.program_headers[0].vaddr = self.virtualAddress("program_headers", load_bias);
         } else {
+            // A non-relocatable executable has its program headers inside its first PT_LOAD segment.
             self.program_headers[0].type = std.elf.PT.LOAD;
+            self.program_headers[0].vaddr = base;
+            self.program_headers[0].memsz = @sizeOf(ElfTestImage);
         }
         self.program_headers[1].type = std.elf.PT.DYNAMIC;
         self.program_headers[1].vaddr = self.virtualAddress("dynamic", load_bias);

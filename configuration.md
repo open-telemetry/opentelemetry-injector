@@ -206,7 +206,10 @@ A process is recognized as Node.js when its executable exports the function `nod
 All other processes, including shells, do not get `NODE_OPTIONS`.
 A shell that starts a Node.js process passes the injector on to it via `LD_PRELOAD`, and the injector then sets `NODE_OPTIONS` in the Node.js process itself.
 
-As a consequence, a program that embeds Node.js and loads `libnode.so` via `dlopen`, instead of depending on it directly, is not instrumented: it looks like any other process when the injector runs.
+As a consequence, the following Node.js processes are not instrumented:
+
+* A program that embeds Node.js and loads `libnode.so` via `dlopen`, instead of depending on it directly: it looks like any other process when the injector runs.
+* A Node.js single executable application built from a musl (Alpine) build of Node.js with `postject`: `postject` rewrites the executable's symbol hash table in a way that makes all of its symbols impossible to look up.
 
 See the [Node.js auto-instrumentation configuration documentation](https://opentelemetry.io/docs/zero-code/js/configuration/) for agent settings.
 

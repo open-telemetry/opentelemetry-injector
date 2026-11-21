@@ -198,13 +198,19 @@ pub fn writeElf(dir: std.Io.Dir, path: []const u8, content: []const u8, flags: u
 }
 
 /// A minimal, synthetic in-memory image of a dynamically linked ELF executable: program headers, a dynamic section, a
-/// DT_HASH table, a symbol table and a string table. It stands in for the main executable of a process, as
-/// elf.ElfDynLib.openMainExecutable sees it, without the need for a real executable.
+/// hash table (DT_HASH or DT_GNU_HASH), a symbol table and a string table. It stands in for the main executable of a
+/// process, as elf.ElfDynLib.openMainExecutable sees it, without the need for a real executable.
+///
+/// The image can be initialized at any address, also at one that does not have the natural alignment of the ELF
+/// structures (see init), to imitate executables that have been rewritten after linking, for example by postject.
 pub const ElfTestImage = extern struct {
     program_headers: [2]std.elf.Elf64.Phdr,
     dynamic: [6]std.elf.Elf64_Dyn,
     // DT_HASH: nbucket, nchain. The symbol lookup only uses nchain, which is the number of symbols.
     hash: [2]u32,
+    // DT_GNU_HASH: the header (nbuckets, symoffset, bloom_size, bloom_shift), one 64 bit bloom filter word, one bucket
+    // and one chain entry, for the one symbol after the null symbol.
+    gnu_hash: [8]u32,
     symbols: [2]std.elf.Elf64_Sym,
     strings: [128]u8,
 
@@ -222,9 +228,14 @@ pub const ElfTestImage = extern struct {
         exported_symbol: ?[]const u8 = null,
         /// The name of the one DT_NEEDED entry, if any.
         needed_library: ?[]const u8 = null,
+        /// Which hash table the dynamic section refers to. Only one of them is referred to, so that symbol lookups
+        /// are guaranteed to go through it.
+        hash_table: enum { sysv, gnu } = .sysv,
     };
 
-    pub fn init(self: *ElfTestImage, options: Options) void {
+    /// Initializes the image at the address of self. All addresses in the image are derived from it, so the image is
+    /// valid at any address, also at one that is not aligned (pass a pointer into a byte buffer at an odd offset).
+    pub fn init(self: *align(1) ElfTestImage, options: Options) void {
         self.* = std.mem.zeroes(ElfTestImage);
         const base = @intFromPtr(self);
         const load_bias: usize = if (options.relocated) base else 0;
@@ -257,7 +268,10 @@ pub const ElfTestImage = extern struct {
         }
 
         var i: usize = 0;
-        self.dynamic[i] = .{ .d_tag = std.elf.DT_HASH, .d_val = self.virtualAddress("hash", load_bias) + dynamic_entry_bias };
+        self.dynamic[i] = switch (options.hash_table) {
+            .sysv => .{ .d_tag = std.elf.DT_HASH, .d_val = self.virtualAddress("hash", load_bias) + dynamic_entry_bias },
+            .gnu => .{ .d_tag = std.elf.DT_GNU_HASH, .d_val = self.virtualAddress("gnu_hash", load_bias) + dynamic_entry_bias },
+        };
         i += 1;
         self.dynamic[i] = .{ .d_tag = std.elf.DT_STRTAB, .d_val = self.virtualAddress("strings", load_bias) + dynamic_entry_bias };
         i += 1;
@@ -273,8 +287,16 @@ pub const ElfTestImage = extern struct {
         self.dynamic[i] = .{ .d_tag = std.elf.DT_NEEDED, .d_val = exported_symbol_offset };
 
         self.hash = .{ 1, self.symbols.len };
+        // One bucket, symbols from index 1 on are in the GNU hash table, a bloom filter of one word, shift 6.
+        self.gnu_hash[0..4].* = .{ 1, 1, 1, 6 };
         // Symbol 0 is the mandatory undefined null symbol.
-        if (options.exported_symbol != null) {
+        if (options.exported_symbol) |name| {
+            const gnu_hash = std.elf.gnu_hash.calculate(name);
+            const bloom = (@as(u64, 1) << @intCast(gnu_hash % 64)) | (@as(u64, 1) << @intCast((gnu_hash >> 6) % 64));
+            self.gnu_hash[4..6].* = @bitCast(bloom);
+            // The bucket points to symbol 1, its chain entry holds the upper 31 bits of the hash and ends the chain.
+            self.gnu_hash[6] = 1;
+            self.gnu_hash[7] = gnu_hash | 1;
             self.symbols[1] = .{
                 .st_name = @intCast(exported_symbol_offset),
                 .st_info = (@as(u8, std.elf.STB_GLOBAL) << 4) | std.elf.STT_FUNC,
@@ -286,12 +308,12 @@ pub const ElfTestImage = extern struct {
         }
     }
 
-    pub fn programHeadersAddress(self: *const ElfTestImage) usize {
+    pub fn programHeadersAddress(self: *align(1) const ElfTestImage) usize {
         return @intFromPtr(&self.program_headers);
     }
 
     /// The virtual address of a part of the image, as the executable file would state it.
-    fn virtualAddress(self: *const ElfTestImage, comptime field: []const u8, load_bias: usize) usize {
+    fn virtualAddress(self: *align(1) const ElfTestImage, comptime field: []const u8, load_bias: usize) usize {
         return @intFromPtr(self) + @offsetOf(ElfTestImage, field) - load_bias;
     }
 };

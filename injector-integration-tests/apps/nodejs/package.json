@@ -1,0 +1,10 @@
+{
+  "name": "otel-injector-nodejs-test-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "node-options": "node index.js node-options",
+    "verify-auto-instrumentation-agent-has-been-injected": "node index.js verify-auto-instrumentation-agent-has-been-injected",
+    "nested-node-options": "npm run --silent node-options"
+  }
+}

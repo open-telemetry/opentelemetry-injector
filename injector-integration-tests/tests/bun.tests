@@ -1,0 +1,27 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+# Bun is not Node.js, although it runs Node.js applications and exports parts of the Node.js native addon API (for
+# example node_module_register). The injector must not add the Node.js auto-instrumentation to NODE_OPTIONS for Bun.
+
+run_test_case \
+  "does not add NODE_OPTIONS to a Bun process" \
+  "app" \
+  "bun index.js node-options" \
+  "NODE_OPTIONS: -"
+run_test_case \
+  "does not modify existing NODE_OPTIONS of a Bun process" \
+  "app" \
+  "bun index.js node-options" \
+  "NODE_OPTIONS: --no-deprecation" \
+  "NODE_OPTIONS=--no-deprecation"
+run_test_case \
+  "does not load the Node.js auto-instrumentation agent into a Bun process" \
+  "app" \
+  "bun index.js verify-auto-instrumentation-agent-has-been-injected" \
+  "otel_injector_nodejs_no_op_agent_has_been_loaded: -"
+run_test_case \
+  "sets OTEL_RESOURCE_ATTRIBUTES for a Bun process" \
+  "app" \
+  "bun index.js otel-resource-attributes" \
+  "OTEL_RESOURCE_ATTRIBUTES: k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app"

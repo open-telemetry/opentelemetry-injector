@@ -1,0 +1,15 @@
+# One of 'breaking', 'deprecation', 'new_component', 'enhancement', 'bug_fix'
+change_type: bug_fix
+
+component: injector
+
+note: Do not abort processes whose program header table is not 8 byte aligned, like Node.js single executable applications.
+
+issues: [474]
+
+subtext: |
+  `postject`, which builds Node.js single executable applications, moves the program header table of the official
+  glibc builds of Node.js to an address that is not 8 byte aligned. The injector now reads all ELF structures of the
+  main executable at any alignment.
+
+change_logs: [user]

@@ -5,20 +5,21 @@
 # The SEA is a modified copy of the node executable, so the injector recognizes it as Node.js like the node executable
 # itself. On glibc, its program header table is at an address that is not 8 byte aligned.
 
-if [ "${LIBC_FLAVOR:-}" = "musl" ]; then
-  # For a position-independent executable, which the musl builds of Node.js are, postject rebuilds the GNU hash table,
-  # and the rebuilt table finds no symbols at all: neither the injector nor the dynamic linker can look up the symbols
+if [ "${LIBC_FLAVOR:-}" = "musl" ] && [ "$(uname -m)" = "aarch64" ]; then
+  # postject rebuilds the GNU hash table of the musl builds of Node.js. On arm64, the rebuilt table finds no symbols at
+  # all, its bloom filter rejects every one of them: neither the injector nor the dynamic linker can look up the symbols
   # of the executable (native addons fail to load with "symbol not found" as well). The injector therefore does not
-  # recognize the SEA as Node.js. This test case makes sure that it at least does not break the process.
+  # recognize the SEA as Node.js. This test case makes sure that it at least does not break the process. On x86_64, the
+  # rebuilt table works, and the SEA is recognized like on glibc.
   run_test_case \
-    "SEA (musl): is not recognized as Node.js, and runs without NODE_OPTIONS" \
+    "SEA (musl, arm64): is not recognized as Node.js, and runs without NODE_OPTIONS" \
     "app" \
     "./app-sea node-options" \
     "NODE_OPTIONS: -"
   # The injector is still loaded into the SEA process: it sets OTEL_RESOURCE_ATTRIBUTES. Without this check, the test
   # case above would also pass if the injector did not run at all.
   run_test_case \
-    "SEA (musl): sets OTEL_RESOURCE_ATTRIBUTES" \
+    "SEA (musl, arm64): sets OTEL_RESOURCE_ATTRIBUTES" \
     "app" \
     "./app-sea otel-resource-attributes" \
     "OTEL_RESOURCE_ATTRIBUTES: k8s.namespace.name=my-namespace,k8s.pod.name=my-pod,k8s.pod.uid=275ecb36-5aa8-4c2a-9c47-d8bb681b9aff,k8s.container.name=test-app"

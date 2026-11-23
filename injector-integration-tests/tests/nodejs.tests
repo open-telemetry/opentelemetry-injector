@@ -5,23 +5,23 @@ run_test_case \
   "injects NODE_OPTIONS if it is not present" \
   "app" \
   "node index.js node-options" \
-  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js"
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"
 run_test_case \
   "ask for NODE_OPTIONS (unset) twice" \
   "app" \
   "node index.js node-options-twice" \
-  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js; NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js"
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs; NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"
 run_test_case \
   "prepends to NODE_OPTIONS if it is present" \
   "app" \
   "node index.js node-options" \
-  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js --no-deprecation" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs --no-deprecation" \
   "NODE_OPTIONS=--no-deprecation"
 run_test_case \
   "ask for NODE_OPTIONS (set) twice" \
   "app" \
   "node index.js node-options-twice" \
-  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js --no-deprecation; NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js --no-deprecation" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs --no-deprecation; NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs --no-deprecation" \
   "NODE_OPTIONS=--no-deprecation"
 
 run_test_case \
@@ -36,26 +36,26 @@ run_test_case \
   "uses NODE_OPTIONS path from the default configuration file" \
   "app" \
   "node index.js node-options" \
-  "NODE_OPTIONS: --require /path/from/config-file/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js"
+  "NODE_OPTIONS: --require /path/from/config-file/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"
 run_test_case \
   "the NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH environment variable overrides the NODE_OPTIONS path from the default configuration file" \
   "app" \
   "node index.js node-options" \
-  "NODE_OPTIONS: --require /path/from/environment-variable/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js" \
-  "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/environment-variable/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js"
+  "NODE_OPTIONS: --require /path/from/environment-variable/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs" \
+  "NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/environment-variable/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"
 
 run_test_case \
   "uses NODE_OPTIONS path from the configuration file at a custom location" \
   "app" \
   "node index.js node-options" \
-  "NODE_OPTIONS: --require /path/from/config-file-custom-location/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js" \
+  "NODE_OPTIONS: --require /path/from/config-file-custom-location/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs" \
   "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/injector.conf"
 run_test_case \
   "the NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH environment variable overrides the NODE_OPTIONS path from the configuration file at a custom location" \
   "app" \
   "node index.js node-options" \
-  "NODE_OPTIONS: --require /path/from/environment-variable/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js" \
-  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/injector.conf NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/environment-variable/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js"
+  "NODE_OPTIONS: --require /path/from/environment-variable/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs" \
+  "OTEL_INJECTOR_CONFIG_FILE=/custom/config/path/injector.conf NODEJS_AUTO_INSTRUMENTATION_AGENT_PATH=/path/from/environment-variable/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"
 
 run_test_case \
   "setting OTEL_INJECTOR_AUTO_INSTRUMENTATION_DISABLED=nodejs disables the Node.js auto-instrumentation" \

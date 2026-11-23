@@ -153,7 +153,7 @@
   details: |-
     See [Node.js requirements and behavior](#nodejs) for the registration file and environment modifications.
     An empty path disables only Node.js instrumentation, not [resource-attribute injection](#resource_attributes).
-  examples: [/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js]
+  examples: [/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs]
 
 - id: python_agent_path
   type: string

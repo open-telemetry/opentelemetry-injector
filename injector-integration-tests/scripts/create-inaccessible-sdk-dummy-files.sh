@@ -27,8 +27,8 @@ touch /usr/lib/opentelemetry/dotnet/musl/net/OpenTelemetry.AutoInstrumentation.S
 mkdir -p /usr/lib/opentelemetry/jvm && touch /usr/lib/opentelemetry/jvm/javaagent.jar
 
 # Node.js
-mkdir -p /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src
-touch /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
+mkdir -p /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist
+touch /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs
 
 # Ruby (both libc flavors need an entry file that the injector access()-checks before injecting)
 mkdir -p /usr/lib/opentelemetry/ruby/glibc

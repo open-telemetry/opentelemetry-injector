@@ -60,6 +60,7 @@ fn detectFromExecutable(executable: *const elf.ElfDynLib) JsRuntime {
     return .unknown;
 }
 
+/// Only used for unit tests, not to be used in production code.
 fn detectFromTestImage(options: test_util.ElfTestImage.Options) !JsRuntime {
     var image: test_util.ElfTestImage = undefined;
     image.init(options);

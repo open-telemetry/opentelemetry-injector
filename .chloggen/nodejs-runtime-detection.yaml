@@ -8,13 +8,15 @@ note: Only add the Node.js auto-instrumentation to `NODE_OPTIONS` in processes t
 issues: [458]
 
 subtext: |
-  Other runtimes read `NODE_OPTIONS` as well. Deno, for example, failed to start when it lacked the permission to read
-  the auto-instrumentation's files.
+  Other runtimes besides Node.js read `NODE_OPTIONS` as well. Deno, for example, failed to start when it lacked the
+  permission to read the auto-instrumentation's files (which is the case when running with the default permissions).
   A process is recognized as Node.js when its executable exports `node::Start`, or depends on `libnode.so`.
-  Shells and other processes that are not Node.js no longer get `NODE_OPTIONS`; a Node.js process they start gets it
-  from the injector loaded into the Node.js process itself.
-  Programs that load Node.js at runtime via `dlopen`, and Node.js single executable applications built from a musl
-  build of Node.js with `postject`, are no longer instrumented.
-  Neither are Node.js processes whose parent removes `LD_PRELOAD` from the environment but keeps `NODE_OPTIONS`.
+  Shells and other processes that are not Node.js no longer get `NODE_OPTIONS`; a Node.js process they start as a child
+  process is instrumented by the injector loaded into the Node.js process itself.
+  The following setups are no longer instrumented:
+  - Programs that load Node.js at runtime via `dlopen`
+  - Node.js single executable applications (SEAs) built from a musl build of Node.js with `postject`
+  - Node.js processes whose non-Node.js parent removes `LD_PRELOAD` from the environment but keeps `NODE_OPTIONS` (these
+    previously used to work incidentally by inheriting the already modified NODE_OPTIONS from the parent)
 
 change_logs: [user]

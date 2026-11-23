@@ -3,7 +3,7 @@
   "private": true,
   "description": "Pinned Markdown linting dependencies for the OpenTelemetry Injector documentation.",
   "devDependencies": {
-    "markdownlint-cli2": "0.24.0",
+    "markdownlint-cli2": "0.24.2",
     "markdownlint-sentences-per-line": "0.1.7"
   }
 }

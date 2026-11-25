@@ -196,3 +196,102 @@ pub fn writeElf(dir: std.Io.Dir, path: []const u8, content: []const u8, flags: u
     try file.writeStreamingAll(testing.io, std.mem.asBytes(&segment));
     try file.writeStreamingAll(testing.io, content);
 }
+
+/// A minimal, synthetic in-memory image of a dynamically linked ELF executable: program headers, a dynamic section, a
+/// DT_HASH table, a symbol table and a string table. It stands in for the main executable of a process, as
+/// elf.ElfDynLib.openMainExecutable sees it, without the need for a real executable.
+pub const ElfTestImage = extern struct {
+    program_headers: [2]std.elf.Elf64.Phdr,
+    dynamic: [6]std.elf.Elf64_Dyn,
+    // DT_HASH: nbucket, nchain. The symbol lookup only uses nchain, which is the number of symbols.
+    hash: [2]u32,
+    symbols: [2]std.elf.Elf64_Sym,
+    strings: [128]u8,
+
+    pub const exported_symbol_value = 0x1234;
+
+    pub const Options = struct {
+        /// With relocated set, the image is a position-independent executable whose load bias is its own address, and
+        /// it says so via PT_PHDR. Without it, it is a non-relocatable executable (ET_EXEC): its virtual addresses are
+        /// absolute and it has no PT_PHDR.
+        relocated: bool = true,
+        /// Whether the address entries in the dynamic section have already been relocated (as glibc does in the
+        /// loaded image) or are left as plain virtual addresses (as musl does).
+        absolute_dynamic_entries: bool = true,
+        /// The name of the one defined symbol in the symbol table, if any.
+        exported_symbol: ?[]const u8 = null,
+        /// The name of the one DT_NEEDED entry, if any.
+        needed_library: ?[]const u8 = null,
+    };
+
+    pub fn init(self: *ElfTestImage, options: Options) void {
+        self.* = std.mem.zeroes(ElfTestImage);
+        const base = @intFromPtr(self);
+        const load_bias: usize = if (options.relocated) base else 0;
+        const dynamic_entry_bias: usize = if (options.absolute_dynamic_entries) load_bias else 0;
+
+        if (options.relocated) {
+            self.program_headers[0].type = std.elf.PT.PHDR;
+            self.program_headers[0].vaddr = self.virtualAddress("program_headers", load_bias);
+        } else {
+            // A non-relocatable executable has its program headers inside its first PT_LOAD segment.
+            self.program_headers[0].type = std.elf.PT.LOAD;
+            self.program_headers[0].vaddr = base;
+            self.program_headers[0].memsz = @sizeOf(ElfTestImage);
+        }
+        self.program_headers[1].type = std.elf.PT.DYNAMIC;
+        self.program_headers[1].vaddr = self.virtualAddress("dynamic", load_bias);
+        self.program_headers[1].memsz = @sizeOf(@TypeOf(self.dynamic));
+
+        // Offset 0 of the string table is the empty string, by convention.
+        var string_offset: usize = 1;
+        const exported_symbol_offset = string_offset;
+        if (options.exported_symbol) |name| {
+            @memcpy(self.strings[string_offset .. string_offset + name.len], name);
+            string_offset += name.len + 1;
+        }
+        const needed_library_offset = string_offset;
+        if (options.needed_library) |name| {
+            @memcpy(self.strings[string_offset .. string_offset + name.len], name);
+            string_offset += name.len + 1;
+        }
+
+        var i: usize = 0;
+        self.dynamic[i] = .{ .d_tag = std.elf.DT_HASH, .d_val = self.virtualAddress("hash", load_bias) + dynamic_entry_bias };
+        i += 1;
+        self.dynamic[i] = .{ .d_tag = std.elf.DT_STRTAB, .d_val = self.virtualAddress("strings", load_bias) + dynamic_entry_bias };
+        i += 1;
+        self.dynamic[i] = .{ .d_tag = std.elf.DT_SYMTAB, .d_val = self.virtualAddress("symbols", load_bias) + dynamic_entry_bias };
+        i += 1;
+        if (options.needed_library != null) {
+            self.dynamic[i] = .{ .d_tag = std.elf.DT_NEEDED, .d_val = needed_library_offset };
+            i += 1;
+        }
+        self.dynamic[i] = .{ .d_tag = std.elf.DT_NULL, .d_val = 0 };
+        i += 1;
+        // Whatever follows DT_NULL must be ignored, even if it looks like a DT_NEEDED entry.
+        self.dynamic[i] = .{ .d_tag = std.elf.DT_NEEDED, .d_val = exported_symbol_offset };
+
+        self.hash = .{ 1, self.symbols.len };
+        // Symbol 0 is the mandatory undefined null symbol.
+        if (options.exported_symbol != null) {
+            self.symbols[1] = .{
+                .st_name = @intCast(exported_symbol_offset),
+                .st_info = (@as(u8, std.elf.STB_GLOBAL) << 4) | std.elf.STT_FUNC,
+                .st_other = 0,
+                .st_shndx = 1,
+                .st_value = exported_symbol_value,
+                .st_size = 0,
+            };
+        }
+    }
+
+    pub fn programHeadersAddress(self: *const ElfTestImage) usize {
+        return @intFromPtr(&self.program_headers);
+    }
+
+    /// The virtual address of a part of the image, as the executable file would state it.
+    fn virtualAddress(self: *const ElfTestImage, comptime field: []const u8, load_bias: usize) usize {
+        return @intFromPtr(self) + @offsetOf(ElfTestImage, field) - load_bias;
+    }
+};

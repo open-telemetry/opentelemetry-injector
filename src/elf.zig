@@ -2,6 +2,9 @@ const builtin = @import("builtin");
 const std = @import("std");
 
 const print = @import("print.zig");
+const test_util = @import("test_util.zig");
+
+const testing = std.testing;
 
 const ElfError = error{
     ElfHashTableNotFound,
@@ -32,6 +35,7 @@ pub const ElfDynLib = struct {
     syms: [*]std.elf.Sym,
     hash: ?[*]u32,
     gnu_hash: ?*std.elf.gnu_hash.Header,
+    dynamic: []const std.elf.Elf64_Dyn,
 
     pub fn open(start_memory_range: usize, end_memory_range: usize) !ElfDynLib {
         const elf_header = @as(*std.elf.Ehdr, @ptrFromInt(start_memory_range));
@@ -49,16 +53,76 @@ pub const ElfDynLib = struct {
 
         if (elf_header.e_type != std.elf.ET.DYN) return error.ElfNotDynamicLibrary;
 
-        var maybe_dynamic_program_header: ?std.elf.Elf64.Phdr = null;
-        {
-            const program_headers_ptr: [*]const std.elf.Elf64.Phdr = @ptrFromInt(start_memory_range + elf_header.e_phoff);
-            const program_headers = program_headers_ptr[0..elf_header.e_phnum];
+        const program_headers_ptr: [*]const std.elf.Elf64.Phdr = @ptrFromInt(start_memory_range + elf_header.e_phoff);
+        const library = try fromProgramHeaders(start_memory_range, end_memory_range, program_headers_ptr[0..elf_header.e_phnum]);
+        if (library.hash == null and library.gnu_hash == null) {
+            return error.ElfHashTableNotFound;
+        }
+        return library;
+    }
 
-            for (program_headers) |program_header| {
-                switch (program_header.type) {
-                    std.elf.PT.DYNAMIC => maybe_dynamic_program_header = program_header,
-                    else => {},
-                }
+    /// Opens the main executable of the current process, given the location and number of its program headers, as the
+    /// kernel reports them in the auxiliary vector (AT_PHDR and AT_PHNUM).
+    ///
+    /// Unlike open, this does not require the ELF header, and works for executables that are not position-independent
+    /// (ET_EXEC). Their symbol values are absolute addresses, which a load bias of zero accounts for. It also accepts
+    /// executables without a symbol hash table; these export no symbols as far as exportsSymbol is concerned.
+    pub fn openMainExecutable(program_headers_address: usize, program_headers_count: usize) !ElfDynLib {
+        if (program_headers_address == 0 or program_headers_count == 0) {
+            return error.MissingProgramHeaders;
+        }
+        const program_headers_ptr: [*]const std.elf.Elf64.Phdr = @ptrFromInt(program_headers_address);
+        const program_headers = program_headers_ptr[0..program_headers_count];
+
+        // Derive the load bias the same way the dynamic linker does (see dl_main in glibc's rtld.c and __dls3 in musl's
+        // ldso/dynlink.c): the difference between where the program headers actually are and where PT_PHDR says they
+        // would be without relocation. An executable without PT_PHDR is treated as not relocated, as glibc does.
+        var load_bias: usize = 0;
+        var has_phdr_program_header = false;
+        for (program_headers) |program_header| {
+            if (program_header.type == std.elf.PT.PHDR) {
+                load_bias = program_headers_address -% program_header.vaddr;
+                has_phdr_program_header = true;
+                break;
+            }
+        }
+
+        // Without PT_PHDR, assuming a load bias of zero is only safe if the program headers actually are where an
+        // unrelocated executable would have them, that is, inside one of its PT_LOAD segments. This rules out the case
+        // where the program was started by running the dynamic linker directly (for example `/lib/ld-linux-x86-64.so.2
+        // ./program`): AT_PHDR then describes the dynamic linker itself, which is position-independent but has no
+        // PT_PHDR. Using a load bias of zero for it would dereference the unrelocated virtual address of its dynamic
+        // section, which is not mapped, and crash the process with a segmentation fault.
+        if (!has_phdr_program_header and !isInsideLoadSegment(program_headers, program_headers_address)) {
+            return error.ProgramHeadersOutsideLoadSegments;
+        }
+
+        // The end of the memory range is not known here, and nothing needs it.
+        return fromProgramHeaders(load_bias, 0, program_headers);
+    }
+
+    fn isInsideLoadSegment(program_headers: []const std.elf.Elf64.Phdr, address: usize) bool {
+        for (program_headers) |program_header| {
+            if (program_header.type == std.elf.PT.LOAD and
+                address >= program_header.vaddr and
+                address - program_header.vaddr < program_header.memsz)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    fn fromProgramHeaders(
+        start_memory_range: usize,
+        end_memory_range: usize,
+        program_headers: []const std.elf.Elf64.Phdr,
+    ) !ElfDynLib {
+        var maybe_dynamic_program_header: ?std.elf.Elf64.Phdr = null;
+        for (program_headers) |program_header| {
+            switch (program_header.type) {
+                std.elf.PT.DYNAMIC => maybe_dynamic_program_header = program_header,
+                else => {},
             }
         }
 
@@ -69,35 +133,36 @@ pub const ElfDynLib = struct {
         var maybe_hashtab: ?[*]u32 = null;
         var maybe_gnu_hash: ?*std.elf.gnu_hash.Header = null;
 
-        {
-            const dynamic_symbols_count = dynamic_program_header.memsz / @sizeOf(std.elf.Elf64_Dyn);
-            const dynamic_symbols_ptr: [*]std.elf.Elf64_Dyn = @ptrFromInt(start_memory_range + dynamic_program_header.vaddr);
-            const dynamic_symbols = dynamic_symbols_ptr[0..dynamic_symbols_count];
+        const dynamic_symbols_count = dynamic_program_header.memsz / @sizeOf(std.elf.Elf64_Dyn);
+        const dynamic_symbols_ptr: [*]std.elf.Elf64_Dyn = @ptrFromInt(start_memory_range + dynamic_program_header.vaddr);
+        var dynamic_symbols = dynamic_symbols_ptr[0..dynamic_symbols_count];
 
-            for (dynamic_symbols) |dynamic_symbol| {
-                var p = dynamic_symbol.d_val;
-                if (p < start_memory_range) {
-                    // Musl libc does not update the dynamic symbol locations to add the start memory offset. GNU libc
-                    // seems to, except for DT_VERDEF. We compensate for it.
-                    p += start_memory_range;
-                }
-                switch (dynamic_symbol.d_tag) {
-                    std.elf.DT_STRTAB => maybe_strings = @ptrFromInt(p),
-                    std.elf.DT_SYMTAB => maybe_syms = @ptrFromInt(p),
-                    std.elf.DT_HASH => maybe_hashtab = @ptrFromInt(p),
-                    std.elf.DT_GNU_HASH => maybe_gnu_hash = @ptrFromInt(p),
-                    else => {},
-                }
+        for (dynamic_symbols, 0..) |dynamic_symbol, i| {
+            if (dynamic_symbol.d_tag == std.elf.DT_NULL) {
+                // DT_NULL marks the end of the dynamic section. Whatever follows (usually padding) is not part of it.
+                dynamic_symbols = dynamic_symbols[0..i];
+                break;
+            }
+            var p = dynamic_symbol.d_val;
+            if (p < start_memory_range) {
+                // Musl libc does not update the dynamic symbol locations to add the start memory offset. GNU libc
+                // seems to, except for DT_VERDEF. We compensate for it.
+                p += start_memory_range;
+            }
+            switch (dynamic_symbol.d_tag) {
+                std.elf.DT_STRTAB => maybe_strings = @ptrFromInt(p),
+                std.elf.DT_SYMTAB => maybe_syms = @ptrFromInt(p),
+                std.elf.DT_HASH => maybe_hashtab = @ptrFromInt(p),
+                std.elf.DT_GNU_HASH => maybe_gnu_hash = @ptrFromInt(p),
+                else => {},
             }
         }
 
         const strings = maybe_strings orelse return error.ElfStringSectionNotFound;
         const syms = maybe_syms orelse return error.ElfSymSectionNotFound;
 
-        if (maybe_hashtab == null and maybe_gnu_hash == null) {
-            return error.ElfHashTableNotFound;
-        }
-
+        // Without a hash table, no symbol can be looked up, but the object might still be inspected for other reasons
+        // (like needsLibraryWithPrefix), so leave it to the caller whether that is an error.
         return .{
             .start_memory_range = start_memory_range,
             .end_memory_range = end_memory_range,
@@ -105,7 +170,30 @@ pub const ElfDynLib = struct {
             .syms = syms,
             .hash = maybe_hashtab,
             .gnu_hash = maybe_gnu_hash,
+            .dynamic = dynamic_symbols,
         };
+    }
+
+    /// Returns true if the ELF object defines and exports a symbol with the given name.
+    pub fn exportsSymbol(self: *const ElfDynLib, name: [:0]const u8) bool {
+        return self.lookupAddress(name) != null;
+    }
+
+    /// Returns true if the file name of one of the ELF object's DT_NEEDED entries starts with the given prefix, for
+    /// example "libnode.so" matches a dependency on "libnode.so.115", and also on "$ORIGIN/lib/libnode.so.115".
+    pub fn needsLibraryWithPrefix(self: *const ElfDynLib, prefix: []const u8) bool {
+        for (self.dynamic) |entry| {
+            // DT_NEEDED holds an offset into the string table, the dynamic linker never relocates it.
+            if (entry.d_tag != std.elf.DT_NEEDED) continue;
+            const library_name = std.mem.sliceTo(self.strings + entry.d_val, 0);
+            // A DT_NEEDED entry that contains a slash is a path, only its last component is the library's file name.
+            const file_name = if (std.mem.lastIndexOfScalar(u8, library_name, '/')) |last_slash|
+                library_name[last_slash + 1 ..]
+            else
+                library_name;
+            if (std.mem.startsWith(u8, file_name, prefix)) return true;
+        }
+        return false;
     }
 
     pub fn lookup(self: *const ElfDynLib, comptime T: type, name: [:0]const u8) ?T {
@@ -219,3 +307,110 @@ pub const ElfDynLib = struct {
         return null;
     }
 };
+
+test "openMainExecutable: looks up exported symbols and needed libraries" {
+    const cases = [_]struct { relocated: bool, absolute_dynamic_entries: bool }{
+        // Position-independent executable, glibc relocates the dynamic section in place.
+        .{ .relocated = true, .absolute_dynamic_entries = true },
+        // Position-independent executable, musl leaves the dynamic section alone.
+        .{ .relocated = true, .absolute_dynamic_entries = false },
+        // Non-relocatable executable (ET_EXEC), for example the official Node.js builds for glibc.
+        .{ .relocated = false, .absolute_dynamic_entries = false },
+    };
+    for (cases) |case| {
+        var image: test_util.ElfTestImage = undefined;
+        image.init(.{
+            .relocated = case.relocated,
+            .absolute_dynamic_entries = case.absolute_dynamic_entries,
+            .exported_symbol = "exported_function",
+            .needed_library = "libexample.so.42",
+        });
+        const executable = try ElfDynLib.openMainExecutable(image.programHeadersAddress(), image.program_headers.len);
+
+        const expected_bias: usize = if (case.relocated) @intFromPtr(&image) else 0;
+        try testing.expectEqual(expected_bias, executable.start_memory_range);
+        try testing.expect(executable.exportsSymbol("exported_function"));
+        try testing.expectEqual(
+            expected_bias + test_util.ElfTestImage.exported_symbol_value,
+            executable.lookupAddress("exported_function").?,
+        );
+        try testing.expect(!executable.exportsSymbol("exported"));
+        try testing.expect(!executable.exportsSymbol("not_exported_function"));
+
+        try testing.expect(executable.needsLibraryWithPrefix("libexample.so"));
+        try testing.expect(executable.needsLibraryWithPrefix("libexample.so.42"));
+        try testing.expect(!executable.needsLibraryWithPrefix("libother.so"));
+        // The image has a stray DT_NEEDED entry after DT_NULL, pointing at "exported_function". It must be ignored.
+        try testing.expect(!executable.needsLibraryWithPrefix("exported"));
+    }
+}
+
+test "openMainExecutable: matches needed libraries given as a path by their file name" {
+    var image: test_util.ElfTestImage = undefined;
+    image.init(.{ .needed_library = "$ORIGIN/lib/libexample.so.42" });
+    const executable = try ElfDynLib.openMainExecutable(image.programHeadersAddress(), image.program_headers.len);
+    try testing.expect(executable.needsLibraryWithPrefix("libexample.so"));
+    try testing.expect(!executable.needsLibraryWithPrefix("$ORIGIN"));
+    try testing.expect(!executable.needsLibraryWithPrefix("lib/"));
+}
+
+test "openMainExecutable: stops reading the dynamic section at DT_NULL" {
+    var image: test_util.ElfTestImage = undefined;
+    image.init(.{ .exported_symbol = "exported_function" });
+    // DT_HASH, DT_STRTAB, DT_SYMTAB, DT_NULL, then an entry that must be ignored. Make it a bogus DT_STRTAB.
+    try testing.expectEqual(std.elf.DT_NULL, image.dynamic[3].d_tag);
+    image.dynamic[4] = .{ .d_tag = std.elf.DT_STRTAB, .d_val = 0xdead0000 };
+    const executable = try ElfDynLib.openMainExecutable(image.programHeadersAddress(), image.program_headers.len);
+    try testing.expectEqual(@intFromPtr(&image.strings), @intFromPtr(executable.strings));
+    try testing.expectEqual(3, executable.dynamic.len);
+    try testing.expect(executable.exportsSymbol("exported_function"));
+}
+
+test "openMainExecutable: ignores undefined symbols" {
+    var image: test_util.ElfTestImage = undefined;
+    image.init(.{ .exported_symbol = "exported_function" });
+    // An undefined symbol (st_shndx == SHN_UNDEF) is an import, not an export.
+    image.symbols[1].st_shndx = 0;
+    const executable = try ElfDynLib.openMainExecutable(image.programHeadersAddress(), image.program_headers.len);
+    try testing.expect(!executable.exportsSymbol("exported_function"));
+}
+
+test "openMainExecutable: rejects missing program headers" {
+    try testing.expectError(error.MissingProgramHeaders, ElfDynLib.openMainExecutable(0, 3));
+    var image: test_util.ElfTestImage = undefined;
+    image.init(.{});
+    try testing.expectError(error.MissingProgramHeaders, ElfDynLib.openMainExecutable(image.programHeadersAddress(), 0));
+}
+
+test "openMainExecutable: rejects relocated program headers without PT_PHDR" {
+    // This is what the auxiliary vector describes when the dynamic linker is run directly (`ld.so ./program`): a
+    // position-independent object without PT_PHDR, whose program headers are not inside a PT_LOAD segment at a load
+    // bias of zero.
+    var image: test_util.ElfTestImage = undefined;
+    image.init(.{ .relocated = true });
+    image.program_headers[0].type = std.elf.PT.NULL;
+    try testing.expectError(
+        error.ProgramHeadersOutsideLoadSegments,
+        ElfDynLib.openMainExecutable(image.programHeadersAddress(), image.program_headers.len),
+    );
+}
+
+test "openMainExecutable: accepts executables without a hash table" {
+    var image: test_util.ElfTestImage = undefined;
+    image.init(.{ .exported_symbol = "exported_function", .needed_library = "libexample.so.42" });
+    // Turn the DT_HASH entry into one that is ignored.
+    image.dynamic[0].d_tag = std.elf.DT_DEBUG;
+    const executable = try ElfDynLib.openMainExecutable(image.programHeadersAddress(), image.program_headers.len);
+    try testing.expect(!executable.exportsSymbol("exported_function"));
+    try testing.expect(executable.needsLibraryWithPrefix("libexample.so"));
+}
+
+test "openMainExecutable: rejects executables without a dynamic section" {
+    var image: test_util.ElfTestImage = undefined;
+    image.init(.{});
+    image.program_headers[1].type = std.elf.PT.NULL;
+    try testing.expectError(
+        error.MissingDynamicLinkingInformation,
+        ElfDynLib.openMainExecutable(image.programHeadersAddress(), image.program_headers.len),
+    );
+}

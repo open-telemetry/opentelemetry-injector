@@ -24,8 +24,9 @@ In the remainder of this document `LD_PRELOAD` and `/etc/ld.so.preload` are used
   But if the executable reads an unrelated environment variable like `PATH`, it must see exactly what it would see without the injector being present.
 * In general, the injector must not alter the observed behavior of the executable, except for the desired modifications.
 * In short, it must always be safe to set up the injector as a system-wide `LD_PRELOAD` hook.
-* As a stretch goal, it would be desirable to not pollute the environment with unrelated environment variables, that is, do not set `NODE_OPTIONS` for a JVM process, or `JAVA_TOOL_OPTIONS` for a Node.js process, etc.
-  The currently implemented approach does not achieve this.
+* As a stretch goal, it would be desirable to not pollute the environment with unrelated environment variables, that is, do not set `PYTHONPATH` for a Ruby process, or `RUBYOPT` for a Python process, etc.
+  The currently implemented approach achieves this partially: `NODE_OPTIONS` is only set for processes that have been identified as Node.js, and `JAVA_TOOL_OPTIONS` only for JVMs.
+  Other environment variables are still set for all processes.
   All known approaches that satisfy this have other, more severe limitations.
 
 Note: Statically linked executables will not be affected by `LD_PRELOAD` at all, but there are [binaries](#dynamically-linked-libc-free-binaries) that are dynamically linked and affected by `LD_PRELOAD`, but do _not_ link against any libc.
@@ -139,9 +140,9 @@ There is currently no known way an `LD_PRELOAD`-based injector can hook into thi
 
 With the current approach outlined in the [design](#design) section, we can solve all requirements without breaking any executables.
 But since the approach makes its modifications via `setenv`, it will pollute the environment of all processes with all environment variables it sets, even if they are not relevant for the specific binary.
-That is, all process will see `NODE_OPTIONS`, `JAVA_TOOL_OPTIONS` and all the .NET related environment variables, even if it is not a Node.js, JVM or .NET process.
+That is, all processes will see `PYTHONPATH`, `RUBYOPT` and all the .NET related environment variables, even if they are not a Python, Ruby or .NET process.
 
-Could we not export and override libc's `getenv` and handle the injection of `NODE_OPTIONS`, `JAVA_TOOL_OPTIONS` etc. (which are read via `getenv`) that way, and only use `setenv` for injecting `OTEL_RESOURCE_ATTRIBUTES` (which is not read via `getenv` by some runtimes, as explained above)?
+Could we not export and override libc's `getenv` and handle the injection of `PYTHONPATH`, `RUBYOPT` etc. (which are read via `getenv`) that way, and only use `setenv` for injecting `OTEL_RESOURCE_ATTRIBUTES` (which is not read via `getenv` by some runtimes, as explained above)?
 That would give us all the benefits of the `getenv` override approach (less environment variable pollution), without any of the drawbacks described in the section [export `getenv`](#export-getenv).
 
 There is an issue that makes this particular strategy prohibitive: there can be shared libraries that look up environment variables very early in the startup process, even before the injector had a chance to run its initialization code.
@@ -151,7 +152,11 @@ This would lead to the injector reporting `OPENSSL_armcap=null` to OpenSSL, even
 Obviously, this is also not acceptable, hence exporting `getenv` is not a viable approach.
 
 In the end, avoiding the risk of breaking assumptions about the environment is deemed much more critical than not adding irrelevant environment variables to the environment of all processes, which is effectively more an aesthetics concern.
-If an executable does not read `NODE_OPTIONS` (because it is not Node.js), or `JAVA_TOOL_OPTIONS` (because it is not a JVM), it effectively makes no difference that these variables are added.
+If an executable does not read `PYTHONPATH` (because it is not Python), or `RUBYOPT` (because it is not Ruby), it effectively makes no difference that these variables are added.
+
+There are exceptions though: some runtimes read environment variables that are meant for a different runtime.
+Deno, for example, reads `NODE_OPTIONS` for compatibility with Node.js.
+For that reason, the injector only sets `NODE_OPTIONS` for processes that it has identified as Node.js, by inspecting the executable's exported symbols and its library dependencies.
 
 ## Dynamically Linked libc-free Binaries
 

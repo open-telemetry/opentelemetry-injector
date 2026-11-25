@@ -4,6 +4,7 @@
 const std = @import("std");
 
 const config = @import("config.zig");
+const js_runtime = @import("js_runtime.zig");
 const print = @import("print.zig");
 const types = @import("types.zig");
 const test_util = @import("test_util.zig");
@@ -29,6 +30,7 @@ pub fn checkNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
         original_value_optional,
         configuration.nodejs_auto_instrumentation_agent_path,
         configuration.auto_instrumentation_disabled.nodejs,
+        js_runtime.detect, // Passed in for testing reasons.
     );
 }
 
@@ -38,9 +40,15 @@ fn doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
     original_value_optional: ?[:0]const u8,
     nodejs_auto_instrumentation_agent_path: []u8,
     nodejs_instrumentation_disabled: bool,
+    comptime detect_js_runtime: fn () js_runtime.JsRuntime,
 ) ?[:0]u8 {
     if (nodejs_instrumentation_disabled or nodejs_auto_instrumentation_agent_path.len == 0) {
         print.printInfo("Skipping the injection of the Node.js OpenTelemetry auto-instrumentation because it has been explicitly disabled.", .{});
+        return null;
+    }
+
+    if (detect_js_runtime() != .nodejs) {
+        print.printDebug("Skipping the injection of the Node.js OpenTelemetry auto-instrumentation because this process is not a Node.js process.", .{});
         return null;
     }
 
@@ -74,6 +82,7 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
             null,
             path,
             true,
+            detectNodeJs,
         );
     try test_util.expectWithMessage(modified_node_options_value == null, "modified_node_options_value == null");
 }
@@ -88,6 +97,7 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
             null,
             path,
             false,
+            detectNodeJs,
         );
     try test_util.expectWithMessage(modified_node_options_value == null, "modified_node_options_value == null");
 }
@@ -102,6 +112,7 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
             null,
             path,
             false,
+            detectNodeJs,
         );
     try test_util.expectWithMessage(modified_node_options_value == null, "modified_node_options_value == null");
 }
@@ -116,6 +127,54 @@ test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: shoul
             "--abort-on-uncaught-exception"[0.. :0],
             path,
             false,
+            detectNodeJs,
+        );
+    try test_util.expectWithMessage(modified_node_options_value == null, "modified_node_options_value == null");
+}
+
+fn detectNodeJs() js_runtime.JsRuntime {
+    return .nodejs;
+}
+
+fn detectUnknownRuntime() js_runtime.JsRuntime {
+    return .unknown;
+}
+
+test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: should add --require for a Node.js process" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "register.js", .data = "" });
+    const path = try tmp.dir.realPathFileAlloc(testing.io, "register.js", testing.allocator);
+    defer testing.allocator.free(path);
+    const modified_node_options_value =
+        doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+            testing.io,
+            testing.allocator,
+            "--no-deprecation"[0.. :0],
+            path,
+            false,
+            detectNodeJs,
+        ) orelse return error.ExpectedModifiedValue;
+    defer testing.allocator.free(modified_node_options_value);
+    const expected = try std.fmt.allocPrint(testing.allocator, "--require {s} --no-deprecation", .{path});
+    defer testing.allocator.free(expected);
+    try testing.expectEqualStrings(expected, modified_node_options_value);
+}
+
+test "doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue: should return null for a process that is not Node.js" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "register.js", .data = "" });
+    const path = try tmp.dir.realPathFileAlloc(testing.io, "register.js", testing.allocator);
+    defer testing.allocator.free(path);
+    const modified_node_options_value =
+        doCheckNodeJsAutoInstrumentationAgentAndGetModifiedNodeOptionsValue(
+            testing.io,
+            testing.allocator,
+            "--no-deprecation"[0.. :0],
+            path,
+            false,
+            detectUnknownRuntime,
         );
     try test_util.expectWithMessage(modified_node_options_value == null, "modified_node_options_value == null");
 }
@@ -128,10 +187,8 @@ fn getModifiedNodeOptionsValue(
     if (original_value_optional) |original_value| {
         if (std.mem.indexOf(u8, original_value, require_nodejs_auto_instrumentation_agent)) |_| {
             // If the correct "--require ..." flag is already present in NODE_OPTIONS, do nothing. This is particularly
-            // important to avoid double injection, for example if we are injecting into a container which has a shell
-            // executable as its entry point (into which we inject env var modifications), and then this shell starts
-            // the Node.js executable as a child process, which inherits the environment from the already injected
-            // shell.
+            // important to avoid double injection, for example if a Node.js process starts another Node.js process as
+            // a child process, which inherits the environment from the already injected parent process.
             gpa.free(require_nodejs_auto_instrumentation_agent);
             return null;
         }

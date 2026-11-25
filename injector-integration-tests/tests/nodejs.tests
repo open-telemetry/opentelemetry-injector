@@ -94,3 +94,16 @@ run_test_case \
   "node index.js node-options" \
   "NODE_OPTIONS: -" \
   "OTEL_INJECTOR_DISABLED=TRUE OTEL_INJECTOR_LOG_LEVEL=info"
+
+# NODE_OPTIONS is only set for Node.js processes. A shell is not Node.js, but when it starts a Node.js process, that
+# process loads the injector via LD_PRELOAD as well, and gets NODE_OPTIONS from it.
+run_test_case \
+  "does not add NODE_OPTIONS to a process that is not Node.js" \
+  "app" \
+  "sh -c 'echo NODE_OPTIONS: \${NODE_OPTIONS:--}'" \
+  "NODE_OPTIONS: -"
+run_test_case \
+  "injects NODE_OPTIONS into a Node.js process started from a shell" \
+  "app" \
+  "sh -c 'node index.js node-options'" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"

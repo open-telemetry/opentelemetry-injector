@@ -198,6 +198,18 @@ As of version 0.82.0 of that package, this file is located at `node_modules/@ope
 Older versions use `node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js`.
 The injector sets or appends to `NODE_OPTIONS` to activate it.
 
+The injector only adds the Node.js auto-instrumentation to `NODE_OPTIONS` when it has verified that the process is a Node.js process.
+
+A process is recognized as Node.js when its executable exports the function `node::Start`, or when the executable depends on `libnode.so`, as the Node.js packages of Linux distributions like Debian, Ubuntu and Fedora do.
+For all other processes, including shells, the injector will not add `NODE_OPTIONS`.
+A parent process (e.g. shell) that starts a Node.js process passes the injector to its child via `LD_PRELOAD`, and the injector then sets `NODE_OPTIONS` in the Node.js process itself.
+
+As a consequence, the following Node.js processes are not instrumented:
+
+* A program that embeds Node.js and loads `libnode.so` via `dlopen`, instead of depending on it directly.
+* A Node.js process whose parent removes `LD_PRELOAD` from the environment but keeps `NODE_OPTIONS`, for example `sudo` configured to keep `NODE_OPTIONS`, or a process supervisor that only passes on an allowlist of environment variables.
+* A Node.js single executable application built from a musl (Alpine) build of Node.js with `postject` (`postject` rewrites the executable's symbol hash table in a way that makes all of its symbols impossible to look up).
+
 See the [Node.js auto-instrumentation configuration documentation](https://opentelemetry.io/docs/zero-code/js/configuration/) for agent settings.
 
 ### Python

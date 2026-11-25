@@ -194,6 +194,8 @@ See the [Java agent configuration documentation](https://opentelemetry.io/docs/z
 ### Node.js
 
 The [agent path](#nodejs_agent_path) must point to the registration file in an installation of the npm module `@opentelemetry/auto-instrumentations-node`.
+As of version 0.82.0 of that package, this file is located at `node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs`.
+Older versions use `node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js`.
 The injector sets or appends to `NODE_OPTIONS` to activate it.
 
 See the [Node.js auto-instrumentation configuration documentation](https://opentelemetry.io/docs/zero-code/js/configuration/) for agent settings.
@@ -556,7 +558,7 @@ An empty path disables only Node.js instrumentation, not [resource-attribute inj
 
 **Examples:**
 
-- `nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js`
+- `nodejs_auto_instrumentation_agent_path=/usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs`
 
 [Back to options](#options)
 

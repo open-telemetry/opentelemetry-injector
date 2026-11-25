@@ -158,7 +158,7 @@ fn getModifiedNodeOptionsValue(
 test "getModifiedNodeOptionsValue: should return --require if original value is unset" {
     const require_nodejs_auto_instrumentation_agent = try std.fmt.allocPrintSentinel(
         testing.allocator,
-        "--require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js",
+        "--require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs",
         .{},
         0,
     );
@@ -172,7 +172,7 @@ test "getModifiedNodeOptionsValue: should return --require if original value is 
         testing.allocator.free(val);
     });
     try testing.expectEqualStrings(
-        "--require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js",
+        "--require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs",
         modified_node_options_value orelse "-",
     );
 }
@@ -181,7 +181,7 @@ test "getModifiedNodeOptionsValue: should prepend --require if original value ex
     const original_value: [:0]const u8 = "--abort-on-uncaught-exception"[0.. :0];
     const require_nodejs_auto_instrumentation_agent = try std.fmt.allocPrintSentinel(
         testing.allocator,
-        "--require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js",
+        "--require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs",
         .{},
         0,
     );
@@ -195,16 +195,16 @@ test "getModifiedNodeOptionsValue: should prepend --require if original value ex
         testing.allocator.free(val);
     });
     try testing.expectEqualStrings(
-        "--require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js --abort-on-uncaught-exception",
+        "--require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs --abort-on-uncaught-exception",
         modified_node_options_value orelse "-",
     );
 }
 
 test "getModifiedNodeOptionsValue: should do nothing if our --require is already present" {
-    const original_value: [:0]const u8 = "--abort-on-uncaught-exception --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js --something-else"[0.. :0];
+    const original_value: [:0]const u8 = "--abort-on-uncaught-exception --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs --something-else"[0.. :0];
     const require_nodejs_auto_instrumentation_agent = try std.fmt.allocPrintSentinel(
         testing.allocator,
-        "--require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js",
+        "--require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs",
         .{},
         0,
     );

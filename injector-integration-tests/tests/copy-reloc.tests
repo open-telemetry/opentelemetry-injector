@@ -29,7 +29,7 @@ run_test_case \
   "copy reloc: injects NODE_OPTIONS when it is not present" \
   "app" \
   "node index.js NODE_OPTIONS" \
-  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js"
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"
 
 run_test_case \
   "copy reloc: injects OTEL_RESOURCE_ATTRIBUTES from OTEL_INJECTOR_K8S_* when no pre-existing value" \
@@ -41,7 +41,7 @@ run_test_case \
   "copy reloc: prepends to NODE_OPTIONS preserving pre-existing value" \
   "app" \
   "node index.js NODE_OPTIONS" \
-  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js --no-deprecation" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs --no-deprecation" \
   "NODE_OPTIONS=--no-deprecation"
 
 run_test_case \

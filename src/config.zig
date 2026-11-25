@@ -287,7 +287,7 @@ test "readConfigurationFromPath: all configuration values from file, no environm
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        "/custom/path/to/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js",
+        "/custom/path/to/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
@@ -831,7 +831,7 @@ test "readConfigurationFile: all configuration values" {
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        "/custom/path/to/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js",
+        "/custom/path/to/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
@@ -893,7 +893,7 @@ test "readConfigurationFile: all configuration values plus whitespace and commen
         configuration.jvm_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
-        "/custom/path/to/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js",
+        "/custom/path/to/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     try testing.expectEqualStrings(
@@ -2257,7 +2257,7 @@ test "readConfigurationDirectory: reads .conf files in alphabetical order and ig
     );
     // 02-nodejs.conf sets the Node.js path
     try testing.expectEqualStrings(
-        "/conf.d/path/to/nodejs/register.js",
+        "/conf.d/path/to/nodejs/register.cjs",
         configuration.nodejs_auto_instrumentation_agent_path,
     );
     // not-a-conf-file.txt should be ignored, so the dotnet path should remain at the default.

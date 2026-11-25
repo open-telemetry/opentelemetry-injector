@@ -31,8 +31,8 @@ fi
 # Node.js
 # Copy the Node.js no-op agent.
 if [ -f no-op-agent/index.js ]; then
-  mkdir -p /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src
-  cp no-op-agent/index.js /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js
+  mkdir -p /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist
+  cp no-op-agent/index.js /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs
 fi
 
 # Python

@@ -135,9 +135,14 @@ pub const ElfDynLib = struct {
 
         const dynamic_symbols_count = dynamic_program_header.memsz / @sizeOf(std.elf.Elf64_Dyn);
         const dynamic_symbols_ptr: [*]std.elf.Elf64_Dyn = @ptrFromInt(start_memory_range + dynamic_program_header.vaddr);
-        const dynamic_symbols = dynamic_symbols_ptr[0..dynamic_symbols_count];
+        var dynamic_symbols = dynamic_symbols_ptr[0..dynamic_symbols_count];
 
-        for (dynamic_symbols) |dynamic_symbol| {
+        for (dynamic_symbols, 0..) |dynamic_symbol, i| {
+            if (dynamic_symbol.d_tag == std.elf.DT_NULL) {
+                // DT_NULL marks the end of the dynamic section. Whatever follows (usually padding) is not part of it.
+                dynamic_symbols = dynamic_symbols[0..i];
+                break;
+            }
             var p = dynamic_symbol.d_val;
             if (p < start_memory_range) {
                 // Musl libc does not update the dynamic symbol locations to add the start memory offset. GNU libc
@@ -174,19 +179,19 @@ pub const ElfDynLib = struct {
         return self.lookupAddress(name) != null;
     }
 
-    /// Returns true if one of the ELF object's DT_NEEDED entries starts with the given prefix, for example "libnode.so"
-    /// matches a dependency on "libnode.so.115".
+    /// Returns true if the file name of one of the ELF object's DT_NEEDED entries starts with the given prefix, for
+    /// example "libnode.so" matches a dependency on "libnode.so.115", and also on "$ORIGIN/lib/libnode.so.115".
     pub fn needsLibraryWithPrefix(self: *const ElfDynLib, prefix: []const u8) bool {
         for (self.dynamic) |entry| {
-            switch (entry.d_tag) {
-                std.elf.DT_NULL => return false,
-                // DT_NEEDED holds an offset into the string table, the dynamic linker never relocates it.
-                std.elf.DT_NEEDED => {
-                    const library_name = std.mem.sliceTo(self.strings + entry.d_val, 0);
-                    if (std.mem.startsWith(u8, library_name, prefix)) return true;
-                },
-                else => {},
-            }
+            // DT_NEEDED holds an offset into the string table, the dynamic linker never relocates it.
+            if (entry.d_tag != std.elf.DT_NEEDED) continue;
+            const library_name = std.mem.sliceTo(self.strings + entry.d_val, 0);
+            // A DT_NEEDED entry that contains a slash is a path, only its last component is the library's file name.
+            const file_name = if (std.mem.lastIndexOfScalar(u8, library_name, '/')) |last_slash|
+                library_name[last_slash + 1 ..]
+            else
+                library_name;
+            if (std.mem.startsWith(u8, file_name, prefix)) return true;
         }
         return false;
     }
@@ -338,6 +343,27 @@ test "openMainExecutable: looks up exported symbols and needed libraries" {
         // The image has a stray DT_NEEDED entry after DT_NULL, pointing at "exported_function". It must be ignored.
         try testing.expect(!executable.needsLibraryWithPrefix("exported"));
     }
+}
+
+test "openMainExecutable: matches needed libraries given as a path by their file name" {
+    var image: test_util.ElfTestImage = undefined;
+    image.init(.{ .needed_library = "$ORIGIN/lib/libexample.so.42" });
+    const executable = try ElfDynLib.openMainExecutable(image.programHeadersAddress(), image.program_headers.len);
+    try testing.expect(executable.needsLibraryWithPrefix("libexample.so"));
+    try testing.expect(!executable.needsLibraryWithPrefix("$ORIGIN"));
+    try testing.expect(!executable.needsLibraryWithPrefix("lib/"));
+}
+
+test "openMainExecutable: stops reading the dynamic section at DT_NULL" {
+    var image: test_util.ElfTestImage = undefined;
+    image.init(.{ .exported_symbol = "exported_function" });
+    // DT_HASH, DT_STRTAB, DT_SYMTAB, DT_NULL, then an entry that must be ignored. Make it a bogus DT_STRTAB.
+    try testing.expectEqual(std.elf.DT_NULL, image.dynamic[3].d_tag);
+    image.dynamic[4] = .{ .d_tag = std.elf.DT_STRTAB, .d_val = 0xdead0000 };
+    const executable = try ElfDynLib.openMainExecutable(image.programHeadersAddress(), image.program_headers.len);
+    try testing.expectEqual(@intFromPtr(&image.strings), @intFromPtr(executable.strings));
+    try testing.expectEqual(3, executable.dynamic.len);
+    try testing.expect(executable.exportsSymbol("exported_function"));
 }
 
 test "openMainExecutable: ignores undefined symbols" {

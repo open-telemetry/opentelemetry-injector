@@ -85,6 +85,7 @@ test "detectFromExecutable: recognizes an executable that exports node::Start as
 test "detectFromExecutable: recognizes an executable that depends on libnode.so as Node.js" {
     try testing.expectEqual(JsRuntime.nodejs, try detectFromTestImage(.{ .needed_library = "libnode.so.108" }));
     try testing.expectEqual(JsRuntime.nodejs, try detectFromTestImage(.{ .needed_library = "libnode.so" }));
+    try testing.expectEqual(JsRuntime.nodejs, try detectFromTestImage(.{ .needed_library = "$ORIGIN/lib/libnode.so.115" }));
 }
 
 test "detectFromExecutable: does not recognize other executables as Node.js" {

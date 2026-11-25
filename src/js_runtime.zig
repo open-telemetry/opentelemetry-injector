@@ -22,7 +22,7 @@ pub const JsRuntime = enum {
 /// been part of that API since the early days of Node.js. The symbol is the Itanium C++ ABI mangled name, which all
 /// Linux toolchains use.
 ///
-/// Runtimes that mimic Node.js (Deno et. al) only provide the parts of the API that native addons call, and node::Star
+/// Runtimes that mimic Node.js (Deno et. al) only provide the parts of the API that native addons call, and node::Start
 /// is not one of them. Note that node_module_register, the function addons built with the NODE_MODULE macro call to
 /// register themselves, does not work for this purpose: Bun (since at least 1.2) and Deno (since at least 2.9) export
 /// it.

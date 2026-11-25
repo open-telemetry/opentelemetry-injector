@@ -106,4 +106,4 @@ run_test_case \
   "injects NODE_OPTIONS into a Node.js process started from a shell" \
   "app" \
   "sh -c 'node index.js node-options'" \
-  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js"
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"

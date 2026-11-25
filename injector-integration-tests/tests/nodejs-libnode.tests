@@ -15,12 +15,12 @@ run_test_case \
   "libnode: injects NODE_OPTIONS if it is not present" \
   "app" \
   "node index.js node-options" \
-  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js"
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"
 run_test_case \
   "libnode: prepends to NODE_OPTIONS if it is present" \
   "app" \
   "node index.js node-options" \
-  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js --no-deprecation" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs --no-deprecation" \
   "NODE_OPTIONS=--no-deprecation"
 run_test_case \
   "libnode: injects the Node.js auto-instrumentation agent" \
@@ -31,7 +31,7 @@ run_test_case \
   "libnode: injects NODE_OPTIONS into a Node.js process started from a shell" \
   "app" \
   "sh -c 'node index.js node-options'" \
-  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js"
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"
 run_test_case \
   "libnode: does not add NODE_OPTIONS to a process that is not Node.js" \
   "app" \

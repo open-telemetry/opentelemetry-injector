@@ -30,12 +30,12 @@ run_test_case \
   "SEA: injects NODE_OPTIONS if it is not present" \
   "app" \
   "./app-sea node-options" \
-  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js"
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"
 run_test_case \
   "SEA: prepends to NODE_OPTIONS if it is present" \
   "app" \
   "./app-sea node-options" \
-  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js --no-deprecation" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs --no-deprecation" \
   "NODE_OPTIONS=--no-deprecation"
 run_test_case \
   "SEA: injects the Node.js auto-instrumentation agent" \

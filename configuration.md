@@ -209,8 +209,12 @@ Conversely, when a process that is not Node.js inherits `NODE_OPTIONS` with the 
 As a consequence, the following Node.js processes are not instrumented:
 
 * A program that embeds Node.js and loads `libnode.so` via `dlopen`, instead of depending on it directly (this includes NW.js).
-* A Node.js process whose parent removes `LD_PRELOAD` from the environment but keeps `NODE_OPTIONS`, for example `sudo` configured to keep `NODE_OPTIONS`, or a process supervisor that only passes on an allowlist of environment variables.
 * A Node.js single executable application built from a musl (Alpine) build of Node.js for arm64 with `postject` (on arm64, `postject` rewrites the executable's symbol hash table in a way that makes all of its symbols impossible to look up).
+* A Node.js process whose parent removes `LD_PRELOAD` from the environment, even if it keeps `NODE_OPTIONS`; for example a process supervisor that only passes on an allowlist of environment variables, or `sudo` configured to keep `NODE_OPTIONS`.
+
+Node.js applications that cannot be detected as Node.js due to one of the reasons above cannot be instrumented by adding `--require=<agent-path>` with the exact same [agent path](#nodejs_agent_path) that the injector is configured with to `NODE_OPTIONS`.
+The injector will strip this `--require` parameter from `NODE_OPTIONS` if it cannot verify that the process is a Node.js runtime.
+Use a Node.js auto-instrumentation installation at a different file system location to instrument such an application, or add `--require` with the injector's agent path as a command line argument instead of via `NODE_OPTIONS`.
 
 See the [Node.js auto-instrumentation configuration documentation](https://opentelemetry.io/docs/zero-code/js/configuration/) for agent settings.
 

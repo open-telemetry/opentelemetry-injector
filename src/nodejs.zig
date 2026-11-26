@@ -219,15 +219,8 @@ fn removeInheritedRequireFlag(
     var removed_any = false;
     // The part of original_value before copy_start has been copied to result or has been removed.
     var copy_start: usize = 0;
-    var search_start: usize = 0;
-    while (std.mem.indexOfPos(u8, original_value, search_start, require_flag)) |flag_start| {
+    while (indexOfRequireFlag(original_value, copy_start, require_flag)) |flag_start| {
         const flag_end = flag_start + require_flag.len;
-        const starts_token = flag_start == 0 or original_value[flag_start - 1] == ' ';
-        const ends_token = flag_end == original_value.len or original_value[flag_end] == ' ';
-        if (!starts_token or !ends_token) {
-            search_start = flag_start + 1;
-            continue;
-        }
         result.appendSlice(gpa, original_value[copy_start..flag_start]) catch |err| {
             print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ node_options_env_var_name, err });
             return null;
@@ -242,7 +235,6 @@ fn removeInheritedRequireFlag(
                 result.items.len -= 1;
             }
         }
-        search_start = copy_start;
         removed_any = true;
     }
     if (!removed_any) {
@@ -258,6 +250,23 @@ fn removeInheritedRequireFlag(
         print.printError("Cannot allocate memory to manipulate the value of \"{s}\": {}", .{ node_options_env_var_name, err });
         return null;
     };
+}
+
+/// Returns the index of the first occurrence of require_flag in node_options at or after start_index, that is a whole
+/// space-separated token, or null if there is none. A partial match like "--require /agent/register.js.bak" for the
+/// flag "--require /agent/register.js" is a different flag and is skipped.
+fn indexOfRequireFlag(node_options: []const u8, start_index: usize, require_flag: []const u8) ?usize {
+    var search_start = start_index;
+    while (std.mem.indexOfPos(u8, node_options, search_start, require_flag)) |flag_start| {
+        const flag_end = flag_start + require_flag.len;
+        const starts_token = flag_start == 0 or node_options[flag_start - 1] == ' ';
+        const ends_token = flag_end == node_options.len or node_options[flag_end] == ' ';
+        if (starts_token and ends_token) {
+            return flag_start;
+        }
+        search_start = flag_start + 1;
+    }
+    return null;
 }
 
 test "removeInheritedRequireFlag: removes the injector's --require flag" {
@@ -315,7 +324,7 @@ fn getModifiedNodeOptionsValue(
     // "--require ..." flag) is treated like an unset one, to not add a trailing space.
     if (original_value_optional != null and original_value_optional.?.len > 0) {
         const original_value = original_value_optional.?;
-        if (std.mem.indexOf(u8, original_value, require_nodejs_auto_instrumentation_agent)) |_| {
+        if (indexOfRequireFlag(original_value, 0, require_nodejs_auto_instrumentation_agent)) |_| {
             // If the correct "--require ..." flag is already present in NODE_OPTIONS, do nothing. This is particularly
             // important to avoid double injection, for example if a Node.js process starts another Node.js process as
             // a child process, which inherits the environment from the already injected parent process.
@@ -421,4 +430,27 @@ test "getModifiedNodeOptionsValue: should do nothing if our --require is already
             require_nodejs_auto_instrumentation_agent,
         );
     try test_util.expectWithMessage(modified_node_options_value == null, "modified_node_options_value == null");
+}
+
+test "getModifiedNodeOptionsValue: should prepend --require if only a flag with a longer path is present" {
+    const original_value: [:0]const u8 = "--require /agent/register.js.bak"[0.. :0];
+    const require_nodejs_auto_instrumentation_agent = try std.fmt.allocPrintSentinel(
+        testing.allocator,
+        "--require /agent/register.js",
+        .{},
+        0,
+    );
+    const modified_node_options_value =
+        getModifiedNodeOptionsValue(
+            testing.allocator,
+            original_value,
+            require_nodejs_auto_instrumentation_agent,
+        );
+    defer (if (modified_node_options_value) |val| {
+        testing.allocator.free(val);
+    });
+    try testing.expectEqualStrings(
+        "--require /agent/register.js --require /agent/register.js.bak",
+        modified_node_options_value orelse "-",
+    );
 }

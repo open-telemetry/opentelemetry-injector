@@ -16,6 +16,13 @@ const ElfError = error{
     MissingDynamicLinkingInformation,
 };
 
+// ElfDynLib accesses all ELF structures it reads from memory, like the program headers, through pointers with an
+// alignment of 1. Tools that rewrite executables after linking, like postject (which Node.js single executable
+// applications are built with) and other LIEF based tools, can move the program header table to an address that is not
+// 8 byte aligned. With the natural alignment, reading from such an address would trip the alignment safety check and
+// crash the process.
+const Phdr = std.elf.Elf64.Phdr;
+
 /// Provide a minimal support for looking up symbols from the memory location where an ELF binary has been memory-mapped
 /// upon load.
 ///
@@ -32,10 +39,11 @@ pub const ElfDynLib = struct {
     start_memory_range: usize,
     end_memory_range: usize,
     strings: [*:0]u8,
-    syms: [*]std.elf.Sym,
-    hash: ?[*]u32,
-    gnu_hash: ?*std.elf.gnu_hash.Header,
-    dynamic: []const std.elf.Elf64_Dyn,
+    // The ELF structures are accessed with an alignment of 1, see the comment on Phdr above.
+    syms: [*]align(1) std.elf.Sym,
+    hash: ?[*]align(1) u32,
+    gnu_hash: ?*align(1) std.elf.gnu_hash.Header,
+    dynamic: []align(1) const std.elf.Elf64_Dyn,
 
     pub fn open(start_memory_range: usize, end_memory_range: usize) !ElfDynLib {
         const elf_header = @as(*std.elf.Ehdr, @ptrFromInt(start_memory_range));
@@ -53,7 +61,7 @@ pub const ElfDynLib = struct {
 
         if (elf_header.e_type != std.elf.ET.DYN) return error.ElfNotDynamicLibrary;
 
-        const program_headers_ptr: [*]const std.elf.Elf64.Phdr = @ptrFromInt(start_memory_range + elf_header.e_phoff);
+        const program_headers_ptr: [*]align(1) const Phdr = @ptrFromInt(start_memory_range + elf_header.e_phoff);
         const library = try fromProgramHeaders(start_memory_range, end_memory_range, program_headers_ptr[0..elf_header.e_phnum]);
         if (library.hash == null and library.gnu_hash == null) {
             return error.ElfHashTableNotFound;
@@ -71,7 +79,7 @@ pub const ElfDynLib = struct {
         if (program_headers_address == 0 or program_headers_count == 0) {
             return error.MissingProgramHeaders;
         }
-        const program_headers_ptr: [*]const std.elf.Elf64.Phdr = @ptrFromInt(program_headers_address);
+        const program_headers_ptr: [*]align(1) const Phdr = @ptrFromInt(program_headers_address);
         const program_headers = program_headers_ptr[0..program_headers_count];
 
         // Derive the load bias the same way the dynamic linker does (see dl_main in glibc's rtld.c and __dls3 in musl's
@@ -101,7 +109,7 @@ pub const ElfDynLib = struct {
         return fromProgramHeaders(load_bias, 0, program_headers);
     }
 
-    fn isInsideLoadSegment(program_headers: []const std.elf.Elf64.Phdr, address: usize) bool {
+    fn isInsideLoadSegment(program_headers: []align(1) const Phdr, address: usize) bool {
         for (program_headers) |program_header| {
             if (program_header.type == std.elf.PT.LOAD and
                 address >= program_header.vaddr and
@@ -116,9 +124,9 @@ pub const ElfDynLib = struct {
     fn fromProgramHeaders(
         start_memory_range: usize,
         end_memory_range: usize,
-        program_headers: []const std.elf.Elf64.Phdr,
+        program_headers: []align(1) const Phdr,
     ) !ElfDynLib {
-        var maybe_dynamic_program_header: ?std.elf.Elf64.Phdr = null;
+        var maybe_dynamic_program_header: ?Phdr = null;
         for (program_headers) |program_header| {
             switch (program_header.type) {
                 std.elf.PT.DYNAMIC => maybe_dynamic_program_header = program_header,
@@ -129,12 +137,12 @@ pub const ElfDynLib = struct {
         const dynamic_program_header = maybe_dynamic_program_header orelse return error.MissingDynamicLinkingInformation;
 
         var maybe_strings: ?[*:0]u8 = null;
-        var maybe_syms: ?[*]std.elf.Elf64_Sym = null;
-        var maybe_hashtab: ?[*]u32 = null;
-        var maybe_gnu_hash: ?*std.elf.gnu_hash.Header = null;
+        var maybe_syms: ?[*]align(1) std.elf.Elf64_Sym = null;
+        var maybe_hashtab: ?[*]align(1) u32 = null;
+        var maybe_gnu_hash: ?*align(1) std.elf.gnu_hash.Header = null;
 
         const dynamic_symbols_count = dynamic_program_header.memsz / @sizeOf(std.elf.Elf64_Dyn);
-        const dynamic_symbols_ptr: [*]std.elf.Elf64_Dyn = @ptrFromInt(start_memory_range + dynamic_program_header.vaddr);
+        const dynamic_symbols_ptr: [*]align(1) std.elf.Elf64_Dyn = @ptrFromInt(start_memory_range + dynamic_program_header.vaddr);
         var dynamic_symbols = dynamic_symbols_ptr[0..dynamic_symbols_count];
 
         for (dynamic_symbols, 0..) |dynamic_symbol, i| {
@@ -207,19 +215,19 @@ pub const ElfDynLib = struct {
     const GnuHashSection64 = struct {
         symoffset: u32,
         bloom_shift: u32,
-        bloom: []u64,
-        buckets: []u32,
-        chain: [*]std.elf.gnu_hash.ChainEntry,
+        bloom: []align(1) u64,
+        buckets: []align(1) u32,
+        chain: [*]align(1) std.elf.gnu_hash.ChainEntry,
 
-        fn fromPtr(header: *std.elf.gnu_hash.Header) @This() {
+        fn fromPtr(header: *align(1) std.elf.gnu_hash.Header) @This() {
             const header_offset = @intFromPtr(header);
             const bloom_offset = header_offset + @sizeOf(std.elf.gnu_hash.Header);
             const buckets_offset = bloom_offset + header.bloom_size * @sizeOf(u64);
             const chain_offset = buckets_offset + header.nbuckets * @sizeOf(u32);
 
-            const bloom_ptr: [*]u64 = @ptrFromInt(bloom_offset);
-            const buckets_ptr: [*]u32 = @ptrFromInt(buckets_offset);
-            const chain_ptr: [*]std.elf.gnu_hash.ChainEntry = @ptrFromInt(chain_offset);
+            const bloom_ptr: [*]align(1) u64 = @ptrFromInt(bloom_offset);
+            const buckets_ptr: [*]align(1) u32 = @ptrFromInt(buckets_offset);
+            const chain_ptr: [*]align(1) std.elf.gnu_hash.ChainEntry = @ptrFromInt(chain_offset);
 
             return .{
                 .symoffset = header.symoffset,
@@ -308,41 +316,62 @@ pub const ElfDynLib = struct {
     }
 };
 
-test "openMainExecutable: looks up exported symbols and needed libraries" {
-    const cases = [_]struct { relocated: bool, absolute_dynamic_entries: bool }{
-        // Position-independent executable, glibc relocates the dynamic section in place.
-        .{ .relocated = true, .absolute_dynamic_entries = true },
-        // Position-independent executable, musl leaves the dynamic section alone.
-        .{ .relocated = true, .absolute_dynamic_entries = false },
-        // Non-relocatable executable (ET_EXEC), for example the official Node.js builds for glibc.
-        .{ .relocated = false, .absolute_dynamic_entries = false },
-    };
-    for (cases) |case| {
-        var image: test_util.ElfTestImage = undefined;
-        image.init(.{
-            .relocated = case.relocated,
-            .absolute_dynamic_entries = case.absolute_dynamic_entries,
-            .exported_symbol = "exported_function",
-            .needed_library = "libexample.so.42",
-        });
-        const executable = try ElfDynLib.openMainExecutable(image.programHeadersAddress(), image.program_headers.len);
+const image_variants = [_]struct { relocated: bool, absolute_dynamic_entries: bool }{
+    // Position-independent executable, glibc relocates the dynamic section in place.
+    .{ .relocated = true, .absolute_dynamic_entries = true },
+    // Position-independent executable, musl leaves the dynamic section alone.
+    .{ .relocated = true, .absolute_dynamic_entries = false },
+    // Non-relocatable executable (ET_EXEC), for example the official Node.js builds for glibc.
+    .{ .relocated = false, .absolute_dynamic_entries = false },
+};
 
-        const expected_bias: usize = if (case.relocated) @intFromPtr(&image) else 0;
-        try testing.expectEqual(expected_bias, executable.start_memory_range);
-        try testing.expect(executable.exportsSymbol("exported_function"));
-        try testing.expectEqual(
-            expected_bias + test_util.ElfTestImage.exported_symbol_value,
-            executable.lookupAddress("exported_function").?,
-        );
-        try testing.expect(!executable.exportsSymbol("exported"));
-        try testing.expect(!executable.exportsSymbol("not_exported_function"));
+/// Initializes an ElfTestImage at the given address in every variant (see image_variants) and with each hash table
+/// type, and checks that openMainExecutable finds its exported symbol and its needed library.
+fn expectLooksUpSymbolsAndLibraries(image: *align(1) test_util.ElfTestImage) !void {
+    for (image_variants) |variant| {
+        for ([_]@FieldType(test_util.ElfTestImage.Options, "hash_table"){ .sysv, .gnu }) |hash_table| {
+            image.init(.{
+                .relocated = variant.relocated,
+                .absolute_dynamic_entries = variant.absolute_dynamic_entries,
+                .exported_symbol = "exported_function",
+                .needed_library = "libexample.so.42",
+                .hash_table = hash_table,
+            });
+            const executable = try ElfDynLib.openMainExecutable(image.programHeadersAddress(), image.program_headers.len);
 
-        try testing.expect(executable.needsLibraryWithPrefix("libexample.so"));
-        try testing.expect(executable.needsLibraryWithPrefix("libexample.so.42"));
-        try testing.expect(!executable.needsLibraryWithPrefix("libother.so"));
-        // The image has a stray DT_NEEDED entry after DT_NULL, pointing at "exported_function". It must be ignored.
-        try testing.expect(!executable.needsLibraryWithPrefix("exported"));
+            const expected_bias: usize = if (variant.relocated) @intFromPtr(image) else 0;
+            try testing.expectEqual(expected_bias, executable.start_memory_range);
+            try testing.expectEqual(hash_table == .sysv, executable.hash != null);
+            try testing.expectEqual(hash_table == .gnu, executable.gnu_hash != null);
+            try testing.expect(executable.exportsSymbol("exported_function"));
+            try testing.expectEqual(
+                expected_bias + test_util.ElfTestImage.exported_symbol_value,
+                executable.lookupAddress("exported_function").?,
+            );
+            try testing.expect(!executable.exportsSymbol("exported"));
+            try testing.expect(!executable.exportsSymbol("not_exported_function"));
+
+            try testing.expect(executable.needsLibraryWithPrefix("libexample.so"));
+            try testing.expect(executable.needsLibraryWithPrefix("libexample.so.42"));
+            try testing.expect(!executable.needsLibraryWithPrefix("libother.so"));
+            // The image has a stray DT_NEEDED entry after DT_NULL, pointing at "exported_function". It must be ignored.
+            try testing.expect(!executable.needsLibraryWithPrefix("exported"));
+        }
     }
+}
+
+test "openMainExecutable: looks up exported symbols and needed libraries" {
+    var image: test_util.ElfTestImage = undefined;
+    try expectLooksUpSymbolsAndLibraries(&image);
+}
+
+test "openMainExecutable: reads all ELF structures at unaligned addresses" {
+    // postject, the tool that builds Node.js single executable applications, can move the program header table to an
+    // odd address. Initialize the whole image at an odd address, so that the program headers, the dynamic section, the
+    // hash tables, the symbol table and the string table are all not naturally aligned.
+    var buffer: [@sizeOf(test_util.ElfTestImage) + 1]u8 align(@alignOf(test_util.ElfTestImage)) = undefined;
+    const image: *align(1) test_util.ElfTestImage = @ptrCast(&buffer[1]);
+    try expectLooksUpSymbolsAndLibraries(image);
 }
 
 test "openMainExecutable: matches needed libraries given as a path by their file name" {

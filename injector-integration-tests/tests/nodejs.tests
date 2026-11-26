@@ -107,3 +107,32 @@ run_test_case \
   "app" \
   "sh -c 'node index.js node-options'" \
   "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"
+
+# Package managers are Node.js applications themselves, and run scripts via a shell. NODE_OPTIONS reaches the Node.js
+# process at the end of the chain twice: inherited from the package manager's environment, and from the injector
+# running in the process itself. The --require must still be there only once.
+run_test_case \
+  "injects NODE_OPTIONS once into a Node.js process started via npm run" \
+  "app" \
+  "npm run --silent node-options" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"
+run_test_case \
+  "injects NODE_OPTIONS once into a Node.js process started via nested npm run" \
+  "app" \
+  "npm run --silent nested-node-options" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"
+run_test_case \
+  "injects the Node.js auto-instrumentation agent into a Node.js process started via npm run" \
+  "app" \
+  "npm run --silent verify-auto-instrumentation-agent-has-been-injected" \
+  "otel_injector_nodejs_no_op_agent_has_been_loaded: true"
+run_test_case \
+  "injects NODE_OPTIONS once into a Node.js process started via npx" \
+  "app" \
+  "npx --no-install node index.js node-options" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"
+run_test_case \
+  "injects NODE_OPTIONS once into a Node.js process started via yarn run" \
+  "app" \
+  "yarn --silent run node-options" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"

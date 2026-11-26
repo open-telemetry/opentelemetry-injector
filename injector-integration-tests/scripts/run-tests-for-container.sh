@@ -53,8 +53,14 @@ esac
 # Note: Runtime-independent test sets like default.tests, sdk-does-not-exist.tests, and sdk-cannot-be-accessed.tests
 # also use Node.js as the runtime for the container under test.
 test_app="nodejs"
+if [[ "$TEST_SET" = "bun.tests" ]]; then
+  test_app="bun"
+fi
 if [[ "$TEST_SET" = "deno.tests" ]]; then
   test_app="deno"
+fi
+if [[ "$TEST_SET" = "nodejs-sea.tests" ]]; then
+  test_app="nodejs-sea"
 fi
 if [[ "$TEST_SET" = "nodejs-libnode.tests" ]]; then
   test_app="nodejs-libnode"
@@ -120,6 +126,13 @@ fi
 base_image_run=unknown
 base_image_build=unknown
 case "$test_app" in
+  "bun")
+    dockerfile_name="injector-integration-tests/apps/bun/Dockerfile"
+    base_image_run=oven/bun:1.4.5-debian
+    if [[ "$LIBC" = "musl" ]]; then
+      base_image_run=oven/bun:1.4.5-alpine
+    fi
+    ;;
   "deno")
     dockerfile_name="injector-integration-tests/apps/deno/Dockerfile"
     base_image_run=denoland/deno:debian-2.9.8
@@ -177,6 +190,13 @@ case "$test_app" in
     base_image_run=vulhub/openjdk:oracle-jdk-6@sha256:35e7972fd3bec182151ec5b61832197e1655609b6a7bf7babebda33318ef5eb1
     ;;
   "nodejs")
+    base_image_run=node:22.15.0-bookworm-slim
+    if [[ "$LIBC" = "musl" ]]; then
+      base_image_run=node:22.15.0-alpine3.21
+    fi
+    ;;
+  "nodejs-sea")
+    dockerfile_name="injector-integration-tests/apps/nodejs-sea/Dockerfile"
     base_image_run=node:22.15.0-bookworm-slim
     if [[ "$LIBC" = "musl" ]]; then
       base_image_run=node:22.15.0-alpine3.21

@@ -1,6 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+const { execSync } = require('node:child_process');
 const process = require('node:process');
 
 function echoEnvVar(envVarName) {
@@ -63,6 +64,10 @@ function main() {
       break;
     case 'custom-env-var':
       echoEnvVar(process.argv[3]);
+      break;
+    case 'spawn':
+      // Runs the given command in a child process via /bin/sh, and writes the child process' output.
+      process.stdout.write(execSync(process.argv[3]));
       break;
     default:
       console.error(`unknown test app command: ${command}`);

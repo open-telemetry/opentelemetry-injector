@@ -136,3 +136,17 @@ run_test_case \
   "app" \
   "yarn --silent run node-options" \
   "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"
+
+# A process that is not Node.js inherits NODE_OPTIONS with the --require flag from its Node.js parent process, and the
+# injector removes the flag again. The spawn command runs the given command via /bin/sh (like an npm script does), so
+# the shell is the process that is not Node.js.
+run_test_case \
+  "removes the inherited --require from NODE_OPTIONS in a shell started by a Node.js process" \
+  "app" \
+  "node index.js spawn 'echo NODE_OPTIONS: \${NODE_OPTIONS:--}'" \
+  "NODE_OPTIONS: -"
+run_test_case \
+  "injects NODE_OPTIONS again into a Node.js process started by a shell started by a Node.js process" \
+  "app" \
+  "node index.js spawn 'node index.js node-options'" \
+  "NODE_OPTIONS: --require /usr/lib/opentelemetry/nodejs/node_modules/@opentelemetry/auto-instrumentations-node/dist/register.cjs"

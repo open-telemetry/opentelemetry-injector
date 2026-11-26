@@ -1,0 +1,16 @@
+# One of 'breaking', 'deprecation', 'new_component', 'enhancement', 'bug_fix'
+change_type: bug_fix
+
+component: Node.js
+
+note: Remove the Node.js auto-instrumentation from `NODE_OPTIONS` inherited by processes that are not Node.js.
+
+issues: [458]
+
+subtext: |
+  A process that is not Node.js, like Deno started from an npm script, inherits `NODE_OPTIONS` with the `--require`
+  flag of the auto-instrumentation from its Node.js parent process.
+  Deno failed to start when it lacked the permission to read the auto-instrumentation's files.
+  The injector now removes exactly that flag again in such processes, and keeps the rest of `NODE_OPTIONS`.
+
+change_logs: [user]

@@ -204,12 +204,20 @@ A process is recognized as Node.js when its executable exports the function `nod
 This covers the official Node.js builds, Node.js single executable applications, executables built with `pkg`, and Electron, which embeds Node.js and honors `NODE_OPTIONS` unless the application disables that.
 For all other processes, including shells, the injector will not add `NODE_OPTIONS`.
 A parent process (e.g. shell) that starts a Node.js process passes the injector to its child via `LD_PRELOAD`, and the injector then sets `NODE_OPTIONS` in the Node.js process itself.
+Conversely, when a process that is not Node.js inherits `NODE_OPTIONS` with the injector's auto-instrumentation from a Node.js parent process (for example Deno started from an npm script), the injector removes the `--require` flag of the auto-instrumentation again and keeps the rest of `NODE_OPTIONS`.
 
 As a consequence, the following Node.js processes are not instrumented:
 
 * A program that embeds Node.js and loads `libnode.so` via `dlopen`, instead of depending on it directly (this includes NW.js).
-* A Node.js process whose parent removes `LD_PRELOAD` from the environment but keeps `NODE_OPTIONS`, for example `sudo` configured to keep `NODE_OPTIONS`, or a process supervisor that only passes on an allowlist of environment variables.
 * A Node.js single executable application built from a musl (Alpine) build of Node.js for arm64 with `postject` (on arm64, `postject` rewrites the executable's symbol hash table in a way that makes all of its symbols impossible to look up).
+* A Node.js process whose parent removes `LD_PRELOAD` from the environment, even if it keeps `NODE_OPTIONS`; for example a process supervisor that only passes on an allowlist of environment variables, or `sudo` configured to keep `NODE_OPTIONS`.
+
+Node.js applications that cannot be detected as Node.js due to one of the reasons above cannot be instrumented by adding `--require <agent-path>` with the exact same [agent path](#nodejs_agent_path) that the injector is configured with to `NODE_OPTIONS`.
+The injector will strip this `--require` parameter from `NODE_OPTIONS` if it cannot verify that the process is a Node.js runtime.
+To instrument such a Node.js application, either
+- use a Node.js auto-instrumentation installation at a different file system location,
+- use the syntax `--require=<agent-path>` (note the `=` instead of a space) in `NODE_OPTIONS`, or
+- add `--require <agent-path>` with the injector's agent path as a command line argument instead of via `NODE_OPTIONS`.
 
 See the [Node.js auto-instrumentation configuration documentation](https://opentelemetry.io/docs/zero-code/js/configuration/) for agent settings.
 
